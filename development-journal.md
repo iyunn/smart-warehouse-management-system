@@ -3,7 +3,7 @@
 
 ---
 
-# 2026-05-10
+# Minggu, 10 Mei 2026
 
 ## Aktivitas Hari Ini
 
