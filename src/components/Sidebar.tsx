@@ -52,6 +52,7 @@ const navItems: NavItem[] = [
   { id: "monitoring", label: "Monitoring", icon: icons.monitor, href: "#" },
   { id: "classification", label: "Classification", icon: icons.classification, href: "#" },
   { id: "reports", label: "Reports", icon: icons.reports, href: "#" },
+  { id: "review", label: "Review Assets", icon: icons.monitor, href: "/review" },
   { id: "settings", label: "Settings", icon: icons.settings, href: "#" },
 ];
 
@@ -161,3 +162,4 @@ function NavLink({ item, active, collapsed, onClick }: { item: NavItem; active: 
     </button>
   );
 }
+
