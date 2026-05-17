@@ -7,10 +7,8 @@ import type { AssetClean, RuleFormState, RULE_FORM_EMPTY } from "../lib/reviewTy
 // Re-export blank so callers don't need to import from reviewTypes
 const BLANK: RuleFormState = {
   keyword: "",
-  jenis: "",
-  merk: "",
-  kategori: "",
-  notes: "",
+  rule_type: "merk",
+  value: "",
 };
 
 type SubmitStatus = "idle" | "submitting" | "success" | "error";
@@ -47,10 +45,11 @@ export function useKeywordRule(): UseKeywordRuleReturn {
 
     setForm({
       keyword,
-      jenis: asset.jenis !== "Unknown" ? asset.jenis : "",
-      merk: asset.merk !== "Unknown" ? asset.merk : "",
-      kategori: asset.kategori ?? "",
-      notes: "",
+      rule_type: "merk",
+      value:
+        asset.merk !== "Unknown"
+          ? asset.merk
+          : "",
     });
     setSubmitStatus("idle");
     setSubmitError("");
@@ -83,12 +82,9 @@ export function useKeywordRule(): UseKeywordRuleReturn {
 
     try {
       const { error } = await supabase.from("keyword_rules").insert({
-        keyword: form.keyword.trim(),
-        jenis: form.jenis.trim(),
-        merk: form.merk.trim(),
-        kategori: form.kategori.trim(),
-        notes: form.notes.trim(),
-        created_by: "admin",
+        keyword: form.keyword.trim().toUpperCase(),
+        rule_type: form.rule_type,
+        value: form.value.trim(),
       });
 
       if (error) throw new Error(error.message);

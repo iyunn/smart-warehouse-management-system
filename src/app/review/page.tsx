@@ -378,7 +378,6 @@ export default function ReviewPage() {
       {modalOpen && (
         <AddRuleModal
           assetId={selectedAsset?.id}
-          defaultKeyword={selectedAsset?.keyword}
           onClose={closeModal}
           onSuccess={handleRuleSuccess}
         />

@@ -15,11 +15,8 @@ export interface AssetClean {
 export interface KeywordRule {
   id?: string;
   keyword: string;
-  jenis: string;
-  merk: string;
-  kategori: string;
-  notes: string;
-  created_by: string;
+  rule_type: "jenis" | "merk";
+  value: string;
   created_at?: string;
 }
 
@@ -34,18 +31,14 @@ export interface ReviewSummary {
 // ─── Modal form state ────────────────────────────────────────────────────────
 export interface RuleFormState {
   keyword: string;
-  jenis: string;
-  merk: string;
-  kategori: string;
-  notes: string;
+  rule_type: "jenis" | "merk";
+  value: string;
 }
 
 export const RULE_FORM_EMPTY: RuleFormState = {
   keyword: "",
-  jenis: "",
-  merk: "",
-  kategori: "",
-  notes: "",
+  rule_type: "merk",
+  value: "",
 };
 
 // ─── Filter / sort state ─────────────────────────────────────────────────────

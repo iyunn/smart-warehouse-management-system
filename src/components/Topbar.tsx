@@ -10,7 +10,7 @@ export default function Topbar({ title }: { title: string }) {
       {/* Title */}
       <div>
         <h1 className="text-white text-[16px] font-semibold tracking-tight leading-none">{title}</h1>
-        <p className="text-slate-500 text-[11px] mt-0.5">
+        <p className="text-slate-500 text-[10px] mt-0.5">
           {new Date().toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
         </p>
       </div>
@@ -30,7 +30,7 @@ export default function Topbar({ title }: { title: string }) {
             placeholder="Search asset..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="bg-white/[0.04] border border-white/[0.08] text-slate-300 text-[13px] placeholder:text-slate-600 rounded-xl pl-9 pr-4 py-2 w-52 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all"
+            className="bg-white/[0.04] border border-white/[0.08] text-slate-300 text-xs placeholder:text-slate-600 rounded-xl pl-9 pr-4 py-1.5 w-48 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all"
           />
         </div>
 

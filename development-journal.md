@@ -220,3 +220,41 @@ Menyimpan data hasil klasifikasi.
 - Rule berhasil tersimpan ke Supabase
 - Dashboard review berhasil diintegrasikan dengan UI utama
 - Persiapan integrasi dashboard utama dengan live Supabase statistics
+
+
+-----------------------------------------------------------------------------
+
+## Minggu, 17 Mei 2026
+
+### Pengembangan Classification System
+- Merevisi arsitektur keyword classification menjadi database-driven.
+- Menghapus seluruh hardcoded keyword rule pada classifier.
+- Mengimplementasikan dynamic keyword matching menggunakan tabel `keyword_rules`.
+- Menjadikan `keyword_rules` sebagai single source of truth untuk klasifikasi aset.
+- Menambahkan dukungan rule terpisah berdasarkan `rule_type`:
+  - merk
+  - jenis
+- Merevisi struktur tabel `keyword_rules` agar lebih scalable dan reusable.
+
+### Pengembangan Review Workflow
+- Merevisi Add Rule modal agar lebih sederhana dan modular.
+- Menghapus field kategori dan catatan dari rule system.
+- Mengimplementasikan form rule berbasis:
+  - keyword
+  - rule_type
+  - value
+
+### Pengembangan Navigation & UI
+- Menghubungkan halaman Dashboard dan Classification.
+- Menghapus menu sidebar "Review Assets".
+- Menjadikan halaman Review sebagai referensi utama design system.
+
+### Arsitektur Sistem
+- Mempertahankan arsitektur modular existing dari Claude-generated structure.
+- Memastikan classifier tetap sebagai pure utility function.
+- Implementasi fetch `keyword_rules` dilakukan di API layer (`route.ts`) untuk menghindari N+1 query dan menjaga separation of concerns.
+
+### Progress Berikutnya
+- Reclassification Engine
+- Realtime dashboard integration
+- Dashboard UI consistency refinement

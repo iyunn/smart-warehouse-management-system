@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 type NavItem = {
   id: string;
@@ -47,12 +48,11 @@ const icons = {
 };
 
 const navItems: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", icon: icons.dashboard, href: "#" },
+  { id: "dashboard", label: "Dashboard", icon: icons.dashboard, href: "/" },
   { id: "upload", label: "Upload DAT", icon: icons.upload, href: "#" },
   { id: "monitoring", label: "Monitoring", icon: icons.monitor, href: "#" },
-  { id: "classification", label: "Classification", icon: icons.classification, href: "#" },
+  { id: "classification", label: "Classification", icon: icons.classification, href: "/review" },
   { id: "reports", label: "Reports", icon: icons.reports, href: "#" },
-  { id: "review", label: "Review Assets", icon: icons.monitor, href: "/review" },
   { id: "settings", label: "Settings", icon: icons.settings, href: "#" },
 ];
 
@@ -137,7 +137,7 @@ export default function Sidebar() {
 function NavLink({ item, active, collapsed, onClick }: { item: NavItem; active: string; collapsed: boolean; onClick: () => void }) {
   const isActive = active === item.id;
   return (
-    <button
+    <Link href={item.href}
       onClick={onClick}
       title={collapsed ? item.label : undefined}
       className={`
@@ -159,7 +159,7 @@ function NavLink({ item, active, collapsed, onClick }: { item: NavItem; active: 
       {!collapsed && isActive && (
         <span className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 flex-shrink-0" />
       )}
-    </button>
+    </Link>
   );
 }
 

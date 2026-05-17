@@ -7,6 +7,16 @@ export async function POST(req: Request) {
     const body = await req.json()
     const { data } = body
 
+    // Fetch keyword_rules once before processing loop
+    const { data: keywordRules, error: rulesError } = await supabase
+      .from('keyword_rules')
+      .select('keyword, rule_type, value')
+
+    if (rulesError) {
+      console.error(rulesError)
+      return NextResponse.json({ success: false, error: 'Failed to fetch keyword rules' })
+    }
+
     let results = []
 
     for (const item of data) {
@@ -29,7 +39,7 @@ export async function POST(req: Request) {
       }
 
       // 2. classify
-      const result = classifyAsset(item.deskripsi)
+      const result = classifyAsset(item.deskripsi, keywordRules ?? [])
 
       // 3. simpan clean data
       const { error: cleanError } = await supabase

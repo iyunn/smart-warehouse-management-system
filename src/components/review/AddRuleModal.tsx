@@ -5,50 +5,9 @@ import { useKeywordRule } from "@/hooks/useKeywordRule";
 
 interface AddRuleModalProps {
   assetId?: string;
-  defaultKeyword?: string;
   onClose: () => void;
   onSuccess?: (assetId?: string) => void;
 }
-
-const JENIS_OPTIONS = [
-  "Komputer",
-  "Printer",
-  "Monitor",
-  "Scanner",
-  "CCTV",
-  "Pendingin",
-  "Radio",
-  "Gudang",
-  "Alarm",
-  "Toko",
-  "Kantor",
-  "Lainnya",
-];
-
-const MERK_OPTIONS = [
-  "Dell",
-  "HP",
-  "Lenovo",
-  "Asus",
-  "Acer",
-  "Apple",
-  "Cisco",
-  "Samsung",
-  "Logitech",
-  "Lainnya",
-];
-
-const KATEGORI_OPTIONS = [
-  "C",
-  "E",
-  "I",
-  "P",
-  "Q",
-  "R",
-  "S",
-  "T",
-  "W",
-];
 
 const OVERLAY_ANIM = `
 @keyframes fadeIn {
@@ -94,7 +53,7 @@ const selectCls =
   "w-full rounded-lg border border-white/10 bg-[#0f1724] px-3 py-2 text-sm text-white outline-none transition-all duration-150 focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/30 hover:border-white/20 appearance-none cursor-pointer";
 
 export const AddRuleModal = memo(
-  ({ assetId, defaultKeyword = "", onClose, onSuccess }: AddRuleModalProps) => {
+  ({ assetId, onClose, onSuccess }: AddRuleModalProps) => {
     const {
             form,
             updateField,
@@ -124,8 +83,7 @@ export const AddRuleModal = memo(
     const validate = useCallback(() => {
       const errs: Record<string, string> = {};
       if (!form.keyword.trim()) errs.keyword = "Keyword wajib diisi";
-      if (!form.jenis) errs.jenis = "Pilih jenis";
-      if (!form.kategori) errs.kategori = "Pilih kategori";
+      if (!form.value.trim()) errs.value = "Value wajib diisi";
       return errs;
     }, [form]);
 
@@ -224,85 +182,55 @@ export const AddRuleModal = memo(
                 <p className="text-xs text-red-400">{errors.keyword}</p>
               )}
             </Field>
-
-            {/* Jenis + Merk side by side */}
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Jenis" required>
+            
+            <Field label="Tipe Rule" required>
                 <div className="relative">
                   <select
-                    value={form.jenis}
-                    onChange={(e) => updateField("jenis", e.target.value)}
+                    value={form.rule_type}
+                    onChange={(e) =>
+                      updateField(
+                        "rule_type",
+                        e.target.value as "jenis" | "merk"
+                      )
+                    }
                     className={selectCls}
                   >
-                    <option value="" disabled>
-                      Pilih jenis
-                    </option>
-                    {JENIS_OPTIONS.map((o) => (
-                      <option key={o} value={o}>
-                        {o}
-                      </option>
-                    ))}
+                    <option value="merk">Merk</option>
+                    <option value="jenis">Jenis</option>
                   </select>
+
                   <ChevronIcon />
                 </div>
-                {errors.jenis && (
-                  <p className="text-xs text-red-400">{errors.jenis}</p>
+              </Field>
+
+              <Field
+                label={
+                  form.rule_type === "merk"
+                    ? "Merk"
+                    : "Jenis Barang"
+                }
+                required
+              >
+                <input
+                  type="text"
+                  value={form.value}
+                  onChange={(e) =>
+                    updateField("value", e.target.value)
+                  }
+                  placeholder={
+                    form.rule_type === "merk"
+                      ? "Contoh: DELL"
+                      : "Contoh: Laptop"
+                  }
+                  className={inputCls}
+                />
+
+                {errors.value && (
+                  <p className="text-xs text-red-400">
+                    {errors.value}
+                  </p>
                 )}
               </Field>
-
-              <Field label="Merk">
-                <div className="relative">
-                  <select
-                    value={form.merk}
-                    onChange={(e) => updateField("merk", e.target.value)}
-                    className={selectCls}
-                  >
-                    <option value="">Tidak diketahui</option>
-                    {MERK_OPTIONS.map((o) => (
-                      <option key={o} value={o}>
-                        {o}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronIcon />
-                </div>
-              </Field>
-            </div>
-
-            {/* Kategori */}
-            <Field label="Kategori" required>
-              <div className="relative">
-                <select
-                  value={form.kategori}
-                  onChange={(e) => updateField("kategori", e.target.value)}
-                  className={selectCls}
-                >
-                  <option value="" disabled>
-                    Pilih kategori
-                  </option>
-                  {KATEGORI_OPTIONS.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-                <ChevronIcon />
-              </div>
-              {errors.kategori && (
-                <p className="text-xs text-red-400">{errors.kategori}</p>
-              )}
-            </Field>
-
-            {/* Notes */}
-            <Field label="Catatan">
-              <textarea
-                value={form.notes}
-                onChange={(e) => updateField("notes", e.target.value)}
-                rows={2}
-                placeholder="Opsional — deskripsi tambahan untuk rule ini"
-                className={`${inputCls} resize-none`}
-              />
-            </Field>
 
             {/* Submit error */}
             {errors.submit && (
