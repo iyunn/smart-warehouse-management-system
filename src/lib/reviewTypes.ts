@@ -1,13 +1,19 @@
 // ─── assets_clean row ────────────────────────────────────────────────────────
+// Kolom aktual di Supabase: id, raw_id, original_description,
+// normalized_description, jenis, merk, kategori, status, confidence, created_at
+// CATATAN: kode_asset dan toko ada di assets_raw, BUKAN di assets_clean
 export interface AssetClean {
   id: string;
-  kode_asset: string;
   original_description: string;
+  normalized_description?: string;
   jenis: string;
   merk: string;
   kategori: string;
-  confidence_score: number | null;
-  toko?: string;
+  /**
+   * Di Supabase kolom ini bernama `confidence`.
+   * Hook melakukan mapping: confidence → confidence_score
+   */
+  confidence_score: number | string | null;
   status?: string;
 }
 
@@ -22,13 +28,19 @@ export interface KeywordRule {
 
 // ─── Derived summary counts ───────────────────────────────────────────────────
 export interface ReviewSummary {
+  /** Jumlah aset unknown (jenis=Unknown OR merk=Unknown) */
   total: number;
   unknownMerk: number;
   unknownJenis: number;
-  completionPct: number; // 0–100, % of assets that are NOT unknown
+  /**
+   * Persentase aset yang SUDAH terklasifikasi.
+   * Dihitung dari total semua aset di assets_clean, bukan hanya unknown.
+   * Formula: (totalAssets - totalUnknown) / totalAssets * 100
+   */
+  completionPct: number;
 }
 
-// ─── Modal form state ────────────────────────────────────────────────────────
+// ─── Modal form state ─────────────────────────────────────────────────────────
 export interface RuleFormState {
   keyword: string;
   rule_type: "jenis" | "merk";
@@ -41,7 +53,8 @@ export const RULE_FORM_EMPTY: RuleFormState = {
   value: "",
 };
 
-// ─── Filter / sort state ─────────────────────────────────────────────────────
+// ─── Filter / sort state ──────────────────────────────────────────────────────
 export type FilterType = "all" | "unknown_jenis" | "unknown_merk" | "both";
-export type SortField = "kode_asset" | "jenis" | "merk" | "confidence_score";
+// kode_asset diganti original_description karena kode_asset tidak ada di assets_clean
+export type SortField = "original_description" | "jenis" | "merk" | "confidence_score";
 export type SortDir = "asc" | "desc";
