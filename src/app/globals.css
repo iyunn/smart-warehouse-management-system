@@ -1,9 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
 @import "tailwindcss";
 
 :root {
-  --color-bg: #080e17;
+  --color-bg: #080e18;
   --color-surface: #111827;
   --color-border: rgba(255, 255, 255, 0.06);
 }
@@ -12,19 +10,20 @@
   box-sizing: border-box;
 }
 
-html {
-  font-family: 'DM Sans', sans-serif;
-}
-
+html,
 body {
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
   background-color: var(--color-bg);
   color: #e2e8f0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-.font-mono {
-  font-family: 'JetBrains Mono', monospace;
+.font-mono,
+code,
+kbd,
+pre {
+  font-family: var(--font-jetbrains-mono), 'JetBrains Mono', monospace;
 }
 
 /* Custom scrollbar */
@@ -38,10 +37,10 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 100px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255,255,255,0.14);
+  background: rgba(255, 255, 255, 0.14);
 }

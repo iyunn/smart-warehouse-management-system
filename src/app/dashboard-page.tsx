@@ -65,7 +65,7 @@ const SUMMARY_CARDS = [
 
 export default function DashboardPage() {
   return (
-    <div className="flex h-screen bg-[#080e18] overflow-hidden">
+    <div className="flex h-screen bg-[#080e17] font-sans overflow-hidden">
       <Sidebar />
 
       {/* Main content */}
