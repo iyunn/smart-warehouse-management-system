@@ -21,40 +21,52 @@ Active Development
 # 1. Project Overview
 
 ## System Overview
+
 Smart Asset Monitoring and Reconciliation System merupakan sistem monitoring, analisis, dan rekonsiliasi data aset perusahaan berbasis cloud computing.
 
 Sistem dikembangkan untuk membantu proses:
-- monitoring aset perusahaan
-- validasi sinkronisasi data aset
-- warehouse asset intelligence
-- klasifikasi aset otomatis
-- discrepancy detection
-- analisis perpindahan aset
-- monitoring mismatch asset
-- monitoring operasional gudang
-
-Sistem menggunakan pendekatan:
-- ETL Pipeline
-- Asset Classification Engine
-- Warehouse Intelligence Dashboard
-- Reconciliation Monitoring
+- Monitoring aset gudang perusahaan (CGA1, CGA2, CGA3)
+- Validasi sinkronisasi data aset antara Oracle DAT dan kondisi fisik
+- Warehouse asset intelligence dan klasifikasi otomatis
+- Discrepancy detection dan analisis perpindahan aset
+- Rekap dan pelaporan aset per cost center
 
 ---
 
 ## Main Purpose
+
 Sistem dibuat untuk membantu menyelesaikan permasalahan ketidaksinkronan data antara:
+- Oracle DAT (sistem administrasi aset utama perusahaan)
+- Web Tracking Asset (sistem tracking perpindahan aset)
+- Kondisi fisik aset di gudang
 
-- Oracle DAT
-- Web Tracking Asset
-- Kondisi fisik aset
+Sistem ini bukan pengganti Oracle ERP maupun Web Tracking. Sistem ini berfungsi sebagai:
+- Monitoring system
+- Reconciliation system
+- Warehouse intelligence system
+- Supporting operational dashboard
 
-Sistem ini bukan pengganti Oracle ERP maupun Web Tracking.
+---
 
-Sistem ini berfungsi sebagai:
-- monitoring system
-- reconciliation system
-- warehouse intelligence system
-- supporting operational dashboard
+## Warehouse Context
+
+### Definisi Gudang (Cost Center yang Dimonitor)
+
+| Kode | Nama Lengkap | Fungsi Operasional |
+|------|-------------|-------------------|
+| CGA1 | Cadangan General Affairs 1 | Barang baru dari supplier, belum didistribusikan |
+| CGA2 | Cadangan General Affairs 2 | Barang bekas yang masih layak dan standar perusahaan |
+| CGA3 | Cadangan General Affairs 3 | Barang calon pemusnahan (rusak/ex-peremajaan/tidak standar) |
+
+### Alur Pergerakan Aset Antar Gudang
+- Aset bisa berpindah: CGA1 → CGA2 (terlalu lama, jadi bekas)
+- Aset bisa berpindah: CGA2 → CGA3 (biaya service > 50% harga perolehan)
+- Setiap upload DAT terbaru otomatis update posisi aset via upsert
+
+### Data Non-Gudang
+- 47,314 aset toko dan departemen tersimpan sebagai background data
+- Tidak ditampilkan di dashboard utama
+- Digunakan untuk keperluan reconciliation (pelacakan posisi terakhir)
 
 ---
 
@@ -73,1102 +85,406 @@ Sistem ini berfungsi sebagai:
 
 ---
 
-## Core Problem Solving
-
-### Existing Problems
-
-#### 1. Oracle dan Web Tracking tidak terintegrasi langsung
-Akibat:
-- double input
-- human error
-- keterlambatan sinkronisasi
-- mismatch data asset
-
-#### 2. Perpindahan fisik barang tidak selalu sinkron dengan administrasi
-Akibat:
-- DAT tidak sesuai fisik
-- ownership asset tidak valid
-- stock opname mismatch
-
-#### 3. Monitoring masih berbasis Excel manual
-Akibat:
-- sulit monitoring realtime
-- sulit validasi data
-- sulit tracking histori
-- sulit analisis stok
-
-#### 4. Deskripsi asset legacy tidak konsisten
-Contoh:
-- Printer Epson T82
-- Printer TM Epson T82
-- Epson TM-T82
-- Printer Thermal Epson TM-T82
-
-Akibat:
-- sulit filtering
-- sulit reporting
-- sulit grouping asset
-- sulit analisis stok
-
----
-
-# 2. Business Workflow Context
-
-## Existing Enterprise Workflow
-
-### Oracle DAT Workflow
-Oracle digunakan sebagai sistem utama administrasi asset perusahaan.
-
-Digunakan untuk:
-- input asset
-- mutasi asset
-- pengelolaan DAT
-- cost-center management
-- depresiasi asset
-- P3AT / pemusnahan asset
-- kebutuhan finance
-
-Oracle menjadi sumber utama administrasi dan financial asset.
-
----
-
-### Web Tracking Workflow
-Web Tracking digunakan untuk:
-- tracking perpindahan asset
-- pengelolaan Surat Jalan
-- BTB (Bukti Terima Barang)
-- tracking ownership asset
-- tracking perpindahan antar cost-center
-
-Jenis transaksi:
-- Surat Jalan Mutasi
-- Surat Jalan Service
-- Surat Jalan Toko Tutup
-- Surat Jalan Sewa
-- dan transaksi lainnya
-
----
-
-## Main Operational Problems
-
-### Scenario 1
-Asset sudah dimutasi di Web Tracking tetapi belum dimutasi di Oracle.
-
-Akibat:
-- ownership berbeda
-- depresiasi salah
-- finance mismatch
-
----
-
-### Scenario 2
-Asset sudah dimutasi di Oracle tetapi tidak dibuatkan Web Tracking.
-
-Akibat:
-- lokasi asset tidak valid
-- ownership tracking mismatch
-- stock opname selisih
-
----
-
-### Scenario 3
-Perpindahan fisik dilakukan menggunakan Surat Jalan manual.
-
-Akibat:
-- perpindahan tidak tercatat di sistem
-- histori asset hilang
-- audit discrepancy
-
----
-
-## System Positioning
-
-System ini bukan:
-- ERP replacement
-- warehouse ERP
-- accounting system
-- official mutation system
-
-System ini adalah:
-- monitoring dashboard
-- reconciliation system
-- warehouse intelligence system
-- asset analysis system
-- discrepancy monitoring system
-
----
-
-# 3. Current Development State
+# 2. Current Development State (per 6 Juni 2026)
 
 ## Features Completed
 
 ### Dashboard UI
 Status: ✅ Completed
-
-Features:
-- enterprise dashboard layout
-- sidebar navigation
-- topbar
-- summary cards
-- dashboard analytics layout
-- dark SaaS interface
+- Enterprise dark dashboard layout
+- Sidebar navigasi dengan active state berbasis URL (usePathname)
+- Topbar dengan search dan user info
+- Summary cards (masih sebagian dummy)
+- Upload section
+- Font konsisten: DM Sans + JetBrains Mono
 
 ---
 
-### Excel Upload Pipeline
-Status: ✅ Completed
+### Excel Upload Pipeline → TXT Upload Pipeline
+Status: ✅ Completed (Upgraded)
 
-Features:
-- DAT Oracle upload
-- XLSX parsing
-- batch processing
-- upload validation
-- Supabase insert
-
----
-
-### DAT Oracle Parsing
-Status: ✅ Completed
-
-Features:
-- header normalization
-- hidden sheet handling
-- row transformation
-- normalization process
+Perubahan major:
+- **Migrasi dari Excel parser ke TXT parser** — file DAT Oracle asli berformat `.txt` tab-delimited
+- **Bulk upsert** menggantikan sequential insert
+- Performa: 51,459 baris dalam 85.6 detik (dari sebelumnya ~20 menit untuk 4,155 baris)
+- **Upsert strategy**: `ON CONFLICT (kode_asset) DO UPDATE` — upload DAT terbaru otomatis update data
+- Kolom finansial ditambahkan: `kuantitas`, `biaya_perolehan`, `jumlah_tercatat`
 
 ---
 
-### Classification Engine
+### Asset Classification Engine
 Status: ✅ Completed
 
-Features:
-- keyword-based classification
-- merk detection
-- kategori detection
-- confidence scoring
-- normalization engine
+Kapabilitas:
+- Keyword matching berbasis word boundary (bukan substring)
+- Jenis detection, Merk detection, No-Merk classification
+- Confidence scoring: high/medium/low
+- Dynamic keyword rules dari database
+- Rule type: `jenis`, `merk`, `no_merk`
+
+Fix penting:
+- Hapus regex agresif yang merusak keyword multi-kata
+- Word boundary: ` keyword ` — "GEA" tidak false positive ke "OMEGA"
 
 ---
 
-### Review Assets Dashboard
+### Reclassification Engine
 Status: ✅ Completed
 
-Features:
-- unknown asset review
-- filtering
-- pagination
-- search
-- review workflow
+Fitur:
+- Normal mode: reclassify semua aset Unknown gudang
+- Revert mode: targeted revert setelah rule dihapus
+- Auto-trigger setelah Add Rule modal
+- Success banner dengan jumlah aset terupdate
+- Filter hanya menyentuh aset CGA1/CGA2/CGA3
+
+---
+
+### Classification Dashboard (Live)
+Status: ✅ Completed
+
+Fitur:
+- Summary cards live dari Supabase: Total Unknown, Unknown Merk, Unknown Jenis, Completion %
+- Completion % dihitung dari total aset gudang
+- Tab: Review Aset + Keyword Rules
+- Filter: Semua / Unknown Jenis / Unknown Merk / Keduanya
+- Pagination dengan fetch semua data (bypass limit 1000)
+- Warehouse filter: hanya CGA1/CGA2/CGA3
 
 ---
 
 ### Keyword Rule System
 Status: ✅ Completed
 
-Features:
-- add keyword rule
-- Supabase integration
-- adaptive classification preparation
+Fitur:
+- Add rule (modal) dengan tipe: Jenis, Merk, No-Merk
+- Edit rule (modal) — update keyword/tipe/value
+- Delete rule + auto revert aset terdampak
+- Search di tabel keyword rules
+- Badge tipe: violet (Merk) / blue (Jenis)
+- Auto-reclassify setelah simpan rule baru
+
+---
+
+### PDF Report Export
+Status: ✅ Completed
+
+Fitur:
+- Laporan Rekap DAT per Jenis Barang
+- Filter cost center: ALL / CGA1 / CGA2 / CGA3
+- Struktur: Cost Center → Kategori Oracle → Jenis Barang
+- Kolom: Item, Qty, Biaya Perolehan, Jumlah Tercatat
+- Subtotal per kategori, total per cost center
+- Validasi: item count & qty match 100% dengan Excel Oracle
 
 ---
 
 ## Features In Progress
 
-### Real-time Dashboard Statistics
+### Live Dashboard Statistics
 Status: 🚧 In Progress
 
-Target:
-- live Supabase statistics
-- realtime summary cards
-- realtime analytics
+Summary cards masih sebagian dummy:
+- Total Asset (dummy)
+- Unclassified Asset (dummy)
+- Distribusi Aset panel (dummy)
+- Recent Activity Table (placeholder)
+
+Target: fetch live dari Supabase dengan filter CGA
 
 ---
 
-### Reclassification Engine
-Status: 🚧 In Progress
-
-Target:
-- auto reclassify after keyword insertion
-- refresh unknown asset queue
-- update existing data
-
----
-
-### DAT Classifier Improvement
-Status: 🚧 In Progress
-
-Target:
-- legacy asset normalization
-- serial number extraction
-- smarter parsing rules
-- asset standardization
-
----
-
-## Planned Features
+## Features Planned
 
 ### DAT vs Web Tracking Reconciliation
 Status: 📌 Planned
 
-Features:
-- mismatch detection
-- discrepancy dashboard
-- reconciliation monitoring
+Fitur:
+- Mismatch detection antara Oracle DAT dan Web Tracking
+- Discrepancy dashboard
+- Reconciliation monitoring
 
 ---
 
-### Internal Surat Jalan System
+### Warehouse Intelligence Dashboard
 Status: 📌 Planned
 
-Features:
-- manual SJ replacement
-- serial number tracking
-- temporary operational bridge
-- warehouse movement log
+Fitur:
+- Asset analytics per CGA
+- Distribution analytics
+- Nilai aset per kategori
+- Trend monitoring
 
 ---
 
-### PDF Surat Jalan Parser
+### Reporting Module — Excel Export
 Status: 📌 Planned
-
-Features:
-- read SJ PDF
-- extract DAT number
-- extract owner
-- movement detection
-- movement logging
-
----
-
-### Reporting System
-Status: 📌 Planned
-
-Features:
-- export PDF
-- export Excel
-- reconciliation reports
-- stock reports
 
 ---
 
 ### Authentication & Role Management
 Status: 📌 Planned
 
-Features:
-- login
-- role management
-- protected routes
+Rencana:
+- Supabase Auth
+- Role: Admin, Viewer
+- Protected routes
 
 ---
 
-## Features Still Dummy / Mock
-
-### Summary Cards
-Current:
-- static numbers
-- dummy statistics
-
-Target:
-- realtime Supabase statistics
-
----
-
-### Recent Activity
-Current:
-- placeholder table
-
-Target:
-- real upload history
-- real activity log
-
----
-
-### Asset Distribution Panel
-Current:
-- mock chart data
-
-Target:
-- live category distribution
-
----
-
-# 4. Current Tech Stack
+# 3. Tech Stack
 
 ## Frontend
-- Next.js 16
+- Next.js 16 (App Router)
 - React 19
 - TypeScript
 - Tailwind CSS v4
-
----
+- Font: DM Sans + JetBrains Mono (via next/font/google)
 
 ## Backend
-Current backend architecture:
-- Next.js Route Handlers
-- Serverless API approach
-
-No dedicated backend server currently used.
-
----
+- Next.js Route Handlers (serverless)
+- No dedicated backend server
 
 ## Database
 - Supabase PostgreSQL
 
-Database Architecture:
-- cloud-hosted PostgreSQL
-- raw vs clean architecture
-- classification logs
-- keyword learning system
+### Tables
+| Tabel | Fungsi |
+|-------|--------|
+| `assets_raw` | Data mentah DAT Oracle |
+| `assets_clean` | Data hasil klasifikasi |
+| `keyword_rules` | Rule klasifikasi adaptif |
+| `classification_logs` | Audit trail klasifikasi |
 
----
+### Indexes
+- `idx_assets_raw_toko` — optimasi filter warehouse
+- `idx_assets_clean_jenis` — optimasi filter unknown
+- `idx_assets_clean_merk` — optimasi filter unknown
+
+### Constraints
+- `assets_raw_kode_asset_unique` — mencegah duplikat, enable upsert
+- `assets_clean_raw_id_unique` — one-to-one dengan assets_raw
 
 ## Deployment
-- Vercel
-
----
-
-## Cloud Architecture
-
-| Component | Cloud Model |
-|---|---|
-| Vercel | PaaS |
-| Supabase | BaaS / DBaaS |
-| GitHub | SaaS |
-
----
+- Vercel (PaaS)
+- GitHub (source control)
+- Supabase (BaaS/DBaaS)
 
 ## Libraries
-
-### Main Libraries
-- @supabase/supabase-js
-- xlsx
-- lucide-react
-
-### Development Libraries
-- tailwindcss
-- typescript
-- @types/react
+- `@react-pdf/renderer` — PDF generation
+- `@supabase/supabase-js` — Supabase client
+- `lucide-react` — icons
 
 ---
 
-## Development Tools
-- GitHub
-- VS Code
-- Claude AI
-- ChatGPT
+# 4. Architecture
 
----
-
-# 5. Frontend Architecture
-
-## Current Folder Structure
+## ETL Pipeline (Current)
 
 ```text
-src/
- ├── app/
- │    ├── dashboard/
- │    ├── review/
- │    └── api/
- │
- ├── components/
- │    ├── layout/
- │    ├── dashboard/
- │    └── review/
- │
- ├── hooks/
- │
- ├── lib/
- │
- └── types/
-```
-
----
-
-## Routing Flow
-
-### Main Routes
-
-| Route | Purpose |
-|---|---|
-| /dashboard | Main dashboard |
-| /review | Review unclassified assets |
-| /api/process | Upload processing API |
-
----
-
-## Component Architecture
-
-### Architecture Pattern
-Current frontend menggunakan:
-- modular component architecture
-- reusable UI components
-- feature grouping
-- hooks-based logic separation
-
----
-
-### Current Pattern
-
-#### Components
-Digunakan untuk:
-- presentational UI
-- layout
-- reusable cards
-- reusable table
-- reusable badges
-
-#### Hooks
-Digunakan untuk:
-- business logic
-- state management
-- data processing
-- Supabase interaction
-
-#### Lib
-Digunakan untuk:
-- utilities
-- parser
-- classifier
-- Supabase client
-- types
-
----
-
-## State Management
-
-### Current Approach
-Using:
-- useState
-- useMemo
-- useCallback
-- custom hooks
-
----
-
-### Important Note
-Project intentionally DOES NOT use:
-- Redux
-- Zustand
-- large global state
-
-Reason:
-- current project scale still manageable
-- lightweight architecture preferred
-- avoid unnecessary complexity
-
----
-
-## Reusable Component Strategy
-
-### Current UI Pattern
-All UI should follow:
-- reusable cards
-- reusable badges
-- reusable toolbar
-- reusable table rows
-- modular dashboard widgets
-
-Avoid duplicated UI.
-
----
-
-# 6. UI/UX Guidelines
-
-## Design Language
-
-Current UI style:
-- enterprise dark dashboard
-- modern SaaS dashboard
-- warehouse intelligence dashboard
-- analytics style interface
-
----
-
-## Design Characteristics
-
-### Visual Style
-- dark background
-- cyan/blue accents
-- rounded cards
-- glassmorphism feel
-- compact spacing
-- modern enterprise layout
-
----
-
-## Layout Pattern
-
-### Main Layout
-
-Structure:
-- collapsible sidebar
-- sticky topbar
-- responsive dashboard grid
-- analytics card layout
-
----
-
-## Responsive Strategy
-
-Responsive behavior:
-- desktop-first dashboard
-- responsive grid
-- adaptive cards
-- compact mobile layout
-
----
-
-## Typography
-
-Current style:
-- clean sans-serif
-- modern dashboard typography
-- compact enterprise spacing
-
----
-
-## UI Consistency Rules
-
-### REQUIRED
-All future UI MUST:
-- follow existing dark dashboard style
-- maintain rounded card design
-- maintain current spacing pattern
-- maintain current accent color
-- maintain current component style
-
----
-
-## Animation Style
-
-Current approach:
-- lightweight transition
-- subtle hover effect
-- smooth card interaction
-
-Avoid heavy animation.
-
----
-
-# 7. Backend & Database Architecture
-
-## Current Backend Architecture
-
-Current architecture:
-
-```text
-Frontend Upload
+Oracle DAT Export (.txt)
 ↓
-Next.js API Route
-↓
-XLSX Parsing
-↓
-Normalization
-↓
-Batch Processing
-↓
-Supabase Insert
-↓
-Classification Engine
-↓
-Dashboard Analytics
-```
-
----
-
-## Database Tables
-
-### assets_raw
-Stores raw uploaded DAT data.
-
-Main fields:
-- kode_asset
-- deskripsi
-- lokasi
-- status
-- toko
-- kategori_oracle
-
-Reference: database_structure.md
-
----
-
-### assets_clean
-Stores normalized & classified assets.
-
-Main fields:
-- jenis
-- merk
-- kategori
-- normalized_description
-- confidence
-
----
-
-### classification_logs
-Stores classification history.
-
-Used for:
-- audit
-- debugging
-- review
-- reclassification tracking
-
----
-
-### keyword_rules
-Stores classification keyword rules.
-
-Used for:
-- adaptive learning
-- keyword matching
-- classification improvement
-
----
-
-## Current Database Concept
-
-### Raw vs Clean Architecture
-
-#### assets_raw
-Stores:
-- original Oracle data
-- untouched source data
-
-#### assets_clean
-Stores:
-- normalized data
-- classified data
-- processed data
-
-This architecture MUST be maintained.
-
----
-
-## Current ETL Flow
-
-```text
-Excel Upload
-↓
-XLSX Parser
+TXT Parser (tab-delimited)
 ↓
 Header Validation
 ↓
-Normalization
+Data Normalization
 ↓
-Batch Processing
+Memory Classification (classifyAsset)
 ↓
-Supabase Insert
+Bulk Upsert assets_raw (ON CONFLICT kode_asset)
 ↓
-Classification Engine
+Bulk Upsert assets_clean (ON CONFLICT raw_id)
 ↓
-Dashboard
+Dashboard Refresh
 ```
 
----
-
-## Current Classification Flow
+## Classification Flow
 
 ```text
-Original Description
+Original Description (deskripsi)
 ↓
-Keyword Matching
+normalizeText() — lowercase, replace punctuation, trim
 ↓
-Normalization
+Word boundary matching (` keyword `)
 ↓
-Classification
+Match keyword_rules (jenis / merk / no_merk)
 ↓
-Confidence Score
+Confidence scoring (high/medium/low)
 ↓
-assets_clean
+assets_clean (jenis, merk, confidence)
 ```
 
----
-
-## Planned Reconciliation Flow
+## Warehouse Filter Strategy
 
 ```text
-Oracle DAT
-+
-Web Tracking
-+
-Internal SJ
+51,459 total aset di DB
 ↓
-Reconciliation Engine
+Filter: toko ILIKE 'CGA1%' OR 'CGA2%' OR 'CGA3%'
 ↓
-Mismatch Detection
-↓
-Monitoring Dashboard
+4,145 aset gudang (yang dimonitor)
 ```
 
----
-
-## Authentication Flow
-
-### Current State
-Authentication not implemented yet.
-
-Current mode:
-- internal prototype
-- public development mode
-
----
-
-## Planned Authentication
-
-Planned:
-- Supabase Auth
-- role-based access
-- protected routes
-
----
-
-# 8. Classification Engine Architecture
-
-## Classification System
-
-Current system uses:
-- keyword-based classification
-- adaptive rule system
-- normalization process
-
----
-
-## Classification Goals
-
-System should detect:
-- jenis barang
-- merk
-- kategori
-- serial number
-- normalized description
-
----
-
-## Main Purpose
-
-Current classifier exists to:
-- normalize legacy asset descriptions
-- improve reporting quality
-- improve filtering
-- improve warehouse analytics
-
----
-
-## Adaptive Keyword Learning
-
-Current architecture supports:
-- adding new keyword rules
-- improving classification quality
-- dynamic rule update
-
----
-
-## Review Workflow
-
-Workflow:
+## Reclassification Flow
 
 ```text
-Unknown Asset
+Add / Edit / Delete Keyword Rule
 ↓
-Review Dashboard
+/api/reclassify POST
 ↓
-Add Keyword Rule
+Fetch keyword_rules aktif
 ↓
-Save to Supabase
+Fetch aset Unknown gudang (CGA only)
 ↓
-Reclassification
+classifyAsset() per aset
+↓
+Batch UPDATE assets_clean yang berubah
+↓
+Refresh dashboard
 ```
 
 ---
 
-# 9. Development Rules
+# 5. Database Architecture
 
-## Coding Rules
+## assets_raw
 
-### REQUIRED
-- modular code
-- reusable component
-- clean separation of logic
-- avoid duplicated logic
-- maintain lightweight architecture
+Menyimpan data mentah DAT Oracle.
 
----
-
-## Naming Convention
-
-### Components
-PascalCase
-
-Example:
-- SummaryCard.tsx
-- ReviewTable.tsx
-
-### Hooks
-camelCase with use prefix
-
-Example:
-- useReviewAssets.ts
-- useKeywordRule.ts
-
-### Utilities
-camelCase
-
-Example:
-- xlsxParser.ts
-- classifier.ts
+Field utama:
+- `id` (uuid, PK)
+- `kode_asset` (text, UNIQUE) — No. Seri Oracle
+- `deskripsi` (text) — Keterangan Oracle
+- `toko` (text) — Cost center/lokasi
+- `kategori_oracle` (text) — Kategori Oracle
+- `status` (text)
+- `kuantitas` (int4)
+- `biaya_perolehan` (int8) — dalam satuan Rupiah
+- `jumlah_tercatat` (int8) — dalam satuan Rupiah
+- `uploaded_at` (timestamp)
+- `source` (text)
 
 ---
 
-## Import Rules
+## assets_clean
 
-Preferred:
-- grouped imports
-- clean ordering
-- avoid circular dependency
+Menyimpan data hasil klasifikasi.
 
----
-
-## Dependency Rules
-
-DO NOT add heavy dependency unless necessary.
-
-Avoid:
-- unnecessary state library
-- unnecessary UI framework
-- overengineering
+Field utama:
+- `id` (uuid, PK)
+- `raw_id` (uuid, FK → assets_raw, UNIQUE)
+- `original_description` (text)
+- `normalized_description` (text)
+- `jenis` (text) — hasil classifier
+- `merk` (text) — hasil classifier
+- `kategori` (text)
+- `confidence` (text) — low/medium/high
+- `status` (text)
+- `created_at` (timestamp)
 
 ---
 
-## Architecture Rules
+## keyword_rules
 
-### MUST KEEP
-- modular structure
-- hooks separation
-- reusable component pattern
-- ETL architecture
-- raw vs clean database architecture
+Menyimpan rule klasifikasi adaptif.
 
----
-
-# 10. Existing Constraints
-
-## Thesis Scope Constraints
-
-Project scope limited to:
-- monitoring
-- analysis
-- reconciliation
-- warehouse intelligence
-
-Project DOES NOT include:
-- ERP replacement
-- financial accounting
-- official asset mutation system
-- Oracle replacement
+Field utama:
+- `id` (uuid, PK)
+- `keyword` (text) — uppercase
+- `rule_type` (text) — 'jenis' | 'merk' | 'no_merk'
+- `value` (text) — nilai yang di-assign
+- `created_at` (timestamptz)
 
 ---
 
-## Technical Constraints
+# 6. Development Rules
 
-Current limitations:
-- no realtime sync with Oracle
-- no direct integration with Web Tracking
-- upload-based reconciliation
-- PDF parsing not implemented yet
+## Architecture Rules (MUST NOT CHANGE)
 
----
+- Raw vs Clean database architecture
+- Supabase integration pattern
+- ETL upload flow
+- Modular component structure
+- Reusable component strategy
+- Dashboard design direction
+- Hook-based logic separation
+- Warehouse filter (CGA only untuk monitoring)
 
-## Operational Constraints
+## Coding Standards
 
-Current workflow still depends on:
-- manual upload
-- operational admin workflow
-- Oracle export file
-- Web Tracking export file
+- Modular architecture
+- Reusable components
+- Hooks untuk business logic
+- TypeScript strict typing
+- Tailwind utility classes
+- Clean separation of concerns
+- PascalCase untuk components, camelCase untuk hooks/utils
 
----
+## UI Standards
 
-# 11. Future Development Direction
-
-## Main Roadmap
-
-### Phase 1
-- stabilize upload pipeline
-- improve classifier
-- realtime dashboard
-
-### Phase 2
-- reconciliation engine
-- DAT vs Web Tracking validation
-- mismatch analytics
-
-### Phase 3
-- internal Surat Jalan system
-- PDF parser
-- movement timeline
-
-### Phase 4
-- analytics dashboard
-- export reporting
-- role management
+- Dark enterprise dashboard
+- Background: `#080e18`
+- Surface: `#111827`
+- Accent: Cyan/Blue primary, Violet/Amber/Emerald/Rose secondary
+- Font: DM Sans (body) + JetBrains Mono (code/numbers)
+- Rounded cards: `rounded-2xl`
+- Compact spacing: `p-5` max untuk cards
 
 ---
 
-## Future Planned Features
+# 7. Thesis Positioning
 
-### Priority Features
-- reconciliation engine
-- PDF parsing
-- internal SJ system
-- stock analytics
-- dashboard analytics
-- reporting
-- role management
+## This Project IS:
+- Warehouse Asset Monitoring System
+- Adaptive Classification System
+- Asset Reconciliation Platform
+- Cloud-based DAT Processing System
+- Warehouse Intelligence Dashboard
 
----
+## This Project IS NOT:
+- ERP Replacement
+- Oracle Replacement
+- Accounting System
+- Official Asset Mutation System
+- Full Web Tracking Integration
 
-# 12. AI Development Guidance
-
-## Important Context
-
-This project ALREADY has:
-- existing architecture
-- existing UI system
-- existing Supabase integration
-- existing ETL pipeline
-- existing component structure
-
-AI/developer MUST:
-- continue existing direction
-- preserve architecture consistency
-- preserve UI consistency
-- preserve database consistency
+## Academic Scope
+- ETL Pipeline implementation
+- Rule-based intelligent classification
+- Cloud architecture (Vercel + Supabase + GitHub)
+- Agile development methodology
+- Warehouse asset management digitalization
 
 ---
 
-## DO NOT
-
-- rewrite architecture
-- create ERP system
-- replace Supabase architecture
-- replace ETL flow
-- overengineer state management
-- change current dashboard design direction
-
----
-
-## REQUIRED APPROACH
-
-- maintain modular structure
-- maintain reusable component strategy
-- maintain current UI style
-- maintain current database architecture
-- preserve lightweight architecture
-- follow current feature modularization
-
----
-
-## UI Guidance
-
-Future UI MUST:
-- follow enterprise dark dashboard style
-- maintain cyan/blue accents
-- maintain rounded cards
-- maintain compact spacing
-- maintain current dashboard hierarchy
-
----
-
-## Backend Guidance
-
-Future backend MUST:
-- preserve Supabase integration
-- preserve ETL architecture
-- preserve raw vs clean approach
-- preserve batch processing strategy
-
----
-
-# 13. Known Issues & Technical Debt
+# 8. Known Issues & Technical Debt
 
 ## Current Issues
 
 ### Dashboard Statistics
-Current:
-- still dummy
-- not realtime
-
----
-
-### Activity Table
-Current:
-- placeholder only
-
----
+- Summary cards masih sebagian dummy
+- Target: live Supabase query dengan filter CGA
 
 ### Classification Accuracy
-Current limitations:
-- keyword matching still limited
-- legacy description still inconsistent
-
----
+- Keyword matching masih rule-based (exact/semi-exact)
+- Belum ada fuzzy matching atau synonym handling
+- ~84% aset gudang masih Unknown (butuh lebih banyak keyword rules)
 
 ### Authentication
-Current:
-- not implemented yet
+- Belum diimplementasikan
+- Sistem masih prototype/internal mode
 
----
+### Recent Activity Table
+- Masih placeholder
+- Belum ada activity logging system
 
-## Technical Debt
+## Accepted Technical Debt
 
-### Current Technical Debt
-- no centralized logging
-- limited analytics
-- parser still evolving
-- no realtime engine yet
-- review workflow still basic
+### Static jenis/kategori Options
+- Beberapa opsi di form masih hardcoded
+- Diterima untuk menjaga simplicity dan development speed
 
----
-
-## Refactor Areas
-
-Potential future refactor:
-- parser modularization
-- reconciliation service layer
-- analytics optimization
-- dashboard performance optimization
-
----
-
-# 14. DO NOT CHANGE WITHOUT APPROVAL
-
-## High Priority Protected Architecture
-
-The following parts MUST NOT be changed without approval:
-
-- Core database structure
-- Raw vs clean architecture
-- Authentication flow design
-- Main routing architecture
-- Existing Supabase integration
-- Existing reusable component patterns
-- Existing ETL upload pipeline
-- Current dashboard layout structure
-- Current feature modularization
-- Current hooks-based logic separation
-
----
-
-# Final Notes
-
-This project is:
-- enterprise-inspired
-- thesis-oriented
-- monitoring-focused
-- reconciliation-focused
-- warehouse intelligence focused
-
-Main objective:
-Build a scalable and maintainable cloud-based asset monitoring & reconciliation system while preserving lightweight modern architecture.
-
+### No Realtime Sync
+- Tidak ada koneksi langsung ke Oracle
+- Upload manual diperlukan setiap ada DAT terbaru
+- Diterima karena scope skripsi = monitoring, bukan integrasi ERP
