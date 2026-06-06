@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  memo,
-  useCallback,
-  useDeferredValue,
-  useMemo,
-  useState,
-} from "react";
+import { memo, useCallback, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import ReviewSummaryCards from "@/components/review/ReviewSummaryCards";
@@ -18,7 +12,6 @@ import { useReviewAssets } from "@/hooks/useReviewAssets";
 import { useReclassify } from "@/hooks/useReclassify";
 import type { FilterType } from "@/lib/reviewTypes";
 
-const PAGE_SIZE = 20;
 type TabType = "review" | "rules";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
@@ -30,7 +23,9 @@ const EmptyState = memo(() => (
       </svg>
     </div>
     <p className="text-sm font-medium text-white/60">Tidak ada aset unknown</p>
-    <p className="mt-1 max-w-xs text-xs text-white/30">Semua aset sudah terklasifikasi. Tambah rule baru jika muncul aset baru yang tidak dikenali.</p>
+    <p className="mt-1 max-w-xs text-xs text-white/30">
+      Semua aset sudah terklasifikasi. Tambah rule baru jika muncul aset baru yang tidak dikenali.
+    </p>
   </div>
 ));
 EmptyState.displayName = "EmptyState";
@@ -115,36 +110,27 @@ TableHeader.displayName = "TableHeader";
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ClassificationPage() {
-  const { allAssets, loading, summary, removeById, refresh } = useReviewAssets();
-  const { status: reclassifyStatus, result: reclassifyResult, trigger: triggerReclassify } = useReclassify();
+  // ✅ Semua state filter/search/pagination sekarang di hook (server-side)
+  const {
+    assets,
+    summary,
+    loading,
+    page,
+    totalPages,
+    totalCount,
+    filter,
+    search,
+    setPage,
+    setFilter,
+    setSearch,
+    removeById,
+    refresh,
+  } = useReviewAssets();
 
+  const { status: reclassifyStatus, result: reclassifyResult, trigger: triggerReclassify } = useReclassify();
   const [activeTab, setActiveTab] = useState<TabType>("review");
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<FilterType>("all");
-  const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<{ id: string; keyword: string } | null>(null);
-
-  const deferredSearch = useDeferredValue(search);
-
-  const filtered = useMemo(() => {
-    let list = allAssets;
-    if (filter === "unknown_jenis") list = list.filter((a) => a.jenis === "Unknown");
-    else if (filter === "unknown_merk") list = list.filter((a) => a.merk === "Unknown");
-    else if (filter === "both") list = list.filter((a) => a.jenis === "Unknown" && a.merk === "Unknown");
-    const q = deferredSearch.toLowerCase().trim();
-    if (q) list = list.filter((a) =>
-      a.original_description?.toLowerCase().includes(q) ||
-      a.normalized_description?.toLowerCase().includes(q) ||
-      a.kategori?.toLowerCase().includes(q)
-    );
-    return list;
-  }, [allAssets, filter, deferredSearch]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const handleSearch = useCallback((v: string) => { setSearch(v); setPage(1); }, []);
-  const handleFilter = useCallback((v: FilterType) => { setFilter(v); setPage(1); }, []);
-  const paginated = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page]);
 
   const handleReclassify = useCallback(async () => {
     const result = await triggerReclassify();
@@ -177,7 +163,9 @@ export default function ClassificationPage() {
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <h1 className="text-lg font-semibold tracking-tight text-white">Classification</h1>
-              <p className="mt-0.5 text-xs text-white/40">Klasifikasi aset yang belum dikenali oleh sistem secara otomatis</p>
+              <p className="mt-0.5 text-xs text-white/40">
+                Klasifikasi aset yang belum dikenali oleh sistem secara otomatis
+              </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <div className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5">
@@ -186,7 +174,7 @@ export default function ClassificationPage() {
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-400" />
                 </span>
                 <span className="text-xs font-medium text-white/70">
-                  {loading ? "—" : allAssets.length.toLocaleString()} aset unknown
+                  {loading ? "—" : summary.total.toLocaleString()} aset unknown
                 </span>
               </div>
               <button onClick={handleReclassify} disabled={isReclassifying || loading}
@@ -225,7 +213,7 @@ export default function ClassificationPage() {
           {/* ── Tab switcher ───────────────────────────────────────── */}
           <div className="mb-4 flex items-center gap-1 rounded-xl border border-white/[0.06] bg-white/[0.02] p-1 w-fit">
             {([
-              { id: "review", label: "Review Aset", count: allAssets.length },
+              { id: "review", label: "Review Aset", count: summary.total },
               { id: "rules",  label: "Keyword Rules", count: null },
             ] as { id: TabType; label: string; count: number | null }[]).map((tab) => (
               <button
@@ -233,9 +221,7 @@ export default function ClassificationPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={[
                   "flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium transition-all",
-                  activeTab === tab.id
-                    ? "bg-white/10 text-white shadow-sm"
-                    : "text-white/40 hover:text-white/70",
+                  activeTab === tab.id ? "bg-white/10 text-white shadow-sm" : "text-white/40 hover:text-white/70",
                 ].join(" ")}
               >
                 {tab.label}
@@ -256,22 +242,22 @@ export default function ClassificationPage() {
               <div className="border-b border-white/[0.06] px-5 py-3">
                 <ReviewTableToolbar
                   search={search}
-                  onSearch={handleSearch}
+                  onSearch={setSearch}
                   filter={filter}
-                  onFilter={handleFilter}
-                  totalFiltered={filtered.length}
-                  totalAll={allAssets.length}
+                  onFilter={setFilter as (v: FilterType) => void}
+                  totalFiltered={totalCount}
+                  totalAll={summary.total}
                 />
               </div>
               {loading || isReclassifying ? (
                 <LoadingRows />
-              ) : filtered.length === 0 ? (
+              ) : assets.length === 0 ? (
                 <EmptyState />
               ) : (
                 <>
                   <TableHeader />
                   <div className="divide-y divide-white/[0.04]">
-                    {paginated.map((asset) => (
+                    {assets.map((asset) => (
                       <ReviewTableRow
                         key={asset.id}
                         asset={asset}
@@ -279,7 +265,13 @@ export default function ClassificationPage() {
                       />
                     ))}
                   </div>
-                  <Pagination page={page} totalPages={totalPages} onPage={setPage} totalItems={filtered.length} pageSize={PAGE_SIZE} />
+                  <Pagination
+                    page={page}
+                    totalPages={totalPages}
+                    onPage={setPage}
+                    totalItems={totalCount}
+                    pageSize={20}
+                  />
                 </>
               )}
             </div>
