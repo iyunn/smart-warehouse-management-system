@@ -38,6 +38,8 @@ export interface ReviewSummary {
    * Formula: (totalAssets - totalUnknown) / totalAssets * 100
    */
   completionPct: number;
+  totalClassified?: number;
+  totalGudang?: number;
 }
 
 // ─── Modal form state ─────────────────────────────────────────────────────────
