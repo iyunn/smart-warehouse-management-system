@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 type NavItem = {
   id: string;
@@ -48,16 +49,27 @@ const icons = {
 };
 
 const navItems: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", icon: icons.dashboard, href: "/" },
-  { id: "upload", label: "Upload DAT", icon: icons.upload, href: "#" },
-  { id: "monitoring", label: "Monitoring", icon: icons.monitor, href: "#" },
-  { id: "classification", label: "Classification", icon: icons.classification, href: "/review" },
-  { id: "reports", label: "Reports", icon: icons.reports, href: "#" },
-  { id: "settings", label: "Settings", icon: icons.settings, href: "#" },
+  { id: "dashboard",      label: "Dashboard",      icon: icons.dashboard,      href: "/"        },
+  { id: "upload",         label: "Upload DAT",     icon: icons.upload,         href: "#"        },
+  { id: "monitoring",     label: "Monitoring",     icon: icons.monitor,        href: "#"        },
+  { id: "classification", label: "Classification", icon: icons.classification, href: "/review"  },
+  { id: "reports",        label: "Reports",        icon: icons.reports,        href: "/reports" },
+  { id: "settings",       label: "Settings",       icon: icons.settings,       href: "#"        },
 ];
 
+/** Tentukan nav item aktif berdasarkan URL saat ini */
+function getActiveId(pathname: string): string {
+  if (pathname.startsWith("/review")) return "classification";
+  if (pathname.startsWith("/reports")) return "reports";
+  if (pathname.startsWith("/monitoring")) return "monitoring";
+  if (pathname.startsWith("/settings")) return "settings";
+  if (pathname === "/" || pathname.startsWith("/dashboard")) return "dashboard";
+  return "dashboard";
+}
+
 export default function Sidebar() {
-  const [active, setActive] = useState("dashboard");
+  const pathname = usePathname();
+  const activeId = getActiveId(pathname);
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -101,7 +113,7 @@ export default function Sidebar() {
           <p className="text-[10px] text-slate-600 uppercase tracking-widest font-medium px-3 pb-2">Main Menu</p>
         )}
         {navItems.slice(0, 4).map((item) => (
-          <NavLink key={item.id} item={item} active={active} collapsed={collapsed} onClick={() => setActive(item.id)} />
+          <NavLink key={item.id} item={item} isActive={activeId === item.id} collapsed={collapsed} />
         ))}
 
         {!collapsed && (
@@ -109,7 +121,7 @@ export default function Sidebar() {
         )}
         {collapsed && <div className="h-2" />}
         {navItems.slice(4).map((item) => (
-          <NavLink key={item.id} item={item} active={active} collapsed={collapsed} onClick={() => setActive(item.id)} />
+          <NavLink key={item.id} item={item} isActive={activeId === item.id} collapsed={collapsed} />
         ))}
       </nav>
 
@@ -134,14 +146,22 @@ export default function Sidebar() {
   );
 }
 
-function NavLink({ item, active, collapsed, onClick }: { item: NavItem; active: string; collapsed: boolean; onClick: () => void }) {
-  const isActive = active === item.id;
+function NavLink({
+  item,
+  isActive,
+  collapsed,
+}: {
+  item: NavItem;
+  isActive: boolean;
+  collapsed: boolean;
+}) {
   return (
-    <Link href={item.href}
-      onClick={onClick}
+    <Link
+      href={item.href}
       title={collapsed ? item.label : undefined}
       className={`
-        w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150 group relative
+        w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium
+        transition-all duration-150 group relative
         ${isActive
           ? "bg-gradient-to-r from-cyan-500/15 to-blue-500/10 text-cyan-400 shadow-sm"
           : "text-slate-500 hover:text-slate-200 hover:bg-white/[0.04]"
@@ -162,4 +182,3 @@ function NavLink({ item, active, collapsed, onClick }: { item: NavItem; active: 
     </Link>
   );
 }
-

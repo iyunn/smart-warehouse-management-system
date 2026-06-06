@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { buildWarehouseFilter } from "@/lib/types";
 import type {
   AssetClean,
   ReviewSummary,
@@ -11,8 +12,7 @@ import type {
 } from "../lib/reviewTypes";
 
 const PAGE_SIZE = 20;
-// Supabase max rows per request = 1000. Kita fetch semua dengan loop pagination.
-const FETCH_BATCH = 1000;
+const FETCH_SIZE = 1000;
 
 interface UseReviewAssetsReturn {
   assets: AssetClean[];
@@ -46,7 +46,6 @@ export function useReviewAssets(): UseReviewAssetsReturn {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [refreshTick, setRefreshTick] = useState(0);
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
@@ -58,131 +57,127 @@ export function useReviewAssets(): UseReviewAssetsReturn {
         const validSortField =
           sortField === "confidence_score" ? "confidence" : sortField;
 
-        // ── Fetch semua unknown assets dengan loop (bypass limit 1000) ──────────
+        // ── Fetch unknown assets hanya dari cost center gudang (CGA1/CGA2/CGA3) ──
+        // Strategy: fetch assets_clean yang unknown, lalu filter via raw_id
+        // yang toko-nya CGA menggunakan subquery via Supabase
         let allRows: any[] = [];
         let from = 0;
-        let hasMore = true;
 
-        while (hasMore) {
+        while (true) {
           const { data, error: sbError } = await supabase
             .from("assets_clean")
-            .select(
-              "id, original_description, normalized_description, jenis, merk, kategori, confidence, status"
-            )
+            .select(`
+              id,
+              original_description,
+              normalized_description,
+              jenis,
+              merk,
+              kategori,
+              confidence,
+              status,
+              assets_raw!inner(toko)
+            `)
             .or("jenis.eq.Unknown,merk.eq.Unknown")
+            .or(buildWarehouseFilter(), { referencedTable: "assets_raw" })
             .order(validSortField, { ascending: sortDir === "asc" })
-            .range(from, from + FETCH_BATCH - 1);
+            .range(from, from + FETCH_SIZE - 1)
 
-          if (sbError) throw new Error(sbError.message);
+          if (sbError) throw new Error(sbError.message)
 
-          const batch = data ?? [];
-          allRows = [...allRows, ...batch];
+          const batch = data ?? []
+          allRows = [...allRows, ...batch]
 
-          // Kalau batch < 1000, berarti sudah habis
-          hasMore = batch.length === FETCH_BATCH;
-          from += FETCH_BATCH;
-
-          // Safety: stop kalau sudah fetch terlalu banyak (50k rows)
-          if (from > 50000) break;
+          if (batch.length < FETCH_SIZE) break
+          from += FETCH_SIZE
+          if (from > 100000) break
         }
 
-        // ── Hitung total semua aset (untuk completionPct) ───────────────────────
+        // ── Hitung total aset gudang (untuk completionPct) ────────────────────
         const { count, error: countError } = await supabase
           .from("assets_clean")
-          .select("*", { count: "exact", head: true });
+          .select("assets_raw!inner(toko)", { count: "exact", head: true })
+          .or(buildWarehouseFilter(), { referencedTable: "assets_raw" })
 
-        if (countError) throw new Error(countError.message);
+        if (countError) throw new Error(countError.message)
 
         if (!cancelled) {
-          // Map 'confidence' (DB) → 'confidence_score' (type lokal)
           const mapped = allRows.map((row: any) => ({
             ...row,
             confidence_score: row.confidence ?? null,
-          })) as AssetClean[];
+          })) as AssetClean[]
 
-          setAllAssets(mapped);
-          setTotalAssetCount(count ?? 0);
+          setAllAssets(mapped)
+          setTotalAssetCount(count ?? 0)
         }
       } catch (err) {
         if (!cancelled)
-          setError(err instanceof Error ? err.message : "Gagal memuat data.");
+          setError(err instanceof Error ? err.message : "Gagal memuat data.")
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoading(false)
       }
     }
 
-    fetchAssets();
-    return () => {
-      cancelled = true;
-    };
-  }, [sortField, sortDir, refreshTick]);
+    fetchAssets()
+    return () => { cancelled = true }
+  }, [sortField, sortDir, refreshTick])
 
   // ── Client-side filter + search ───────────────────────────────────────────────
   const filtered = useMemo(() => {
-    let rows = allAssets;
+    let rows = allAssets
 
     if (filter === "unknown_jenis")
-      rows = rows.filter((r) => r.jenis === "Unknown");
+      rows = rows.filter((r) => r.jenis === "Unknown")
     else if (filter === "unknown_merk")
-      rows = rows.filter((r) => r.merk === "Unknown");
+      rows = rows.filter((r) => r.merk === "Unknown")
     else if (filter === "both")
-      rows = rows.filter(
-        (r) => r.jenis === "Unknown" && r.merk === "Unknown"
-      );
+      rows = rows.filter((r) => r.jenis === "Unknown" && r.merk === "Unknown")
 
     if (search.trim()) {
-      const q = search.toLowerCase();
+      const q = search.toLowerCase()
       rows = rows.filter(
         (r) =>
           r.original_description?.toLowerCase().includes(q) ||
           r.normalized_description?.toLowerCase().includes(q) ||
           r.kategori?.toLowerCase().includes(q)
-      );
+      )
     }
 
-    return rows;
-  }, [allAssets, filter, search]);
+    return rows
+  }, [allAssets, filter, search])
 
-  // ── Pagination ────────────────────────────────────────────────────────────────
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
 
   const assets = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, page]);
+    const start = (page - 1) * PAGE_SIZE
+    return filtered.slice(start, start + PAGE_SIZE)
+  }, [filtered, page])
 
-  useEffect(() => {
-    setPage(1);
-  }, [filter, search]);
+  useEffect(() => { setPage(1) }, [filter, search])
 
   // ── Summary ───────────────────────────────────────────────────────────────────
-  // completionPct dihitung dari totalAssetCount (semua aset di assets_clean)
-  // bukan dari jumlah unknown saja, agar angkanya akurat
   const summary = useMemo<ReviewSummary>(() => {
-    const totalUnknown = allAssets.length;
-    const unknownJenis = allAssets.filter((r) => r.jenis === "Unknown").length;
-    const unknownMerk = allAssets.filter((r) => r.merk === "Unknown").length;
+    const totalUnknown = allAssets.length
+    const unknownJenis = allAssets.filter((r) => r.jenis === "Unknown").length
+    const unknownMerk = allAssets.filter((r) => r.merk === "Unknown").length
 
     const completionPct =
       totalAssetCount === 0
         ? 100
-        : Math.round(
-            ((totalAssetCount - totalUnknown) / totalAssetCount) * 100
-          );
+        : Math.round(((totalAssetCount - totalUnknown) / totalAssetCount) * 100)
 
-    return { total: totalUnknown, unknownJenis, unknownMerk, completionPct };
-  }, [allAssets, totalAssetCount]);
+    return { total: totalUnknown, unknownJenis, unknownMerk, completionPct }
+  }, [allAssets, totalAssetCount])
 
   const setSort = useCallback((field: SortField, dir: SortDir) => {
-    setSortField(field);
-    setSortDir(dir);
-  }, []);
+    setSortField(field)
+    setSortDir(dir)
+  }, [])
 
-  const refresh = useCallback(() => setRefreshTick((t) => t + 1), []);
+  const refresh = useCallback(() => setRefreshTick((t) => t + 1), [])
 
   const removeById = useCallback((id: string) => {
-    setAllAssets((prev) => prev.filter((a) => a.id !== id));
-  }, []);
+    setAllAssets((prev) => prev.filter((a) => a.id !== id))
+  }, [])
 
   return {
     assets,
@@ -202,5 +197,5 @@ export function useReviewAssets(): UseReviewAssetsReturn {
     setSort,
     refresh,
     removeById,
-  };
+  }
 }

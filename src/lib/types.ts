@@ -1,6 +1,32 @@
 // ─── Raw Excel row (keyed by the actual column header strings) ─────────────────
 export type RawExcelRow = Record<string, unknown>;
 
+// ─── Warehouse cost center constants ─────────────────────────────────────────
+// Tiga gudang utama yang dimonitor sistem ini
+export const WAREHOUSE_COST_CENTERS = ['CGA1', 'CGA2', 'CGA3'] as const
+export type WarehouseCostCenter = typeof WAREHOUSE_COST_CENTERS[number]
+
+/**
+ * CGA1 = Cadangan General Affairs 1 (barang baru dari supplier)
+ * CGA2 = Cadangan General Affairs 2 (barang bekas layak pakai)
+ * CGA3 = Cadangan General Affairs 3 (barang calon pemusnahan)
+ */
+export const WAREHOUSE_LABELS: Record<WarehouseCostCenter, string> = {
+  CGA1: 'Cadangan General Affairs 1',
+  CGA2: 'Cadangan General Affairs 2',
+  CGA3: 'Cadangan General Affairs 3',
+}
+
+/**
+ * Build Supabase filter string untuk query hanya aset gudang.
+ * Contoh hasil: "toko.ilike.CGA1%,toko.ilike.CGA2%,toko.ilike.CGA3%"
+ */
+export function buildWarehouseFilter(): string {
+  return WAREHOUSE_COST_CENTERS
+    .map((code) => `toko.ilike.${code}%`)
+    .join(',')
+}
+
 // ─── Mapped / validated asset record ──────────────────────────────────────────
 export interface AssetRecord {
   toko:             string;
@@ -13,7 +39,7 @@ export interface AssetRecord {
   jumlah_tercatat:  number;
 }
 
-// ─── Column mapping: Excel header → AssetRecord key (legacy xlsx support) ─────
+// ─── Column mapping ────────────────────────────────────────────────────────────
 export const COLUMN_MAP: Record<string, keyof AssetRecord> = {
   toko:                  "toko",
   kategori:              "kategori_oracle",
@@ -56,7 +82,7 @@ export interface ParseResult {
   warnings:    string[];
 }
 
-// ─── Upload pipeline state (drives the UI) ────────────────────────────────────
+// ─── Upload pipeline state ────────────────────────────────────────────────────
 export type PipelinePhase =
   | "idle"
   | "dragging"
