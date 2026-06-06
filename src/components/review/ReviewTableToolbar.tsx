@@ -32,6 +32,8 @@ function ReviewTableToolbar({
     [onSearch]
   );
 
+  const handleClear = useCallback(() => onSearch(""), [onSearch]);
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       {/* Left: filter chips */}
@@ -61,6 +63,7 @@ function ReviewTableToolbar({
           aset
         </span>
         <div className="relative">
+          {/* Search icon */}
           <svg
             className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
             width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -68,13 +71,27 @@ function ReviewTableToolbar({
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
+
           <input
             type="text"
             value={search}
             onChange={handleSearch}
             placeholder="Cari kode, deskripsi..."
-            className="bg-white/[0.04] border border-white/[0.08] text-slate-300 text-[12px] placeholder:text-slate-600 rounded-xl pl-8 pr-3 py-1.5 w-44 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all"
+            className="bg-white/[0.04] border border-white/[0.08] text-slate-300 text-[12px] placeholder:text-slate-600 rounded-xl pl-8 pr-7 py-1.5 w-44 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all"
           />
+
+          {/* Clear button — hanya muncul kalau ada input */}
+          {search && (
+            <button
+              onClick={handleClear}
+              aria-label="Hapus pencarian"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 flex h-4 w-4 items-center justify-center rounded-full bg-white/10 text-slate-400 hover:bg-white/20 hover:text-white transition-all"
+            >
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M1 1l6 6M7 1L1 7" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
     </div>

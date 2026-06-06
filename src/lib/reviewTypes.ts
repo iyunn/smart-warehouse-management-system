@@ -21,7 +21,7 @@ export interface AssetClean {
 export interface KeywordRule {
   id?: string;
   keyword: string;
-  rule_type: "jenis" | "merk";
+  rule_type: "jenis" | "merk" | "no_merk";
   value: string;
   created_at?: string;
 }
@@ -43,7 +43,7 @@ export interface ReviewSummary {
 // ─── Modal form state ─────────────────────────────────────────────────────────
 export interface RuleFormState {
   keyword: string;
-  rule_type: "jenis" | "merk";
+  rule_type: "jenis" | "merk" | "no_merk";
   value: string;
 }
 
@@ -55,6 +55,5 @@ export const RULE_FORM_EMPTY: RuleFormState = {
 
 // ─── Filter / sort state ──────────────────────────────────────────────────────
 export type FilterType = "all" | "unknown_jenis" | "unknown_merk" | "both";
-// kode_asset diganti original_description karena kode_asset tidak ada di assets_clean
 export type SortField = "original_description" | "jenis" | "merk" | "confidence_score";
 export type SortDir = "asc" | "desc";

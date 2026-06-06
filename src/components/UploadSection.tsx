@@ -11,7 +11,7 @@
  */
 
 import { useState, useCallback, useRef, useReducer } from "react";
-import { parseExcelFile } from "@/lib/xlsxParser";
+import { parseTxtFile } from "@/lib/txtParser";
 import { processBatches } from "@/lib/batchProcessor";
 import type { PipelineState, PipelinePhase, ProcessSummary } from "@/lib/types";
 
@@ -210,11 +210,11 @@ export default function UploadSection() {
 
   const handleFile = useCallback((file: File) => {
     const ext = file.name.split(".").pop()?.toLowerCase();
-    if (ext !== "xlsx" && ext !== "xls") {
+    if (ext !== "txt") {
       dispatch({
         type: "ERROR",
         message: "Format file tidak didukung.",
-        detail: `File "${file.name}" bukan .xlsx atau .xls.`,
+        detail: `File "${file.name}" bukan .txt. Upload file export DAT Oracle (.txt).`,
       });
       return;
     }
@@ -261,7 +261,7 @@ export default function UploadSection() {
 
     let parseResult;
     try {
-      parseResult = await parseExcelFile(state.file);
+      parseResult = await parseTxtFile(state.file);
     } catch (err: unknown) {
       clearInterval(parseTimer);
       dispatch({
@@ -351,7 +351,7 @@ export default function UploadSection() {
         <div>
           <h3 className="text-white text-[14px] font-semibold">Upload File DAT</h3>
           <p className="text-slate-500 text-[11px] mt-0.5">
-            Import data aset dari file Excel (.xlsx / .xls) — batch 500 baris
+            Import data aset dari file export DAT Oracle (.txt)
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -386,7 +386,7 @@ export default function UploadSection() {
         <input
           ref={inputRef}
           type="file"
-          accept=".xlsx,.xls"
+          accept=".txt"
           className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
         />
@@ -405,7 +405,7 @@ export default function UploadSection() {
               <p className="text-slate-600 text-[11px] mt-1">atau klik untuk memilih file</p>
             </div>
             <div className="flex gap-2">
-              {[".xlsx", ".xls"].map((ext) => (
+              {[".txt"].map((ext) => (
                 <span key={ext} className="text-[10px] px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/10 text-slate-500 font-mono">{ext}</span>
               ))}
             </div>
@@ -458,7 +458,7 @@ export default function UploadSection() {
                 <ProgressBar value={state.parseProgress} color="cyan" />
               </div>
             </div>
-            <p className="text-slate-600 text-[11px] text-center">Membaca & memvalidasi kolom Excel…</p>
+            <p className="text-slate-600 text-[11px] text-center">Membaca & memvalidasi file DAT Oracle…</p>
           </div>
         )}
 
@@ -623,7 +623,7 @@ export default function UploadSection() {
         )}
 
         {state.phase === "parsing" && (
-          <p className="text-slate-500 text-[11px]">Parsing Excel…</p>
+          <p className="text-slate-500 text-[11px]">Parsing file DAT…</p>
         )}
         {state.phase === "processing" && (
           <p className="text-slate-500 text-[11px]">
