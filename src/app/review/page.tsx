@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import ReviewSummaryCards from "@/components/review/ReviewSummaryCards";
@@ -12,6 +12,7 @@ import { useReviewAssets } from "@/hooks/useReviewAssets";
 import { useReclassify } from "@/hooks/useReclassify";
 import type { FilterType } from "@/lib/reviewTypes";
 
+const PAGE_SIZE = 20;
 type TabType = "review" | "rules";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
@@ -57,7 +58,7 @@ const Pagination = memo(({ page, totalPages, onPage, totalItems, pageSize }: Pag
   return (
     <div className="flex items-center justify-between border-t border-white/5 px-5 py-3">
       <p className="text-xs text-white/30">
-        Menampilkan <span className="text-white/60">{from}–{to}</span> dari <span className="text-white/60">{totalItems}</span> aset
+        Menampilkan <span className="text-white/60">{from}–{to}</span> dari <span className="text-white/60">{totalItems.toLocaleString()}</span> aset
       </p>
       <div className="flex items-center gap-1">
         <PageBtn onClick={() => onPage(page - 1)} disabled={page === 1} aria-label="Sebelumnya">
@@ -98,10 +99,10 @@ const PageBtn = memo(({ active, children, ...props }: PageBtnProps) => (
 ));
 PageBtn.displayName = "PageBtn";
 
-// ─── Table Header ─────────────────────────────────────────────────────────────
+// ─── Table Header — tanpa kolom Kategori ─────────────────────────────────────
 const TableHeader = memo(() => (
-  <div className="grid grid-cols-[1fr_140px_120px_100px_80px_44px] gap-4 border-b border-white/[0.06] px-5 py-3">
-    {["Deskripsi Aset", "Jenis", "Merk", "Kategori", "Confidence", ""].map((h, i) => (
+  <div className="grid grid-cols-[1fr_160px_140px_80px_44px] gap-4 border-b border-white/[0.06] px-5 py-3">
+    {["Deskripsi Aset", "Jenis", "Merk", "Confidence", ""].map((h, i) => (
       <span key={`${h}-${i}`} className="text-[10px] font-semibold uppercase tracking-widest text-white/25">{h}</span>
     ))}
   </div>
@@ -110,27 +111,40 @@ TableHeader.displayName = "TableHeader";
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ClassificationPage() {
-  // ✅ Semua state filter/search/pagination sekarang di hook (server-side)
-  const {
-    assets,
-    summary,
-    loading,
-    page,
-    totalPages,
-    totalCount,
-    filter,
-    search,
-    setPage,
-    setFilter,
-    setSearch,
-    removeById,
-    refresh,
-  } = useReviewAssets();
-
+  const { allAssets, summary, loading, refresh, removeById } = useReviewAssets();
   const { status: reclassifyStatus, result: reclassifyResult, trigger: triggerReclassify } = useReclassify();
-  const [activeTab, setActiveTab] = useState<TabType>("review");
-  const [modalOpen, setModalOpen] = useState(false);
+
+  const [activeTab, setActiveTab]   = useState<TabType>("review");
+  const [filter, setFilter]         = useState<FilterType>("all");
+  const [search, setSearch]         = useState("");
+  const [page, setPage]             = useState(1);
+  const [modalOpen, setModalOpen]   = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<{ id: string; keyword: string } | null>(null);
+
+  // ── Client-side filter + search ───────────────────────────────────────────
+  const filtered = useMemo(() => {
+    let list = allAssets;
+    if (filter === "unknown_jenis") list = list.filter((a) => a.jenis === "Unknown");
+    else if (filter === "unknown_merk") list = list.filter((a) => a.merk === "Unknown");
+    else if (filter === "both") list = list.filter((a) => a.jenis === "Unknown" && a.merk === "Unknown");
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((a) =>
+        a.original_description?.toLowerCase().includes(q) ||
+        a.normalized_description?.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [allAssets, filter, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated  = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page]
+  );
+
+  const handleFilter = useCallback((f: FilterType) => { setFilter(f); setPage(1); }, []);
+  const handleSearch = useCallback((v: string)     => { setSearch(v); setPage(1); }, []);
 
   const handleReclassify = useCallback(async () => {
     const result = await triggerReclassify();
@@ -159,13 +173,11 @@ export default function ClassificationPage() {
         <Topbar title="Classification" />
         <main className="flex-1 overflow-y-auto px-6 py-5">
 
-          {/* ── Page header ───────────────────────────────────────── */}
+          {/* Page header */}
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <h1 className="text-lg font-semibold tracking-tight text-white">Classification</h1>
-              <p className="mt-0.5 text-xs text-white/40">
-                Klasifikasi aset yang belum dikenali oleh sistem secara otomatis
-              </p>
+              <p className="mt-0.5 text-xs text-white/40">Klasifikasi aset yang belum dikenali oleh sistem secara otomatis</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <div className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5">
@@ -193,7 +205,7 @@ export default function ClassificationPage() {
             </div>
           </div>
 
-          {/* ── Reclassify result banner ───────────────────────────── */}
+          {/* Reclassify banner */}
           {reclassifyResult && reclassifyResult.updated > 0 && (
             <div className="mb-4 flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400 shrink-0">
@@ -205,25 +217,20 @@ export default function ClassificationPage() {
             </div>
           )}
 
-          {/* ── Summary cards ──────────────────────────────────────── */}
+          {/* Summary cards */}
           <div className="mb-5">
             <ReviewSummaryCards summary={summary} loading={loading} />
           </div>
 
-          {/* ── Tab switcher ───────────────────────────────────────── */}
+          {/* Tab switcher */}
           <div className="mb-4 flex items-center gap-1 rounded-xl border border-white/[0.06] bg-white/[0.02] p-1 w-fit">
             {([
               { id: "review", label: "Review Aset", count: summary.total },
               { id: "rules",  label: "Keyword Rules", count: null },
             ] as { id: TabType; label: string; count: number | null }[]).map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={[
-                  "flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium transition-all",
-                  activeTab === tab.id ? "bg-white/10 text-white shadow-sm" : "text-white/40 hover:text-white/70",
-                ].join(" ")}
-              >
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={["flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium transition-all",
+                  activeTab === tab.id ? "bg-white/10 text-white shadow-sm" : "text-white/40 hover:text-white/70"].join(" ")}>
                 {tab.label}
                 {tab.count !== null && (
                   <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-mono ${
@@ -236,28 +243,28 @@ export default function ClassificationPage() {
             ))}
           </div>
 
-          {/* ── Tab content ────────────────────────────────────────── */}
+          {/* Tab content */}
           {activeTab === "review" ? (
             <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] shadow-xl shadow-black/30">
               <div className="border-b border-white/[0.06] px-5 py-3">
                 <ReviewTableToolbar
                   search={search}
-                  onSearch={setSearch}
+                  onSearch={handleSearch}
                   filter={filter}
-                  onFilter={setFilter as (v: FilterType) => void}
-                  totalFiltered={totalCount}
+                  onFilter={handleFilter}
+                  totalFiltered={filtered.length}
                   totalAll={summary.total}
                 />
               </div>
               {loading || isReclassifying ? (
                 <LoadingRows />
-              ) : assets.length === 0 ? (
+              ) : filtered.length === 0 ? (
                 <EmptyState />
               ) : (
                 <>
                   <TableHeader />
                   <div className="divide-y divide-white/[0.04]">
-                    {assets.map((asset) => (
+                    {paginated.map((asset) => (
                       <ReviewTableRow
                         key={asset.id}
                         asset={asset}
@@ -269,8 +276,8 @@ export default function ClassificationPage() {
                     page={page}
                     totalPages={totalPages}
                     onPage={setPage}
-                    totalItems={totalCount}
-                    pageSize={20}
+                    totalItems={filtered.length}
+                    pageSize={PAGE_SIZE}
                   />
                 </>
               )}

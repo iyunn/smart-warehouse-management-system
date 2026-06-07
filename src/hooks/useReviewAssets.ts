@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import type {
   AssetClean,
   ReviewSummary,
@@ -10,6 +11,7 @@ import type {
 } from "../lib/reviewTypes";
 
 const PAGE_SIZE = 20;
+const FETCH_SIZE = 1000;
 
 interface UseReviewAssetsReturn {
   assets: AssetClean[];
@@ -19,7 +21,6 @@ interface UseReviewAssetsReturn {
   error: string | null;
   page: number;
   totalPages: number;
-  totalCount: number;
   filter: FilterType;
   search: string;
   sortField: SortField;
@@ -33,67 +34,65 @@ interface UseReviewAssetsReturn {
 }
 
 export function useReviewAssets(): UseReviewAssetsReturn {
-  const [assets, setAssets] = useState<AssetClean[]>([]);
-  const [summary, setSummary] = useState<ReviewSummary>({
-    total: 0, unknownJenis: 0, unknownMerk: 0, completionPct: 100,
-  });
+  const [allAssets, setAllAssets] = useState<AssetClean[]>([]);
+  const [totalAssetCount, setTotalAssetCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPageState] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
   const [filter, setFilterState] = useState<FilterType>("all");
-  const [search, setSearchState] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("original_description");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [refreshTick, setRefreshTick] = useState(0);
 
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const setSearch = useCallback((s: string) => {
-    setSearchState(s);
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    searchDebounceRef.current = setTimeout(() => {
-      setDebouncedSearch(s);
-      setPageState(1);
-    }, 400);
-  }, []);
-
-  const setFilter = useCallback((f: FilterType) => {
-    setFilterState(f);
-    setPageState(1);
-  }, []);
-
-  const setPage = useCallback((p: number) => setPageState(p), []);
-
-  // ── Single fetch ke API route (semua query di server) ─────────────────────
+  // ── Fetch semua unknown assets + total count ──────────────────────────────
+  // DB sudah CGA only → tidak perlu join assets_raw atau warehouse filter
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchData() {
+    async function fetchAssets() {
       setLoading(true);
       setError(null);
 
       try {
-        const params = new URLSearchParams({
-          page: String(page),
-          filter,
-          search: debouncedSearch,
-          sort: sortField,
-          dir: sortDir,
-        });
+        const validSort = sortField === "confidence_score" ? "confidence" : sortField;
 
-        const res = await fetch(`/api/classification?${params}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        // Fetch semua unknown dengan loop (bypass limit 1000)
+        let allRows: any[] = [];
+        let from = 0;
 
-        const data = await res.json();
+        while (true) {
+          const { data, error: sbError } = await supabase
+            .from("assets_clean")
+            .select("id, original_description, normalized_description, jenis, merk, kategori, confidence, status")
+            .or("jenis.eq.Unknown,merk.eq.Unknown")
+            .order(validSort, { ascending: sortDir === "asc" })
+            .range(from, from + FETCH_SIZE - 1);
+
+          if (sbError) throw new Error(sbError.message);
+
+          const batch = data ?? [];
+          allRows = [...allRows, ...batch];
+          if (batch.length < FETCH_SIZE) break;
+          from += FETCH_SIZE;
+          if (from > 50000) break;
+        }
+
+        // Total semua aset (untuk completionPct)
+        const { count, error: countError } = await supabase
+          .from("assets_clean")
+          .select("*", { count: "exact", head: true });
+
+        if (countError) throw new Error(countError.message);
 
         if (!cancelled) {
-          setAssets(data.assets ?? []);
-          setTotalCount(data.pagination.totalCount ?? 0);
-          setTotalPages(data.pagination.totalPages ?? 1);
-          setSummary(data.summary);
+          setAllAssets(
+            allRows.map((row: any) => ({
+              ...row,
+              confidence_score: row.confidence ?? null,
+            })) as AssetClean[]
+          );
+          setTotalAssetCount(count ?? 0);
         }
       } catch (err) {
         if (!cancelled)
@@ -103,35 +102,79 @@ export function useReviewAssets(): UseReviewAssetsReturn {
       }
     }
 
-    fetchData();
+    fetchAssets();
     return () => { cancelled = true; };
-  }, [page, filter, debouncedSearch, sortField, sortDir, refreshTick]);
+  }, [sortField, sortDir, refreshTick]);
 
-  const setSort = useCallback((field: SortField, dir: SortDir) => {
-    setSortField(field);
-    setSortDir(dir);
-    setPageState(1);
+  // ── Client-side filter + search ───────────────────────────────────────────
+  const filtered = useMemo(() => {
+    let rows = allAssets;
+
+    if (filter === "unknown_jenis") rows = rows.filter((r) => r.jenis === "Unknown");
+    else if (filter === "unknown_merk") rows = rows.filter((r) => r.merk === "Unknown");
+    else if (filter === "both") rows = rows.filter((r) => r.jenis === "Unknown" && r.merk === "Unknown");
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      rows = rows.filter(
+        (r) =>
+          r.original_description?.toLowerCase().includes(q) ||
+          r.normalized_description?.toLowerCase().includes(q) ||
+          r.kategori?.toLowerCase().includes(q)
+      );
+    }
+
+    return rows;
+  }, [allAssets, filter, search]);
+
+  // ── Client-side pagination ────────────────────────────────────────────────
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+  const assets = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page]
+  );
+
+  useEffect(() => { setPageState(1); }, [filter, search]);
+
+  // ── Summary ───────────────────────────────────────────────────────────────
+  const summary = useMemo<ReviewSummary>(() => {
+    const totalUnknown    = allAssets.length;
+    const unknownJenis    = allAssets.filter((r) => r.jenis === "Unknown").length;
+    const unknownMerk     = allAssets.filter((r) => r.merk === "Unknown").length;
+    const totalClassified = totalAssetCount - totalUnknown;
+    const completionPct   = totalAssetCount === 0
+      ? 100
+      : Math.round((totalClassified / totalAssetCount) * 100);
+
+    return {
+      total: totalUnknown,
+      unknownJenis,
+      unknownMerk,
+      completionPct,
+      totalClassified,
+      totalGudang: totalAssetCount,
+    } as ReviewSummary;
+  }, [allAssets, totalAssetCount]);
+
+  const setFilter = useCallback((f: FilterType) => { setFilterState(f); setPageState(1); }, []);
+  const setPage   = useCallback((p: number) => setPageState(p), []);
+  const setSort   = useCallback((field: SortField, dir: SortDir) => {
+    setSortField(field); setSortDir(dir);
   }, []);
-
-  const refresh = useCallback(() => {
-    setRefreshTick((t) => t + 1);
-    setPageState(1);
-  }, []);
-
+  const refresh   = useCallback(() => setRefreshTick((t) => t + 1), []);
   const removeById = useCallback((id: string) => {
-    setAssets((prev) => prev.filter((a) => a.id !== id));
-    setTotalCount((prev) => Math.max(0, prev - 1));
+    setAllAssets((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
   return {
     assets,
-    allAssets: assets,
+    allAssets,
     summary,
     loading,
     error,
     page,
     totalPages,
-    totalCount,
     filter,
     search,
     sortField,

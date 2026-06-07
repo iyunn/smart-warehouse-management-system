@@ -6,24 +6,24 @@ import type { FilterType } from "../../lib/reviewTypes";
 interface ReviewTableToolbarProps {
   search: string;
   filter: FilterType;
-  totalFiltered: number;
-  totalAll: number;
+  totalFiltered: number;  // hasil pencarian/filter saat ini
+  totalAll: number;       // total semua unknown
   onSearch: (v: string) => void;
   onFilter: (f: FilterType) => void;
 }
 
 const FILTERS: { value: FilterType; label: string }[] = [
-  { value: "all", label: "Semua" },
+  { value: "all",          label: "Semua"        },
   { value: "unknown_jenis", label: "Unknown Jenis" },
-  { value: "unknown_merk", label: "Unknown Merk" },
-  { value: "both", label: "Keduanya" },
+  { value: "unknown_merk",  label: "Unknown Merk"  },
+  { value: "both",          label: "Keduanya"      },
 ];
 
 function ReviewTableToolbar({
   search,
   filter,
-  totalFiltered,
-  totalAll,
+  totalFiltered = 0,
+  totalAll = 0,
   onSearch,
   onFilter,
 }: ReviewTableToolbarProps) {
@@ -31,12 +31,14 @@ function ReviewTableToolbar({
     (e: React.ChangeEvent<HTMLInputElement>) => onSearch(e.target.value),
     [onSearch]
   );
-
   const handleClear = useCallback(() => onSearch(""), [onSearch]);
+
+  // Tampilkan "a / b" hanya kalau sedang difilter/search (a berbeda dari b)
+  const isFiltered = totalFiltered !== totalAll;
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      {/* Left: filter chips */}
+      {/* Filter chips */}
       <div className="flex items-center gap-1.5 flex-wrap">
         {FILTERS.map((f) => (
           <button
@@ -53,40 +55,32 @@ function ReviewTableToolbar({
         ))}
       </div>
 
-      {/* Right: search + count */}
+      {/* Count + Search */}
       <div className="flex items-center gap-3">
         <span className="text-slate-600 text-[11px] hidden sm:block">
-          <span className="text-slate-400 font-mono">{totalFiltered}</span>
-          {totalFiltered !== totalAll && (
-            <> / <span className="text-slate-600 font-mono">{totalAll}</span></>
+          <span className="text-slate-400 font-mono">{totalFiltered.toLocaleString()}</span>
+          {isFiltered && (
+            <> / <span className="text-slate-600 font-mono">{totalAll.toLocaleString()}</span></>
           )}{" "}
           aset
         </span>
         <div className="relative">
-          {/* Search icon */}
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
-            width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-          >
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
+            width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
-
           <input
             type="text"
             value={search}
             onChange={handleSearch}
-            placeholder="Cari kode, deskripsi..."
-            className="bg-white/[0.04] border border-white/[0.08] text-slate-300 text-[12px] placeholder:text-slate-600 rounded-xl pl-8 pr-7 py-1.5 w-44 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all"
+            placeholder="Cari deskripsi aset..."
+            suppressHydrationWarning
+            className="bg-white/[0.04] border border-white/[0.08] text-slate-300 text-[12px] placeholder:text-slate-600 rounded-xl pl-8 pr-7 py-1.5 w-48 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all"
           />
-
-          {/* Clear button — hanya muncul kalau ada input */}
           {search && (
-            <button
-              onClick={handleClear}
-              aria-label="Hapus pencarian"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 flex h-4 w-4 items-center justify-center rounded-full bg-white/10 text-slate-400 hover:bg-white/20 hover:text-white transition-all"
-            >
+            <button onClick={handleClear} aria-label="Hapus pencarian"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 flex h-4 w-4 items-center justify-center rounded-full bg-white/10 text-slate-400 hover:bg-white/20 hover:text-white transition-all">
               <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M1 1l6 6M7 1L1 7" />
               </svg>

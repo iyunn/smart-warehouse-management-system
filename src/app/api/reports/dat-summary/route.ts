@@ -15,34 +15,29 @@ export async function GET(req: NextRequest) {
     const costCenterFilter = searchParams.get('cost_center') // 'ALL' | 'CGA1' | 'CGA2' | 'CGA3'
 
     // ── 1. Build toko filter ──────────────────────────────────────────────────
+    // DB sudah CGA only → filter hanya untuk memilih CGA1/CGA2/CGA3 spesifik
     const targetCenters = costCenterFilter && costCenterFilter !== 'ALL'
       ? [costCenterFilter]
       : [...WAREHOUSE_COST_CENTERS]
 
-    // ── 2. Query assets_raw JOIN assets_clean untuk aset gudang ───────────────
-    // Fetch semua sekaligus dengan pagination
+    const tokoConditions = targetCenters.map(c => `toko.ilike.${c}%`).join(',')
+
+    // ── 2. Fetch data dengan pagination ───────────────────────────────────────
     let allData: any[] = []
     let from = 0
     const FETCH_SIZE = 1000
-
-    const tokoConditions = targetCenters.map(c => `toko.ilike.${c}%`).join(',')
 
     while (true) {
       const { data, error } = await supabase
         .from('assets_raw')
         .select(`
-          id,
           kode_asset,
           toko,
           kategori_oracle,
           kuantitas,
           biaya_perolehan,
           jumlah_tercatat,
-          assets_clean (
-            jenis,
-            merk,
-            confidence
-          )
+          assets_clean (jenis)
         `)
         .or(tokoConditions)
         .range(from, from + FETCH_SIZE - 1)
@@ -57,120 +52,56 @@ export async function GET(req: NextRequest) {
       if (from > 100000) break
     }
 
-    // ── 3. Agregasi data: toko → kategori_oracle → jenis ─────────────────────
-    // Struktur: Map<toko, Map<kategori, Map<jenis, { item, qty, perolehan, tercatat }>>>
-    
-    type JenisData = {
-      jenis: string
-      item: number
-      qty: number
-      perolehan: number
-      tercatat: number
-    }
-
-    type KategoriData = {
-      kategori: string
-      items: JenisData[]
-      totalItem: number
-      totalQty: number
-      totalPerolehan: number
-      totalTercatat: number
-    }
-
-    type TokoData = {
-      toko: string
-      tokoCode: string
-      kategoris: KategoriData[]
-      totalItem: number
-      totalQty: number
-      totalPerolehan: number
-      totalTercatat: number
-    }
+    // ── 3. Agregasi: toko → kategori_oracle → jenis ───────────────────────────
+    type JenisData    = { jenis: string; item: number; qty: number; perolehan: number; tercatat: number }
+    type KategoriData = { kategori: string; items: JenisData[]; totalItem: number; totalQty: number; totalPerolehan: number; totalTercatat: number }
+    type TokoData     = { toko: string; tokoCode: string; kategoris: KategoriData[]; totalItem: number; totalQty: number; totalPerolehan: number; totalTercatat: number }
 
     const tokoMap = new Map<string, Map<string, Map<string, JenisData>>>()
 
     for (const row of allData) {
-      const toko = row.toko ?? 'Unknown'
-      const kategori = row.kategori_oracle ?? 'Unknown'
+      const toko     = row.toko              ?? 'Unknown'
+      const kategori = row.kategori_oracle   ?? 'Unknown'
       const cleanData = Array.isArray(row.assets_clean) ? row.assets_clean[0] : row.assets_clean
-      const jenis = cleanData?.jenis ?? 'Unknown'
-      const qty = row.kuantitas ?? 1
-      const perolehan = row.biaya_perolehan ?? 0
-      const tercatat = row.jumlah_tercatat ?? 0
+      const jenis    = cleanData?.jenis      ?? 'Unknown'
+      const qty      = row.kuantitas         ?? 1
+      const perolehan  = row.biaya_perolehan ?? 0
+      const tercatat   = row.jumlah_tercatat ?? 0
 
       if (!tokoMap.has(toko)) tokoMap.set(toko, new Map())
       const kategoriMap = tokoMap.get(toko)!
-
       if (!kategoriMap.has(kategori)) kategoriMap.set(kategori, new Map())
       const jenisMap = kategoriMap.get(kategori)!
 
-      if (!jenisMap.has(jenis)) {
-        jenisMap.set(jenis, { jenis, item: 0, qty: 0, perolehan: 0, tercatat: 0 })
-      }
-      const jenisData = jenisMap.get(jenis)!
-      jenisData.item += 1
-      jenisData.qty += qty
-      jenisData.perolehan += perolehan
-      jenisData.tercatat += tercatat
+      if (!jenisMap.has(jenis)) jenisMap.set(jenis, { jenis, item: 0, qty: 0, perolehan: 0, tercatat: 0 })
+      const d = jenisMap.get(jenis)!
+      d.item++; d.qty += qty; d.perolehan += perolehan; d.tercatat += tercatat
     }
 
-    // ── 4. Convert Map ke array yang bisa dirender ────────────────────────────
+    // ── 4. Convert ke array ───────────────────────────────────────────────────
     const reportData: TokoData[] = []
 
     for (const [toko, kategoriMap] of tokoMap) {
-      // Ekstrak kode CGA dari nama toko (misal "CGA1 - CADANGAN..." → "CGA1")
       const tokoCode = toko.split(' - ')[0]?.trim() ?? toko
-
       const kategoris: KategoriData[] = []
-      let tokoTotalItem = 0
-      let tokoTotalQty = 0
-      let tokoTotalPerolehan = 0
-      let tokoTotalTercatat = 0
+      let tokoTotalItem = 0, tokoTotalQty = 0, tokoTotalPerolehan = 0, tokoTotalTercatat = 0
 
       for (const [kategori, jenisMap] of kategoriMap) {
-        const items = Array.from(jenisMap.values())
-          .sort((a, b) => a.jenis.localeCompare(b.jenis))
+        const items = Array.from(jenisMap.values()).sort((a, b) => a.jenis.localeCompare(b.jenis))
+        const t = items.reduce((acc, i) => ({
+          item: acc.item + i.item, qty: acc.qty + i.qty,
+          perolehan: acc.perolehan + i.perolehan, tercatat: acc.tercatat + i.tercatat,
+        }), { item: 0, qty: 0, perolehan: 0, tercatat: 0 })
 
-        const kategoriTotal = items.reduce(
-          (acc, i) => ({
-            item: acc.item + i.item,
-            qty: acc.qty + i.qty,
-            perolehan: acc.perolehan + i.perolehan,
-            tercatat: acc.tercatat + i.tercatat,
-          }),
-          { item: 0, qty: 0, perolehan: 0, tercatat: 0 }
-        )
-
-        kategoris.push({
-          kategori,
-          items,
-          totalItem: kategoriTotal.item,
-          totalQty: kategoriTotal.qty,
-          totalPerolehan: kategoriTotal.perolehan,
-          totalTercatat: kategoriTotal.tercatat,
-        })
-
-        tokoTotalItem += kategoriTotal.item
-        tokoTotalQty += kategoriTotal.qty
-        tokoTotalPerolehan += kategoriTotal.perolehan
-        tokoTotalTercatat += kategoriTotal.tercatat
+        kategoris.push({ kategori, items, totalItem: t.item, totalQty: t.qty, totalPerolehan: t.perolehan, totalTercatat: t.tercatat })
+        tokoTotalItem += t.item; tokoTotalQty += t.qty
+        tokoTotalPerolehan += t.perolehan; tokoTotalTercatat += t.tercatat
       }
 
-      // Sort kategori alphabetically
       kategoris.sort((a, b) => a.kategori.localeCompare(b.kategori))
-
-      reportData.push({
-        toko,
-        tokoCode,
-        kategoris,
-        totalItem: tokoTotalItem,
-        totalQty: tokoTotalQty,
-        totalPerolehan: tokoTotalPerolehan,
-        totalTercatat: tokoTotalTercatat,
-      })
+      reportData.push({ toko, tokoCode, kategoris, totalItem: tokoTotalItem, totalQty: tokoTotalQty, totalPerolehan: tokoTotalPerolehan, totalTercatat: tokoTotalTercatat })
     }
 
-    // Sort by toko code (CGA1 → CGA2 → CGA3)
     reportData.sort((a, b) => a.tokoCode.localeCompare(b.tokoCode))
 
     // ── 5. Generate PDF ───────────────────────────────────────────────────────
@@ -180,7 +111,6 @@ export async function GET(req: NextRequest) {
 
     const filename = `DAT-Summary-${costCenterFilter ?? 'ALL'}-${new Date().toISOString().slice(0, 10)}.pdf`
 
-    // Fix: wrap dengan Uint8Array
     return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {

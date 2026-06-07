@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { classifyAsset } from '@/lib/classifier'
-import { buildWarehouseFilter } from '@/lib/types'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,7 +12,7 @@ const BATCH_SIZE = 500
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}))
-    const revertMerk: string | undefined = body.revert_merk
+    const revertMerk:  string | undefined = body.revert_merk
     const revertJenis: string | undefined = body.revert_jenis
     const isRevertMode = !!(revertMerk || revertJenis)
 
@@ -24,7 +23,8 @@ export async function POST(req: Request) {
 
     if (rulesError) throw new Error(`Failed to fetch keyword rules: ${rulesError.message}`)
 
-    // ── 2. Fetch target aset — hanya dari gudang (CGA1/CGA2/CGA3) ────────────
+    // ── 2. Fetch target aset ──────────────────────────────────────────────────
+    // DB sudah CGA only → tidak perlu warehouse filter
     let allTargets: any[] = []
     let from = 0
     const FETCH_SIZE = 1000
@@ -32,22 +32,18 @@ export async function POST(req: Request) {
     while (true) {
       let query = supabase
         .from('assets_clean')
-        .select('id, original_description, jenis, merk, assets_raw!inner(toko)')
+        .select('id, original_description, jenis, merk')
 
       if (isRevertMode) {
         const conditions: string[] = []
-        if (revertMerk) conditions.push(`merk.eq.${revertMerk}`)
+        if (revertMerk)  conditions.push(`merk.eq.${revertMerk}`)
         if (revertJenis) conditions.push(`jenis.eq.${revertJenis}`)
         query = query.or(conditions.join(','))
       } else {
         query = query.or('jenis.eq.Unknown,merk.eq.Unknown')
       }
 
-      // Filter hanya aset gudang
-      query = query.or(buildWarehouseFilter(), { referencedTable: 'assets_raw' })
-
       const { data, error } = await query.range(from, from + FETCH_SIZE - 1)
-
       if (error) throw new Error(`Failed to fetch assets: ${error.message}`)
 
       const batch = data ?? []
@@ -64,8 +60,8 @@ export async function POST(req: Request) {
         updated: 0,
         total_unknown: 0,
         message: isRevertMode
-          ? 'Tidak ada aset gudang yang terdampak rule yang dihapus'
-          : 'Tidak ada aset gudang unknown untuk diklasifikasi',
+          ? 'Tidak ada aset yang terdampak rule yang dihapus'
+          : 'Tidak ada aset unknown untuk diklasifikasi',
       })
     }
 
@@ -75,14 +71,13 @@ export async function POST(req: Request) {
     for (const asset of allTargets) {
       if (isRevertMode) {
         const currentJenis = revertJenis && asset.jenis === revertJenis ? 'Unknown' : asset.jenis
-        const currentMerk = revertMerk && asset.merk === revertMerk ? 'Unknown' : asset.merk
+        const currentMerk  = revertMerk  && asset.merk  === revertMerk  ? 'Unknown' : asset.merk
 
-        const result = classifyAsset(asset.original_description, keywordRules ?? [])
-
+        const result  = classifyAsset(asset.original_description, keywordRules ?? [])
         const newJenis = result.jenis !== 'Unknown' ? result.jenis : currentJenis
-        const newMerk = result.merk !== 'Unknown' ? result.merk : currentMerk
+        const newMerk  = result.merk  !== 'Unknown' ? result.merk  : currentMerk
 
-        let confidence: string = 'low'
+        let confidence = 'low'
         if (newJenis !== 'Unknown' && newMerk !== 'Unknown') confidence = 'high'
         else if (newJenis !== 'Unknown' || newMerk !== 'Unknown') confidence = 'medium'
 
@@ -91,13 +86,13 @@ export async function POST(req: Request) {
         const result = classifyAsset(asset.original_description, keywordRules ?? [])
 
         const jenisChanged = result.jenis !== 'Unknown' && result.jenis !== asset.jenis
-        const merkChanged = result.merk !== 'Unknown' && result.merk !== asset.merk
+        const merkChanged  = result.merk  !== 'Unknown' && result.merk  !== asset.merk
 
         if (jenisChanged || merkChanged) {
           toUpdate.push({
-            id: asset.id,
-            jenis: jenisChanged ? result.jenis : asset.jenis,
-            merk: merkChanged ? result.merk : asset.merk,
+            id:         asset.id,
+            jenis:      jenisChanged ? result.jenis : asset.jenis,
+            merk:       merkChanged  ? result.merk  : asset.merk,
             confidence: result.confidence,
           })
         }
@@ -140,8 +135,8 @@ export async function POST(req: Request) {
       updated: totalUpdated,
       total_unknown: allTargets.length,
       message: isRevertMode
-        ? `Revert selesai: ${totalUpdated} aset gudang diperbarui`
-        : `Reclassified ${totalUpdated} of ${allTargets.length} unknown assets gudang`,
+        ? `Revert selesai: ${totalUpdated} aset diperbarui`
+        : `Reclassified ${totalUpdated} of ${allTargets.length} unknown assets`,
     })
 
   } catch (error) {

@@ -1,33 +1,18 @@
-// ─── Raw Excel row (keyed by the actual column header strings) ─────────────────
+// ─── Raw Excel row ────────────────────────────────────────────────────────────
 export type RawExcelRow = Record<string, unknown>;
 
-// ─── Warehouse cost center constants ─────────────────────────────────────────
-// Tiga gudang utama yang dimonitor sistem ini
-export const WAREHOUSE_COST_CENTERS = ['CGA1', 'CGA2', 'CGA3'] as const
-export type WarehouseCostCenter = typeof WAREHOUSE_COST_CENTERS[number]
+// ─── Warehouse cost center info (untuk label saja, tidak untuk filter) ────────
+// DB sudah CGA only → tidak perlu buildWarehouseFilter()
+export const WAREHOUSE_COST_CENTERS = ['CGA1', 'CGA2', 'CGA3'] as const;
+export type WarehouseCostCenter = typeof WAREHOUSE_COST_CENTERS[number];
 
-/**
- * CGA1 = Cadangan General Affairs 1 (barang baru dari supplier)
- * CGA2 = Cadangan General Affairs 2 (barang bekas layak pakai)
- * CGA3 = Cadangan General Affairs 3 (barang calon pemusnahan)
- */
 export const WAREHOUSE_LABELS: Record<WarehouseCostCenter, string> = {
   CGA1: 'Cadangan General Affairs 1',
   CGA2: 'Cadangan General Affairs 2',
   CGA3: 'Cadangan General Affairs 3',
-}
+};
 
-/**
- * Build Supabase filter string untuk query hanya aset gudang.
- * Contoh hasil: "toko.ilike.CGA1%,toko.ilike.CGA2%,toko.ilike.CGA3%"
- */
-export function buildWarehouseFilter(): string {
-  return WAREHOUSE_COST_CENTERS
-    .map((code) => `toko.ilike.${code}%`)
-    .join(',')
-}
-
-// ─── Mapped / validated asset record ──────────────────────────────────────────
+// ─── Asset record ─────────────────────────────────────────────────────────────
 export interface AssetRecord {
   toko:             string;
   kategori_oracle:  string;
@@ -39,22 +24,22 @@ export interface AssetRecord {
   jumlah_tercatat:  number;
 }
 
-// ─── Column mapping ────────────────────────────────────────────────────────────
+// ─── Column mapping (legacy, untuk reference) ─────────────────────────────────
 export const COLUMN_MAP: Record<string, keyof AssetRecord> = {
-  toko:                  "toko",
-  kategori:              "kategori_oracle",
-  "no. seri":            "kode_asset",
-  keterangan:            "deskripsi",
-  kuantitas:             "kuantitas",
-  " biaya perolehan ":   "biaya_perolehan",
-  " jumlah tercatat ":   "jumlah_tercatat",
+  toko:                "toko",
+  kategori:            "kategori_oracle",
+  "no. seri":          "kode_asset",
+  keterangan:          "deskripsi",
+  kuantitas:           "kuantitas",
+  " biaya perolehan ": "biaya_perolehan",
+  " jumlah tercatat ": "jumlah_tercatat",
 };
 
 export const REQUIRED_COLUMNS = ["toko", "kategori", "no. seri", "keterangan"] as string[];
-export const DEFAULT_STATUS = "CGA1";
-export const BATCH_SIZE = 500;
+export const DEFAULT_STATUS    = "CGA1";
+export const BATCH_SIZE        = 500;
 
-// ─── Batch processing result ───────────────────────────────────────────────────
+// ─── Processing types ─────────────────────────────────────────────────────────
 export interface BatchResult {
   batchIndex:   number;
   totalBatches: number;
@@ -63,19 +48,17 @@ export interface BatchResult {
   error?:       string;
 }
 
-// ─── Overall processing summary ───────────────────────────────────────────────
 export interface ProcessSummary {
-  totalRows:          number;
-  validRows:          number;
-  skippedRows:        number;
-  totalBatches:       number;
-  successfulBatches:  number;
-  failedBatches:      number;
-  errors:             string[];
-  durationMs:         number;
+  totalRows:         number;
+  validRows:         number;
+  skippedRows:       number;
+  totalBatches:      number;
+  successfulBatches: number;
+  failedBatches:     number;
+  errors:            string[];
+  durationMs:        number;
 }
 
-// ─── Parse result from parser ─────────────────────────────────────────────────
 export interface ParseResult {
   records:     AssetRecord[];
   skippedRows: number;
@@ -84,24 +67,19 @@ export interface ParseResult {
 
 // ─── Upload pipeline state ────────────────────────────────────────────────────
 export type PipelinePhase =
-  | "idle"
-  | "dragging"
-  | "selected"
-  | "parsing"
-  | "processing"
-  | "success"
-  | "error";
+  | "idle" | "dragging" | "selected"
+  | "parsing" | "processing" | "success" | "error";
 
 export interface PipelineState {
-  phase:          PipelinePhase;
-  file:           File | null;
-  fileName:       string;
-  fileSize:       string;
-  parseProgress:  number;
-  batchProgress:  number;
-  currentBatch:   number;
-  totalBatches:   number;
-  summary:        ProcessSummary | null;
-  errorMessage:   string;
-  errorDetail:    string;
+  phase:         PipelinePhase;
+  file:          File | null;
+  fileName:      string;
+  fileSize:      string;
+  parseProgress: number;
+  batchProgress: number;
+  currentBatch:  number;
+  totalBatches:  number;
+  summary:       ProcessSummary | null;
+  errorMessage:  string;
+  errorDetail:   string;
 }
