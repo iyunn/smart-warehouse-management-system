@@ -49,20 +49,20 @@ const icons = {
 };
 
 const navItems: NavItem[] = [
-  { id: "dashboard",      label: "Dashboard",      icon: icons.dashboard,      href: "/"        },
-  { id: "upload",         label: "Upload DAT",     icon: icons.upload,         href: "#"        },
-  { id: "monitoring",     label: "Monitoring",     icon: icons.monitor,        href: "#"        },
-  { id: "classification", label: "Classification", icon: icons.classification, href: "/review"  },
-  { id: "reports",        label: "Reports",        icon: icons.reports,        href: "/reports" },
-  { id: "settings",       label: "Settings",       icon: icons.settings,       href: "#"        },
+  { id: "dashboard",      label: "Dashboard",      icon: icons.dashboard,      href: "/"           },
+  { id: "upload",         label: "Upload Data",    icon: icons.upload,         href: "/upload"     },
+  { id: "monitoring",     label: "Monitoring",     icon: icons.monitor,        href: "/monitoring" },
+  { id: "classification", label: "Classification", icon: icons.classification, href: "/review"     },
+  { id: "reports",        label: "Reports",        icon: icons.reports,        href: "/reports"    },
+  { id: "settings",       label: "Settings",       icon: icons.settings,       href: "#"           },
 ];
 
-/** Tentukan nav item aktif berdasarkan URL saat ini */
 function getActiveId(pathname: string): string {
-  if (pathname.startsWith("/review")) return "classification";
-  if (pathname.startsWith("/reports")) return "reports";
+  if (pathname.startsWith("/upload"))     return "upload";
   if (pathname.startsWith("/monitoring")) return "monitoring";
-  if (pathname.startsWith("/settings")) return "settings";
+  if (pathname.startsWith("/review"))     return "classification";
+  if (pathname.startsWith("/reports"))    return "reports";
+  if (pathname.startsWith("/settings"))   return "settings";
   if (pathname === "/" || pathname.startsWith("/dashboard")) return "dashboard";
   return "dashboard";
 }
@@ -73,14 +73,7 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <aside
-      className={`
-        relative flex flex-col h-screen bg-[#0d1117] border-r border-white/[0.06]
-        transition-all duration-300 ease-in-out
-        ${collapsed ? "w-[68px]" : "w-[230px]"}
-      `}
-    >
-      {/* Logo */}
+    <aside className={`relative flex flex-col h-screen bg-[#0d1117] border-r border-white/[0.06] transition-all duration-300 ease-in-out ${collapsed ? "w-[68px]" : "w-[230px]"}`}>
       <div className="flex items-center gap-3 px-4 py-5 border-b border-white/[0.06]">
         <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
@@ -95,37 +88,25 @@ export default function Sidebar() {
         )}
       </div>
 
-      {/* Collapse toggle */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-[72px] w-6 h-6 rounded-full bg-[#1a2030] border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-white/20 transition-all z-10"
-      >
+      <button onClick={() => setCollapsed(!collapsed)}
+        className="absolute -right-3 top-[72px] w-6 h-6 rounded-full bg-[#1a2030] border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-white/20 transition-all z-10">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          {collapsed
-            ? <polyline points="9 18 15 12 9 6" />
-            : <polyline points="15 18 9 12 15 6" />}
+          {collapsed ? <polyline points="9 18 15 12 9 6" /> : <polyline points="15 18 9 12 15 6" />}
         </svg>
       </button>
 
-      {/* Nav */}
       <nav className="flex-1 px-2.5 py-4 space-y-0.5 overflow-y-auto">
-        {!collapsed && (
-          <p className="text-[10px] text-slate-600 uppercase tracking-widest font-medium px-3 pb-2">Main Menu</p>
-        )}
-        {navItems.slice(0, 4).map((item) => (
+        {!collapsed && <p className="text-[10px] text-slate-600 uppercase tracking-widest font-medium px-3 pb-2">Main Menu</p>}
+        {navItems.slice(0, 4).map(item => (
           <NavLink key={item.id} item={item} isActive={activeId === item.id} collapsed={collapsed} />
         ))}
-
-        {!collapsed && (
-          <p className="text-[10px] text-slate-600 uppercase tracking-widest font-medium px-3 pt-4 pb-2">System</p>
-        )}
+        {!collapsed && <p className="text-[10px] text-slate-600 uppercase tracking-widest font-medium px-3 pt-4 pb-2">System</p>}
         {collapsed && <div className="h-2" />}
-        {navItems.slice(4).map((item) => (
+        {navItems.slice(4).map(item => (
           <NavLink key={item.id} item={item} isActive={activeId === item.id} collapsed={collapsed} />
         ))}
       </nav>
 
-      {/* Footer */}
       <div className={`p-3 border-t border-white/[0.06] ${collapsed ? "flex justify-center" : ""}`}>
         {collapsed ? (
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center text-white text-xs font-bold">A</div>
@@ -146,39 +127,21 @@ export default function Sidebar() {
   );
 }
 
-function NavLink({
-  item,
-  isActive,
-  collapsed,
-}: {
-  item: NavItem;
-  isActive: boolean;
-  collapsed: boolean;
-}) {
+function NavLink({ item, isActive, collapsed }: { item: NavItem; isActive: boolean; collapsed: boolean }) {
   return (
-    <Link
-      href={item.href}
+    <Link href={item.href}
       title={collapsed ? item.label : undefined}
-      className={`
-        w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium
-        transition-all duration-150 group relative
-        ${isActive
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150 group relative ${
+        isActive
           ? "bg-gradient-to-r from-cyan-500/15 to-blue-500/10 text-cyan-400 shadow-sm"
           : "text-slate-500 hover:text-slate-200 hover:bg-white/[0.04]"
-        }
-        ${collapsed ? "justify-center" : ""}
-      `}
-    >
-      {isActive && (
-        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-cyan-400 rounded-r-full" />
-      )}
+      } ${collapsed ? "justify-center" : ""}`}>
+      {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-cyan-400 rounded-r-full" />}
       <span className={`flex-shrink-0 transition-colors ${isActive ? "text-cyan-400" : "text-slate-600 group-hover:text-slate-300"}`}>
         {item.icon}
       </span>
       {!collapsed && <span className="truncate">{item.label}</span>}
-      {!collapsed && isActive && (
-        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 flex-shrink-0" />
-      )}
+      {!collapsed && isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 flex-shrink-0" />}
     </Link>
   );
 }
