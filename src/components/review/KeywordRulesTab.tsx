@@ -19,7 +19,7 @@ const selectCls =
 
 const EditRuleModal = memo(({ rule, onClose, onSaved }: EditRuleModalProps) => {
   const [keyword, setKeyword] = useState(rule.keyword);
-  const [ruleType, setRuleType] = useState<"jenis" | "merk">(rule.rule_type);
+  const [ruleType, setRuleType] = useState<"jenis" | "merk" | "no_merk">(rule.rule_type as "jenis" | "merk" | "no_merk");
   const [value, setValue] = useState(rule.value);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -207,15 +207,19 @@ DeleteConfirmModal.displayName = "DeleteConfirmModal";
 
 // ─── Rule Type Badge ──────────────────────────────────────────────────────────
 
-const RuleTypeBadge = memo(({ type }: { type: string }) => (
-  <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-lg border ${
-    type === "merk"
-      ? "text-violet-400 bg-violet-400/10 border-violet-400/20"
-      : "text-blue-400 bg-blue-400/10 border-blue-400/20"
-  }`}>
-    {type === "merk" ? "Merk" : "Jenis"}
-  </span>
-));
+const RuleTypeBadge = memo(({ type }: { type: string }) => {
+  const config = type === "merk"
+    ? { label: "Merk", className: "text-violet-400 bg-violet-400/10 border-violet-400/20" }
+    : type === "no_merk"
+    ? { label: "No Merk", className: "text-slate-400 bg-slate-400/10 border-slate-400/20" }
+    : { label: "Jenis", className: "text-blue-400 bg-blue-400/10 border-blue-400/20" };
+
+  return (
+    <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-lg border ${config.className}`}>
+      {config.label}
+    </span>
+  );
+});
 RuleTypeBadge.displayName = "RuleTypeBadge";
 
 // ─── Main Component ───────────────────────────────────────────────────────────
