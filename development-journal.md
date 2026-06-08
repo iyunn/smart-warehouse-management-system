@@ -876,3 +876,178 @@ Keputusan setelah analisis trade-off (**tidak buat tabel master baru**):
 - LPP Web Tracking integration
 - Authentication & Role Management (Supabase Auth)
 - DB optimization (materialized view, PostgreSQL function) — deferred sampai semua fitur selesai
+
+---
+
+# Minggu, 8 Juni 2026 (Sesi Sore)
+
+## Ringkasan Sesi Pengembangan
+
+Lanjutan sesi Senin pagi. Fokus pada **Surat Jalan Manual Sesi 3** (Report + Excel Export) dan **Fitur Print/PDF SJ** (kritikal karena tanpa print, sistem SJ Manual tidak fungsional end-to-end untuk operasional).
+
+---
+
+## 1. Surat Jalan Manual - Sesi 3 (Report + Excel Export)
+
+### Halaman `/sj/report`
+
+**Filter Panel (4 baris):**
+1. Period preset chips: Semua / Hari Ini / Kemarin / 7 Hari / Bulan Ini / Custom
+2. Custom date range (muncul saat preset = Custom): Dari - Sampai
+3. Multi filter: Tujuan (searchable) | Jenis (searchable) | Status (styled select)
+4. Search: Field selector (Semua / No SJ / SN / Pembawa) + input + Reset Filter button
+
+**Hasil info bar:**
+> Menampilkan 156 item dari 32 Surat Jalan ke 15 tujuan — Total Qty: 200
+> Periode: 1-8 Juni 2026
+
+**Tabel flat (1 row = 1 item barang):**
+Tanggal | No SJ | Tujuan | Pembawa | Jenis | Merk | SN | Qty | Satuan | Keterangan | Status
+
+**Layout final tabel** (setelah tweak):
+- SN dipersempit 120px → 80px (cuma 6 digit pertama yang relevan)
+- Keterangan diperluas 180px → 220px
+- min-w table 1280px → 1380px (fix Status column overflow)
+- Horizontal scroll otomatis kalau layar sempit
+
+### Excel Export
+
+**Library:** `xlsx` (SheetJS) — ~200KB, paling ringan dan zero server load (generate client-side).
+
+**Format output (single sheet flat, 17 kolom):**
+No | Tanggal | No. SJ | Kode Tujuan | Nama Tujuan | Pembawa | Penerima | Jenis | Merk | Serial Number | Qty | Satuan | Baru | AT | Keterangan | Status | Disetujui
+
+**Behavior:**
+- Tombol "Export Excel" auto-pakai filter yang sedang aktif
+- Filename otomatis: `Laporan-Surat-Jalan-YYYY-MM-DD.xlsx`
+- Disabled saat hasil filter kosong
+- Column widths auto-set agar readable
+
+### StyledSelect Component
+
+Native `<select>` di Status SJ dan Search Field tidak konsisten dengan tema (font putih di bg gelap, tampilan mentah). Dibuat `StyledSelect` component custom — pattern yang sama dengan `SatuanSelect` di SJItemsTable. Sekarang semua dropdown konsisten.
+
+### Reset Filter Button
+
+Diganti dari text link plain ke button styled amber/jingga (mirip Export Excel button tapi warna amber) + icon refresh. Disabled state (opacity 40%) saat tidak ada filter aktif.
+
+### File Baru
+- `src/app/api/sj/report/route.ts` — GET endpoint untuk flat items
+- `src/hooks/useSJReport.ts` — fetch wrapper
+- `src/lib/excelExporter.ts` — utility export pakai SheetJS
+- `src/app/sj/report/page.tsx` — halaman report
+- Library `xlsx` ditambahkan ke dependencies
+
+---
+
+## 2. Fitur Print / PDF Surat Jalan
+
+### Konteks
+Tanpa print, sistem SJ Manual tidak fungsional secara operasional — user tidak bisa cetak fisik untuk minta TTD. Fitur ini dijadikan prerequisite sebelum Sesi 4.
+
+### PDF Layout — Modern tapi Formal
+
+**Header:** Logo Indomaret + "PT. Indomarco Prismatama / General Affairs Division" + judul "SURAT JALAN" (fresh dengan accent cyan, 2pt border bottom)
+
+**Meta box:** No SJ + Tanggal Pengiriman dalam container slate background
+
+**Tujuan section:** Border-left 3px cyan thick (modern accent style)
+
+**Items table:**
+- Header dengan accent biru muda
+- Alternating row colors (zebra striping)
+- Tag badges inline: hijau "BARU" + biru "AT"
+- Kolom: No | Jenis | Merk | Serial No | Qty | Satuan | Tag | Keterangan
+- SN pakai font monospace (Courier)
+
+**Total row:** Total Item + Total Qty di bagian bawah tabel
+
+**4 kolom TTD:**
+- Dibuat: hardcoded "Admin GA"
+- Disetujui: hardcoded "SPV/Manager"
+- Pembawa: dari input form
+- Penerima: dari label tujuan (auto)
+
+**Footer:**
+- Branding "SmartWMS"
+- Page number "Halaman X / N" (auto pagination kalau items banyak melebihi 1 halaman A4)
+
+### Library
+- `@react-pdf/renderer` — sudah ada di project (sebelumnya dipakai untuk DAT Summary report)
+- Tidak perlu library tambahan, sesuai prinsip "tidak menambah dependency tidak perlu"
+
+### Logo Strategy
+
+**Path:** `public/logo-idm.png` (BUKAN `src/assets/` karena Next.js tidak serve dari src ke browser)
+
+**Loading:**
+- Logo di-fetch sebagai blob → convert ke base64
+- Di-cache di module-level variable (load sekali per session, bukan per generate)
+- Fallback ke text "INDOMARET" dengan background cyan kalau file gagal load
+- Console.warn kalau gagal (untuk debugging) tapi tidak block proses
+
+**Concern legal:** Logo Indomaret adalah trademark. Untuk demo skripsi (educational) aman. Kalau di-deploy publik atau komersial, perlu ganti.
+
+### Modal Preview (SJPreviewModal)
+
+Modal dengan iframe yang menampilkan PDF preview real-time:
+- Generate PDF blob → create object URL → tampilkan di iframe
+- 2 button utama: Download PDF (cyan) + Print (emerald)
+- Print button buka PDF di tab baru → user tinggal Ctrl+P
+- Download button save dengan filename auto: `SJ-Manual-CGA-2026-06-0001.pdf` (slash di-replace dash)
+- Loading state dengan spinner saat generate
+- Error state dengan retry hint
+- Object URL otomatis di-revoke saat modal ditutup (no memory leak)
+
+### Auto-Trigger Modal
+
+Modal preview muncul otomatis di 4 skenario:
+1. **Submit Buat SJ baru** → preview → tutup → form reset
+2. **Update Edit SJ** → preview → tutup → redirect ke `/sj/list`
+3. **Reschedule berhasil** → preview → tutup → refresh list
+4. **Klik icon printer hijau** di `/sj/list` row → instant preview anytime
+
+Modal preview SELALU muncul setelah ada perubahan data SJ — user pasti dapat kesempatan print setelah create/edit/reschedule.
+
+### Helper Functions (sjPdfHelpers.ts)
+
+3 utility functions:
+- `generateSJPdfBlob(data)` — return Blob untuk preview iframe
+- `downloadSJPdf(data)` — trigger browser download
+- `openSJPdfForPrint(data)` — buka di tab baru
+
+Semua share logo loader yang sama (cache module-level).
+
+### PreviewWrapper Component
+
+Di list page, ada wrapper component yang handle fetch detail SJ via `useSJDetail`. Saat user klik printer icon, wrapper fetch full data (header + items) lalu pass ke `SJPreviewModal`. Pakai loading state minimalist sambil tunggu fetch.
+
+### File Baru / Diubah
+- **NEW** `src/components/sj/SuratJalanPDF.tsx` — PDF document template
+- **NEW** `src/lib/sjPdfHelpers.ts` — utility functions
+- **NEW** `src/components/sj/SJPreviewModal.tsx` — modal dengan iframe preview
+- **UPDATED** `src/app/sj/buat/page.tsx` — replace success state dengan modal trigger
+- **UPDATED** `src/app/sj/list/page.tsx` — add print button + auto-preview after reschedule
+
+### Performance Considerations
+
+Sesuai prinsip optimal/enteng:
+- Logo cache di memory (1x load per session)
+- PDF generate client-side (zero server/DB load)
+- Iframe blob URL di-revoke saat tutup modal
+- `@react-pdf/renderer` sudah ada di bundle, tidak nambah berat
+
+---
+
+## Status Akhir Sesi (8 Juni 2026, Sore)
+
+### Fitur Selesai
+- ✅ Surat Jalan Manual Sesi 3 (Report + Excel Export)
+- ✅ Print/PDF feature dengan preview modal
+- ✅ Logo Indomaret integration dengan cache strategy
+
+### Next Priority
+- Sesi 4 SJ Manual: Monitoring alokasi (checkbox mutasi Oracle)
+- Implementasi Closing snapshots architecture
+- LPP Web Tracking integration
+- Authentication & Role Management

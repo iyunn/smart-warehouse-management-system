@@ -199,8 +199,13 @@ Fitur:
 - Kolom: Item, Qty, Biaya Perolehan, Jumlah Tercatat
 - Validasi: item count & qty match 100% dengan Excel Oracle
 
-### Surat Jalan Manual — Sesi 1 + Sesi 2
-Status: ✅ Completed (Sesi 1 & 2 dari 4 sesi)
+### Surat Jalan Manual — Sesi 1 + 2 + 3 + Print/PDF
+Status: ✅ Completed (3 dari 4 sesi + Print feature)
+
+**Sesi 1:** Schema (3 tabel) + Buat SJ + Master Tujuan + Sidebar dropdown
+**Sesi 2:** List SJ + Edit + Reschedule + Delete
+**Sesi 3:** Report dashboard + Excel export (SheetJS, single-sheet flat)
+**Print/PDF:** Modal preview dengan Download + Print, auto-trigger setelah submit/edit/reschedule
 
 **Schema (3 tabel baru):**
 - `sj_tujuan` (master tujuan/penerima)
@@ -229,25 +234,17 @@ Status: ✅ Completed (Sesi 1 & 2 dari 4 sesi)
 
 ## Features In Progress
 
-### Surat Jalan Manual — Sesi 3
+### Surat Jalan Manual — Sesi 4
 Status: 🚧 Planned (Next sesi)
 
-Halaman `/sj/report`:
-- Dashboard informatif (mirip main dashboard)
-- Filter by jenis, periode, tujuan
-- Export Excel: ALL atau by filter
+Monitoring alokasi:
+- List barang yang sudah dialokasikan via SJ
+- Checkbox "sudah mutasi Oracle" per item
+- Deteksi fisik dikirim tapi belum dimutasi Oracle
 
 ---
 
 ## Features Planned
-
-### Surat Jalan Manual — Sesi 3
-Status: 📌 Planned
-
-Halaman `/sj/report`:
-- Dashboard informatif (mirip main dashboard)
-- Filter by jenis, periode, tujuan
-- Export Excel: ALL atau by filter
 
 ### Surat Jalan Manual — Sesi 4
 Status: 📌 Planned
@@ -769,6 +766,13 @@ src/
 ---
 
 # 10. Recent Major Changes Log
+
+## 8 Juni 2026 (Sore)
+- **Surat Jalan Manual Sesi 3** — Report page + Excel export (SheetJS)
+- **Print/PDF Feature** — SuratJalanPDF component, SJPreviewModal, auto-trigger setelah submit/edit/reschedule
+- Logo Indomaret integration (cache module-level, fallback ke text)
+- StyledSelect component for consistent dark theme dropdown
+- Library `xlsx` added to dependencies
 
 ## 8 Juni 2026
 - **Surat Jalan Manual Sesi 2** — Halaman List + Edit + Reschedule + Delete
