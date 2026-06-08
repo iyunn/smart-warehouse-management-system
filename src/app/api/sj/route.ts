@@ -13,7 +13,6 @@ async function generateNoSJ(tanggal: string): Promise<string> {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const prefix = `SJ-Manual/CGA/${year}/${month}/`
 
-  // Cari sequence terbesar di bulan ini
   const { data } = await supabase
     .from('surat_jalan')
     .select('no_sj')
@@ -30,7 +29,69 @@ async function generateNoSJ(tanggal: string): Promise<string> {
   return `${prefix}${String(nextSeq).padStart(4, '0')}`
 }
 
-// POST — create new SJ
+// ─── GET /api/sj — list all SJ atau detail by id ──────────────────────────
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+
+    if (id) {
+      // Get detail SJ + items
+      const { data: sj, error: sjError } = await supabase
+        .from('surat_jalan')
+        .select(`
+          *,
+          tujuan:sj_tujuan(id, kode, nama),
+          items:surat_jalan_items(*)
+        `)
+        .eq('id', id)
+        .single()
+
+      if (sjError) throw new Error(sjError.message)
+
+      // Sort items by urutan
+      if (sj?.items) {
+        sj.items.sort((a: any, b: any) => a.urutan - b.urutan)
+      }
+
+      return NextResponse.json({ sj })
+    }
+
+    // List all SJ dengan tujuan info + items count
+    const { data, error } = await supabase
+      .from('surat_jalan')
+      .select(`
+        id, no_sj, tanggal, pembawa, penerima, status, approved_by,
+        created_at, updated_at,
+        tujuan:sj_tujuan(id, kode, nama),
+        items:surat_jalan_items(jenis, serial_number)
+      `)
+      .order('tanggal', { ascending: false })
+      .order('created_at', { ascending: false })
+
+    if (error) throw new Error(error.message)
+
+    // Transform: hitung items count + flatten data untuk search
+    const list = (data ?? []).map((sj: any) => ({
+      ...sj,
+      items_count: sj.items?.length ?? 0,
+      // Untuk client-side search by SN/jenis tanpa fetch items lagi
+      jenis_list: [...new Set((sj.items ?? []).map((i: any) => i.jenis).filter(Boolean))],
+      sn_list:    [...new Set((sj.items ?? []).map((i: any) => i.serial_number).filter(Boolean))],
+      items: undefined,  // jangan kirim full items (hemat payload)
+    }))
+
+    return NextResponse.json({ sj: list })
+
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Error' },
+      { status: 500 }
+    )
+  }
+}
+
+// ─── POST /api/sj — create new SJ ──────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -43,10 +104,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Minimal 1 item barang' }, { status: 400 })
     }
 
-    // Generate No SJ
     const no_sj = await generateNoSJ(tanggal)
 
-    // Insert header
     const { data: sjData, error: sjError } = await supabase
       .from('surat_jalan')
       .insert({
@@ -63,7 +122,6 @@ export async function POST(req: NextRequest) {
 
     if (sjError) throw new Error(sjError.message)
 
-    // Insert items (bulk)
     const itemsToInsert = items.map((item: any, idx: number) => ({
       sj_id:         sjData.id,
       urutan:        idx + 1,
@@ -82,12 +140,123 @@ export async function POST(req: NextRequest) {
       .insert(itemsToInsert)
 
     if (itemsError) {
-      // Rollback: hapus header juga
       await supabase.from('surat_jalan').delete().eq('id', sjData.id)
       throw new Error(itemsError.message)
     }
 
     return NextResponse.json({ sj: sjData, no_sj })
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Error' },
+      { status: 500 }
+    )
+  }
+}
+
+// ─── PATCH /api/sj — update existing SJ ──────────────────────────────────
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { id, tanggal, tujuan_id, pembawa, penerima, approved_by, items, status, reschedule_only } = body
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID wajib' }, { status: 400 })
+    }
+
+    // ── Mode 1: Reschedule only (cuma update tanggal) ──────────────────────
+    if (reschedule_only) {
+      if (!tanggal) {
+        return NextResponse.json({ error: 'Tanggal wajib diisi' }, { status: 400 })
+      }
+      const { data, error } = await supabase
+        .from('surat_jalan')
+        .update({ tanggal, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single()
+
+      if (error) throw new Error(error.message)
+      return NextResponse.json({ sj: data })
+    }
+
+    // ── Mode 2: Full edit (update header + replace items) ──────────────────
+    if (!tanggal || !tujuan_id) {
+      return NextResponse.json({ error: 'Tanggal dan tujuan wajib diisi' }, { status: 400 })
+    }
+    if (!items || items.length === 0) {
+      return NextResponse.json({ error: 'Minimal 1 item barang' }, { status: 400 })
+    }
+
+    // Update header
+    const { data: sjData, error: sjError } = await supabase
+      .from('surat_jalan')
+      .update({
+        tanggal,
+        tujuan_id,
+        pembawa:     pembawa ?? '',
+        penerima:    penerima ?? '',
+        approved_by: approved_by ?? '',
+        status:      status ?? 'draft',
+        updated_at:  new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (sjError) throw new Error(sjError.message)
+
+    // Replace items: delete lama, insert baru
+    // Lebih simpel & aman dibanding diff per row, payload kecil
+    const { error: delError } = await supabase
+      .from('surat_jalan_items')
+      .delete()
+      .eq('sj_id', id)
+
+    if (delError) throw new Error(delError.message)
+
+    const itemsToInsert = items.map((item: any, idx: number) => ({
+      sj_id:         id,
+      urutan:        idx + 1,
+      jenis:         item.jenis ?? '',
+      merk:          item.merk ?? '',
+      serial_number: item.serial_number ?? '',
+      qty:           item.qty ?? 1,
+      satuan:        item.satuan ?? 'Unit',
+      is_baru:       !!item.is_baru,
+      is_aktiva:     !!item.is_aktiva,
+      keterangan:    item.keterangan ?? '',
+    }))
+
+    const { error: itemsError } = await supabase
+      .from('surat_jalan_items')
+      .insert(itemsToInsert)
+
+    if (itemsError) throw new Error(itemsError.message)
+
+    return NextResponse.json({ sj: sjData })
+
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Error' },
+      { status: 500 }
+    )
+  }
+}
+
+// ─── DELETE /api/sj?id=xxx — hard delete (CASCADE items) ─────────────────
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID wajib' }, { status: 400 })
+    }
+
+    const { error } = await supabase.from('surat_jalan').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+
+    return NextResponse.json({ success: true })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Error' },

@@ -1,44 +1,72 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useCallback, useMemo, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import SearchableDropdown from "@/components/sj/SearchableDropdown";
 import SJItemsTable from "@/components/sj/SJItemsTable";
 import { useMasterJenis, useMasterMerk, useMasterTujuan } from "@/hooks/useSJMaster";
+import { useSJDetail } from "@/hooks/useSJList";
 import { createEmptyItem, type SJItem } from "@/lib/sjTypes";
 
-export default function BuatSJPage() {
+function BuatSJPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit");
+  const isEditMode = !!editId;
+
   const { jenis: jenisOptions } = useMasterJenis();
   const { merk: merkOptions }   = useMasterMerk();
   const { tujuan: tujuanList }  = useMasterTujuan();
+
+  // Fetch existing SJ untuk edit mode
+  const { sj: existingSJ, loading: loadingExisting, error: loadError } = useSJDetail(editId);
 
   // Header state
   const today = new Date().toISOString().slice(0, 10);
   const [tanggal, setTanggal]   = useState(today);
   const [tujuanId, setTujuanId] = useState("");
   const [pembawa, setPembawa]   = useState("");
-
-  // Items state
-  const [items, setItems] = useState<SJItem[]>([createEmptyItem(1)]);
+  const [items, setItems]       = useState<SJItem[]>([createEmptyItem(1)]);
 
   // Submit state
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]           = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [hydrated, setHydrated]     = useState(false);
+
+  // Pre-fill form saat edit mode setelah data ter-fetch
+  useEffect(() => {
+    if (isEditMode && existingSJ && !hydrated) {
+      setTanggal(existingSJ.tanggal);
+      setTujuanId(existingSJ.tujuan_id);
+      setPembawa(existingSJ.pembawa ?? "");
+
+      const itemsData = (existingSJ.items ?? []).map((it: any, idx: number) => ({
+        urutan:        idx + 1,
+        jenis:         it.jenis ?? "",
+        merk:          it.merk ?? "",
+        serial_number: it.serial_number ?? "",
+        qty:           it.qty ?? 1,
+        satuan:        it.satuan ?? "Unit",
+        is_baru:       !!it.is_baru,
+        is_aktiva:     !!it.is_aktiva,
+        keterangan:    it.keterangan ?? "",
+      }));
+      setItems(itemsData.length > 0 ? itemsData : [createEmptyItem(1)]);
+      setHydrated(true);
+    }
+  }, [isEditMode, existingSJ, hydrated]);
 
   const tujuanOptions = useMemo(
     () => tujuanList.map(t => ({
-      value:    t.id,
-      label:    `${t.kode} — ${t.nama}`,
-      sublabel: undefined,
+      value: t.id,
+      label: `${t.kode} — ${t.nama}`,
     })),
     [tujuanList]
   );
 
-  // Penerima otomatis = label tujuan
   const selectedTujuan = tujuanList.find(t => t.id === tujuanId);
   const penerimaDisplay = selectedTujuan ? `${selectedTujuan.kode} — ${selectedTujuan.nama}` : "";
 
@@ -56,18 +84,23 @@ export default function BuatSJPage() {
 
     setSubmitting(true);
     try {
+      const body: any = {
+        tanggal,
+        tujuan_id:   tujuanId,
+        pembawa,
+        penerima:    penerimaDisplay,
+        approved_by: "SPV/Manager",
+        items:       validItems,
+        status,
+      };
+
+      // Edit mode: PATCH dengan id
+      if (isEditMode) body.id = editId;
+
       const res = await fetch("/api/sj", {
-        method: "POST",
+        method:  isEditMode ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tanggal,
-          tujuan_id:   tujuanId,
-          pembawa,
-          penerima:    penerimaDisplay,    // sama dengan tujuan
-          approved_by: "SPV/Manager",       // hardcoded
-          items: validItems,
-          status,
-        }),
+        body:    JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -76,10 +109,14 @@ export default function BuatSJPage() {
       }
 
       const data = await res.json();
-      setSuccessMsg(`Surat Jalan berhasil dibuat: ${data.no_sj}`);
+      setSuccessMsg(
+        isEditMode
+          ? `Surat Jalan ${existingSJ?.no_sj} berhasil diupdate`
+          : `Surat Jalan berhasil dibuat: ${data.no_sj}`
+      );
 
       setTimeout(() => {
-        if (status === "submitted") {
+        if (isEditMode || status === "submitted") {
           router.push("/sj/list");
         } else {
           setItems([createEmptyItem(1)]);
@@ -93,21 +130,70 @@ export default function BuatSJPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [tanggal, tujuanId, pembawa, penerimaDisplay, items, router]);
+  }, [tanggal, tujuanId, pembawa, penerimaDisplay, items, router, isEditMode, editId, existingSJ]);
+
+  // Loading state untuk edit mode
+  if (isEditMode && loadingExisting) {
+    return (
+      <div className="flex h-screen overflow-hidden bg-[#080e18] text-white">
+        <Sidebar />
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <Topbar title="Edit Surat Jalan" />
+          <main className="flex-1 flex items-center justify-center">
+            <div className="flex items-center gap-2 text-white/40">
+              <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2A10 10 0 1 1 2 12" /></svg>
+              <span className="text-sm">Memuat data Surat Jalan...</span>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  if (isEditMode && loadError) {
+    return (
+      <div className="flex h-screen overflow-hidden bg-[#080e18] text-white">
+        <Sidebar />
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <Topbar title="Edit Surat Jalan" />
+          <main className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-sm text-rose-400 mb-2">SJ tidak ditemukan atau gagal dimuat</p>
+              <button onClick={() => router.push("/sj/list")} className="text-xs text-cyan-400 hover:text-cyan-300">
+                ← Kembali ke List
+              </button>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#080e18] text-white">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Buat Surat Jalan Manual" />
+        <Topbar title={isEditMode ? "Edit Surat Jalan" : "Buat Surat Jalan Manual"} />
 
         <main className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
 
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight text-white">Buat Surat Jalan Manual</h1>
-            <p className="mt-0.5 text-xs text-white/40">
-              Buat surat jalan pengiriman barang dari gudang ke tujuan. No SJ akan di-generate otomatis.
-            </p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight text-white">
+                {isEditMode ? "Edit Surat Jalan Manual" : "Buat Surat Jalan Manual"}
+              </h1>
+              <p className="mt-0.5 text-xs text-white/40">
+                {isEditMode
+                  ? `Edit ${existingSJ?.no_sj} — perubahan akan menggantikan data lama`
+                  : "Buat surat jalan pengiriman barang dari gudang ke tujuan. No SJ akan di-generate otomatis."}
+              </p>
+            </div>
+            {isEditMode && (
+              <button onClick={() => router.push("/sj/list")}
+                className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/70 hover:bg-white/[0.08]">
+                ← Batal
+              </button>
+            )}
           </div>
 
           {/* Banner */}
@@ -135,7 +221,6 @@ export default function BuatSJPage() {
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-              {/* Tanggal */}
               <div>
                 <label className="block text-[11px] font-medium text-white/50 mb-1.5">Tanggal Pengiriman *</label>
                 <input
@@ -147,7 +232,6 @@ export default function BuatSJPage() {
                 />
               </div>
 
-              {/* Tujuan */}
               <div>
                 <label className="block text-[11px] font-medium text-white/50 mb-1.5">Tujuan *</label>
                 <SearchableDropdown
@@ -163,7 +247,6 @@ export default function BuatSJPage() {
                 )}
               </div>
 
-              {/* Pembawa */}
               <div className="md:col-span-2">
                 <label className="block text-[11px] font-medium text-white/50 mb-1.5">Pembawa</label>
                 <input
@@ -193,24 +276,26 @@ export default function BuatSJPage() {
 
           {/* Action buttons */}
           <div className="flex items-center justify-end gap-2 sticky bottom-0 bg-[#080e18] py-3">
+            {!isEditMode && (
+              <button
+                type="button"
+                onClick={() => handleSubmit("draft")}
+                disabled={submitting}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 bg-white/[0.04] text-white/70 text-[12px] font-medium hover:bg-white/[0.08] hover:text-white transition-all disabled:opacity-50"
+              >
+                Simpan Draft
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => handleSubmit("draft")}
-              disabled={submitting}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 bg-white/[0.04] text-white/70 text-[12px] font-medium hover:bg-white/[0.08] hover:text-white transition-all disabled:opacity-50"
-            >
-              Simpan Draft
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSubmit("submitted")}
+              onClick={() => handleSubmit(isEditMode ? (existingSJ?.status ?? "submitted") : "submitted")}
               disabled={submitting}
               className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-[12px] font-semibold shadow-lg shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition-all disabled:opacity-50"
             >
               {submitting ? (
                 <><svg className="animate-spin" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 1.5A4.5 4.5 0 1 1 1.5 6" /></svg>Menyimpan...</>
               ) : (
-                <>Submit Surat Jalan</>
+                isEditMode ? <>Update Surat Jalan</> : <>Submit Surat Jalan</>
               )}
             </button>
           </div>
@@ -218,5 +303,18 @@ export default function BuatSJPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+// Wrapper dengan Suspense untuk useSearchParams
+export default function BuatSJPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen bg-[#080e18] items-center justify-center">
+        <span className="text-white/40 text-sm">Memuat...</span>
+      </div>
+    }>
+      <BuatSJPageContent />
+    </Suspense>
   );
 }
