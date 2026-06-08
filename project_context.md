@@ -199,8 +199,8 @@ Fitur:
 - Kolom: Item, Qty, Biaya Perolehan, Jumlah Tercatat
 - Validasi: item count & qty match 100% dengan Excel Oracle
 
-### Surat Jalan Manual — Sesi 1
-Status: ✅ Completed (Sesi 1 dari 4 sesi)
+### Surat Jalan Manual — Sesi 1 + Sesi 2
+Status: ✅ Completed (Sesi 1 & 2 dari 4 sesi)
 
 **Schema (3 tabel baru):**
 - `sj_tujuan` (master tujuan/penerima)
@@ -229,13 +229,13 @@ Status: ✅ Completed (Sesi 1 dari 4 sesi)
 
 ## Features In Progress
 
-### Surat Jalan Manual — Sesi 2
+### Surat Jalan Manual — Sesi 3
 Status: 🚧 Planned (Next sesi)
 
-Halaman `/sj/list`:
-- Search by SN, kode tujuan, jenis barang
-- Edit, delete, reschedule actions
-- Reschedule: overwrite tanggal (tidak ada history log)
+Halaman `/sj/report`:
+- Dashboard informatif (mirip main dashboard)
+- Filter by jenis, periode, tujuan
+- Export Excel: ALL atau by filter
 
 ---
 
@@ -769,6 +769,13 @@ src/
 ---
 
 # 10. Recent Major Changes Log
+
+## 8 Juni 2026
+- **Surat Jalan Manual Sesi 2** — Halaman List + Edit + Reschedule + Delete
+- API `/api/sj` extensions: GET (list+detail), PATCH (reschedule_only + full edit), DELETE (CASCADE)
+- Edit mode via `?edit={id}` di `/sj/buat` page (reuse form, replace items strategy)
+- New hook `useSJList` + `useSJDetail`
+- Bug fix: accentColor SummaryCard hanya support 4 warna (emerald → amber)
 
 ## 7 Juni 2026
 - **CGA-only architecture refactor** — DB tidak lagi simpan non-CGA
