@@ -6,9 +6,11 @@ import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import SearchableDropdown from "@/components/sj/SearchableDropdown";
 import SJItemsTable from "@/components/sj/SJItemsTable";
+import SJPreviewModal from "@/components/sj/SJPreviewModal";
 import { useMasterJenis, useMasterMerk, useMasterTujuan } from "@/hooks/useSJMaster";
 import { useSJDetail } from "@/hooks/useSJList";
 import { createEmptyItem, type SJItem } from "@/lib/sjTypes";
+import type { SJDataForPDF } from "@/components/sj/SuratJalanPDF";
 
 function BuatSJPageContent() {
   const router = useRouter();
@@ -20,23 +22,22 @@ function BuatSJPageContent() {
   const { merk: merkOptions }   = useMasterMerk();
   const { tujuan: tujuanList }  = useMasterTujuan();
 
-  // Fetch existing SJ untuk edit mode
   const { sj: existingSJ, loading: loadingExisting, error: loadError } = useSJDetail(editId);
 
-  // Header state
   const today = new Date().toISOString().slice(0, 10);
   const [tanggal, setTanggal]   = useState(today);
   const [tujuanId, setTujuanId] = useState("");
   const [pembawa, setPembawa]   = useState("");
   const [items, setItems]       = useState<SJItem[]>([createEmptyItem(1)]);
 
-  // Submit state
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]           = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
   const [hydrated, setHydrated]     = useState(false);
 
-  // Pre-fill form saat edit mode setelah data ter-fetch
+  // Preview modal state
+  const [previewData, setPreviewData] = useState<SJDataForPDF | null>(null);
+  const [previewTitle, setPreviewTitle] = useState<string>("");
+
   useEffect(() => {
     if (isEditMode && existingSJ && !hydrated) {
       setTanggal(existingSJ.tanggal);
@@ -72,7 +73,6 @@ function BuatSJPageContent() {
 
   const handleSubmit = useCallback(async (status: "draft" | "submitted") => {
     setError("");
-    setSuccessMsg("");
 
     if (!tujuanId) { setError("Tujuan wajib dipilih"); return; }
     if (!tanggal)  { setError("Tanggal wajib diisi"); return; }
@@ -94,7 +94,6 @@ function BuatSJPageContent() {
         status,
       };
 
-      // Edit mode: PATCH dengan id
       if (isEditMode) body.id = editId;
 
       const res = await fetch("/api/sj", {
@@ -109,30 +108,52 @@ function BuatSJPageContent() {
       }
 
       const data = await res.json();
-      setSuccessMsg(
-        isEditMode
-          ? `Surat Jalan ${existingSJ?.no_sj} berhasil diupdate`
-          : `Surat Jalan berhasil dibuat: ${data.no_sj}`
-      );
+      const finalNoSJ = isEditMode ? existingSJ?.no_sj : data.no_sj;
 
-      setTimeout(() => {
-        if (isEditMode || status === "submitted") {
-          router.push("/sj/list");
-        } else {
-          setItems([createEmptyItem(1)]);
-          setPembawa("");
-          setSuccessMsg("");
-        }
-      }, 1500);
+      // ── Build PDF data dan trigger preview modal ───────────────────────
+      const pdfData: SJDataForPDF = {
+        no_sj:       finalNoSJ,
+        tanggal,
+        tujuan_kode: selectedTujuan?.kode ?? "",
+        tujuan_nama: selectedTujuan?.nama ?? "",
+        pembawa,
+        penerima:    penerimaDisplay,
+        approved_by: "SPV/Manager",
+        created_by:  "Admin GA",
+        items: validItems.map((it, idx) => ({
+          urutan:        idx + 1,
+          jenis:         it.jenis,
+          merk:          it.merk,
+          serial_number: it.serial_number,
+          qty:           it.qty,
+          satuan:        it.satuan,
+          is_baru:       it.is_baru,
+          is_aktiva:     it.is_aktiva,
+          keterangan:    it.keterangan,
+        })),
+      };
+
+      setPreviewTitle(isEditMode ? "Surat Jalan Berhasil Diupdate" : "Surat Jalan Berhasil Dibuat");
+      setPreviewData(pdfData);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
     } finally {
       setSubmitting(false);
     }
-  }, [tanggal, tujuanId, pembawa, penerimaDisplay, items, router, isEditMode, editId, existingSJ]);
+  }, [tanggal, tujuanId, pembawa, penerimaDisplay, items, isEditMode, editId, existingSJ, selectedTujuan]);
 
-  // Loading state untuk edit mode
+  // Handler saat user tutup modal — redirect/reset
+  const handleClosePreview = useCallback(() => {
+    setPreviewData(null);
+    if (isEditMode) {
+      router.push("/sj/list");
+    } else {
+      setItems([createEmptyItem(1)]);
+      setPembawa("");
+    }
+  }, [isEditMode, router]);
+
   if (isEditMode && loadingExisting) {
     return (
       <div className="flex h-screen overflow-hidden bg-[#080e18] text-white">
@@ -196,7 +217,6 @@ function BuatSJPageContent() {
             )}
           </div>
 
-          {/* Banner */}
           {error && (
             <div className="flex items-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/[0.06] px-4 py-3">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-rose-400 shrink-0">
@@ -205,16 +225,7 @@ function BuatSJPageContent() {
               <p className="text-xs text-rose-300">{error}</p>
             </div>
           )}
-          {successMsg && (
-            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400 shrink-0">
-                <circle cx="8" cy="8" r="6.5" /><path d="M5 8l2 2 4-4" />
-              </svg>
-              <p className="text-xs text-emerald-300">{successMsg}</p>
-            </div>
-          )}
 
-          {/* SJ Header Form */}
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
             <h2 className="text-[12px] font-semibold uppercase tracking-widest text-cyan-400/70 mb-4">
               Informasi Surat Jalan
@@ -261,7 +272,6 @@ function BuatSJPageContent() {
             </div>
           </div>
 
-          {/* Items Table */}
           <div>
             <h2 className="text-[12px] font-semibold uppercase tracking-widest text-cyan-400/70 mb-3">
               Detail Barang
@@ -274,7 +284,6 @@ function BuatSJPageContent() {
             />
           </div>
 
-          {/* Action buttons */}
           <div className="flex items-center justify-end gap-2 sticky bottom-0 bg-[#080e18] py-3">
             {!isEditMode && (
               <button
@@ -302,11 +311,19 @@ function BuatSJPageContent() {
 
         </main>
       </div>
+
+      {/* Preview Modal */}
+      {previewData && (
+        <SJPreviewModal
+          data={previewData}
+          title={previewTitle}
+          onClose={handleClosePreview}
+        />
+      )}
     </div>
   );
 }
 
-// Wrapper dengan Suspense untuk useSearchParams
 export default function BuatSJPage() {
   return (
     <Suspense fallback={
