@@ -39,7 +39,9 @@ async function loadLogo(): Promise<string | null> {
 // ─── Generate PDF blob untuk preview ──────────────────────────────────────
 export async function generateSJPdfBlob(data: SJDataForPDF): Promise<Blob> {
   const logoSrc = await loadLogo();
-  const pdfDoc = pdf(React.createElement(SuratJalanPDF, { data, logoSrc: logoSrc ?? undefined }));
+  const element = React.createElement(SuratJalanPDF, { data, logoSrc: logoSrc ?? undefined });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pdfDoc = pdf(element as any);
   return await pdfDoc.toBlob();
 }
 
