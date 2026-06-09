@@ -767,6 +767,14 @@ src/
 
 # 10. Recent Major Changes Log
 
+## 9 Juni 2026 (Sore — Bug Fixes)
+- **SearchableDropdown** — keyboard nav (↑↓Enter), Tab to next field, scroll fix, forwardRef
+- **Cache invalidation** — edit/delete keyword rule sekarang invalidate semua cache (sama seperti add rule)
+- **Fix no_merk revert** — DeleteConfirmModal kirim `revert_merk='Non-Merk'` bukan `revert_jenis`
+- **Classifier 2-pass** — merk spesifik rules selalu diproses sebelum no_merk (Pass 1 skip no_merk, Pass 2 no_merk sebagai fallback)
+- **cellToNumber fix** — smart dot detection untuk handle Oracle DAT format campuran (titik ribuan vs titik desimal)
+- **Action required:** Upload ulang DAT TXT setelah deploy agar jumlah_tercatat ter-parse ulang dengan benar
+
 ## 9 Juni 2026
 - **Keyword Rule Consistency** — AutocompleteInput + disable submit on casing mismatch, /api/keyword-rules/values endpoint, useKeywordRuleValues hook, SQL migration cleanup duplikat
 - **SJ Rekap Alokasi filter refactor** — 3 dropdown → unified 7-field search, "Minggu Ini" label, dynamic Excel filename

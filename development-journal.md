@@ -1240,3 +1240,170 @@ Kolom: No | Jenis | Merk | Cost Center | Kategori Oracle | Kode Aset | Deskripsi
 - Closing snapshots architecture (DAT/LPP Closing upload)
 - LPP Web Tracking integration
 - Authentication & Role Management
+
+---
+
+# Selasa, 9 Juni 2026 (Sesi Sore — Bug Fixes)
+
+## Ringkasan
+
+Sesi fokus pada berbagai bug fix yang ditemukan saat testing operasional.
+
+---
+
+## 1. SearchableDropdown — Keyboard Navigation & Tab Support
+
+### Masalah
+- Arrow Up/Down tidak berfungsi di dropdown Jenis/Merk pada form Buat SJ
+- Tidak bisa scroll dropdown list (dropdown hilang saat scroll)
+- Setelah pilih item, Tab tidak pindah ke kolom berikutnya
+
+### Root Cause
+- Tidak ada handler ArrowUp/ArrowDown di search input
+- Event listener `scroll` dengan `capture: true` intercept semua scroll event termasuk scroll di dalam dropdown list sendiri
+- Setelah pilih item, fokus kembali ke `document.body` bukan ke trigger button
+
+### Fix
+- Tambah keyboard navigation: ArrowUp/Down navigasi highlight, Enter/Tab pilih item
+- Mouse hover sync dengan highlight state
+- `onMouseDown preventDefault` fix click-before-blur bug
+- Auto-focus search input saat dropdown buka
+- Auto-scroll highlighted item ke viewport
+- Tab: pilih item ter-highlight → fokus ke trigger → Tab natural browser ke elemen berikutnya
+- Scroll close guard: cek apakah scroll terjadi di dalam `dropdownRef` sebelum close
+- `forwardRef` support untuk external focus control
+- Hapus `memo()` wrapper dari `forwardRef` (React 19 compatibility)
+
+### File Diubah
+- **UPDATED** `src/components/sj/SearchableDropdown.tsx`
+
+---
+
+## 2. Cache Invalidation Setelah Edit/Delete Keyword Rule
+
+### Masalah
+Setelah edit atau delete keyword rule, dropdown Jenis/Merk di form Buat SJ dan suggestion di AddRuleModal masih menampilkan data lama — harus tunggu 5 menit TTL atau refresh manual.
+
+### Root Cause
+`KeywordRulesTab.tsx` tidak memanggil invalidate cache setelah `UPDATE` (edit) atau `DELETE` rule. Hanya `useKeywordRule` (add rule) yang sudah invalidate cache.
+
+### Fix
+Tambah fungsi `invalidateAllCaches()` di `KeywordRulesTab.tsx` yang dipanggil setelah:
+- Edit rule berhasil (setelah `onSaved()`)
+- Delete rule berhasil (setelah revert + `onDeleted()`)
+
+```ts
+function invalidateAllCaches() {
+  fetch("/api/keyword-rules/values", { method: "DELETE" }).catch(() => {});
+  fetch("/api/sj/master/jenis",      { method: "DELETE" }).catch(() => {});
+  fetch("/api/sj/master/merk",       { method: "DELETE" }).catch(() => {});
+}
+```
+
+Sekarang semua aksi rule (add/edit/delete) → cache langsung bersih → UI langsung fresh.
+
+### File Diubah
+- **UPDATED** `src/components/review/KeywordRulesTab.tsx`
+
+---
+
+## 3. Fix Revert no_merk Rule Saat Delete
+
+### Masalah
+Saat rule `no_merk` dihapus via UI, aset yang ter-klasifikasi "Non-Merk" tidak otomatis revert ke Unknown.
+
+### Root Cause
+`DeleteConfirmModal` di `KeywordRulesTab` salah kirim body ke `/api/reclassify`:
+```ts
+// SALAH — no_merk masuk ke else branch
+if (rule.rule_type === "merk") body.revert_merk = rule.value;
+else body.revert_jenis = rule.value;  // kirim revert_jenis = "Non-Merk" — tidak ada aset dengan jenis "Non-Merk"
+```
+
+### Fix
+```ts
+if (rule.rule_type === "merk")          body.revert_merk  = rule.value;
+else if (rule.rule_type === "no_merk")  body.revert_merk  = "Non-Merk";
+else                                    body.revert_jenis = rule.value;
+```
+
+---
+
+## 4. Classifier 2-Pass Logic
+
+### Masalah
+Aset dengan deskripsi mengandung keyword `no_merk` sekaligus keyword `merk` spesifik (mis. "DVR 16 CH Dahua") bisa ter-klasifikasi sebagai Non-Merk kalau rule `no_merk` "DVR" diproses sebelum rule `merk` "DAHUA" di loop.
+
+### Fix
+Ganti 1 loop menjadi 2 pass:
+
+**Pass 1:** Loop semua rules, skip `no_merk`, proses jenis + merk spesifik dulu.
+
+**Pass 2:** Hanya dijalankan kalau merk **masih Unknown** setelah Pass 1 — baru cek `no_merk` rules sebagai fallback.
+
+Dengan ini, merk spesifik **selalu menang** atas `no_merk` regardless urutan rules di DB.
+
+### File Diubah
+- **UPDATED** `src/lib/classifier.ts`
+
+---
+
+## 5. Fix cellToNumber — Oracle DAT Desimal Format
+
+### Masalah
+Nilai `jumlah_tercatat` di DB jauh lebih besar dari yang seharusnya. Contoh: `10164583.33` di file TXT tersimpan sebagai `1016458333` di DB (100x lebih besar).
+
+### Root Cause
+Fungsi `cellToNumber` di `txtParser.ts` menggunakan:
+```ts
+const cleaned = str.replace(/\./g, "").replace(/,/g, ".");
+```
+Ini hapus **semua titik** tanpa melihat konteks. Padahal Oracle export kadang menggunakan titik sebagai desimal (`10164583.33`) bukan sebagai ribuan — sehingga titik desimal ikut terhapus.
+
+### Fix: Smart dot detection
+```ts
+if (str.includes(",")) {
+  // Format Indonesia: titik=ribuan, koma=desimal
+  cleaned = str.replace(/\./g, "").replace(",", ".");
+} else {
+  const dotParts = str.split(".");
+  if (dotParts.length > 2) {
+    // Lebih dari 1 titik → semua titik adalah ribuan
+    cleaned = str.replace(/\./g, "");
+  } else if (dotParts.length === 2 && dotParts[1].length <= 2) {
+    // Tepat 1 titik + ≤2 digit → titik adalah desimal
+    cleaned = str;
+  } else {
+    // Tepat 1 titik + 3 digit → titik adalah ribuan
+    cleaned = str.replace(/\./g, "");
+  }
+}
+```
+
+Format yang di-handle:
+| Input | Output | Konteks |
+|---|---|---|
+| `2.383.000` | `2383000` | Titik ribuan |
+| `10.164.583,33` | `10164583` | Format Indonesia |
+| `10164583.33` | `10164583` | Titik desimal |
+| `2383000` | `2383000` | Plain integer |
+
+### Tindakan Lanjutan
+Setelah deploy fix ini, **upload ulang file DAT** agar data di DB ter-parse ulang dengan benar.
+
+### File Diubah
+- **UPDATED** `src/lib/txtParser.ts`
+
+---
+
+## Status Akhir Sesi (9 Juni 2026, Sore)
+
+### Selesai
+- ✅ SearchableDropdown keyboard navigation + Tab support + scroll fix
+- ✅ Cache invalidation setelah edit/delete keyword rule
+- ✅ Fix revert no_merk rule saat delete
+- ✅ Classifier 2-pass logic (merk spesifik > no_merk)
+- ✅ cellToNumber fix untuk Oracle DAT desimal format
+
+### Action Required
+- ⚠ Upload ulang file DAT TXT setelah deploy — data `jumlah_tercatat` di DB perlu di-refresh dengan parser baru
