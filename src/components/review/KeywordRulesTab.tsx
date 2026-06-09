@@ -195,8 +195,9 @@ const DeleteConfirmModal = memo(({ rule, onClose, onDeleted }: DeleteConfirmProp
     setStatus("reverting");
     try {
       const body: Record<string, string> = {};
-      if (rule.rule_type === "merk") body.revert_merk = rule.value;
-      else body.revert_jenis = rule.value;
+      if (rule.rule_type === "merk")    body.revert_merk  = rule.value;
+      else if (rule.rule_type === "no_merk") body.revert_merk = "Non-Merk";
+      else                              body.revert_jenis = rule.value;
 
       await fetch("/api/reclassify", {
         method: "POST",
