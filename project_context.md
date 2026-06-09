@@ -767,6 +767,13 @@ src/
 
 # 10. Recent Major Changes Log
 
+## 9 Juni 2026
+- **Keyword Rule Consistency** — AutocompleteInput + disable submit on casing mismatch, /api/keyword-rules/values endpoint, useKeywordRuleValues hook, SQL migration cleanup duplikat
+- **SJ Rekap Alokasi filter refactor** — 3 dropdown → unified 7-field search, "Minggu Ini" label, dynamic Excel filename
+- **Rename sidebar** — "List Surat Jalan" → "Daftar Surat Jalan", "Report" → "Rekap Alokasi"
+- **Monitoring DAT overhaul** — multi-field AND tag filter, extractCGACode fix, kolom reorder + sort + Tercatat, horizontal scroll, Export Excel 2 sheet (Summary + Detail)
+- **New files:** AutocompleteInput.tsx, useKeywordRuleValues.ts, TagInput.tsx, monitoringExporter.ts
+
 ## 8 Juni 2026 (Sore)
 - **Surat Jalan Manual Sesi 3** — Report page + Excel export (SheetJS)
 - **Print/PDF Feature** — SuratJalanPDF component, SJPreviewModal, auto-trigger setelah submit/edit/reschedule

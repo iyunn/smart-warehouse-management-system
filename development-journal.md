@@ -879,7 +879,7 @@ Keputusan setelah analisis trade-off (**tidak buat tabel master baru**):
 
 ---
 
-# Minggu, 8 Juni 2026 (Sesi Sore)
+# Senin, 8 Juni 2026 (Sesi Sore)
 
 ## Ringkasan Sesi Pengembangan
 
@@ -1049,5 +1049,194 @@ Sesuai prinsip optimal/enteng:
 ### Next Priority
 - Sesi 4 SJ Manual: Monitoring alokasi (checkbox mutasi Oracle)
 - Implementasi Closing snapshots architecture
+- LPP Web Tracking integration
+- Authentication & Role Management
+
+---
+
+# Selasa, 9 Juni 2026
+
+## Ringkasan Sesi Pengembangan
+
+Sesi ini fokus pada 4 hal: Keyword Rule Consistency, SJ Rekap Alokasi refactor, rename sidebar, dan Monitoring DAT overhaul.
+
+---
+
+## 1. Keyword Rule Consistency
+
+### Masalah
+Data `keyword_rules` inconsistent — ada value yang sama tapi berbeda casing (misal "CPU" dan "Cpu" dianggap 2 jenis berbeda). Ini menyebabkan Report DAT menampilkan data terfragmentasi padahal merujuk ke jenis yang sama.
+
+### Solusi
+Pendekatan UI-level: autocomplete suggestion + disable submit saat terdeteksi casing mismatch. Lebih ringan dari server-side duplicate check (tidak ada network round-trip tambahan).
+
+### Autocomplete Suggestion (AddRuleModal + EditRuleModal)
+- Field "Value" (Jenis/Merk) sekarang pakai `AutocompleteInput` component
+- Suggestion di-fetch dari `/api/keyword-rules/values?type=jenis|merk`
+- Matching case-insensitive saat mengetik — user langsung lihat value yang sudah ada
+- Source: `keyword_rules` saja (bukan `assets_clean`) sesuai prinsip "dasar dari keyword rule itu sendiri"
+
+### Disable Submit Saat Mismatch
+- Kalau user ketik value yang case-insensitive match dengan existing tapi casing beda (mis. ada "CPU", user ketik "cpu"):
+  - Warning hint amber muncul: *Sudah ada value "CPU" — klik untuk pakai casing yang sudah ada*
+  - Tombol Simpan **otomatis disabled** (opacity 40%, cursor not-allowed, tooltip on hover)
+  - Klik suggestion → value auto-replace ke casing existing → tombol aktif lagi
+- Tidak ada server-side check saat submit → hemat 1 Supabase query per save
+
+### Mismatch Detection via Callback
+`AutocompleteInput` expose `onMismatchChange` callback:
+```ts
+onMismatchChange?: (mismatch: { hasMismatch: boolean; existingValue: string | null }) => void
+```
+Parent (`AddRuleModal` / `EditRuleModal`) track state `valueMismatch` → disable button.
+
+### SQL Migration (One-time)
+SQL script `migration-keyword-rules-cleanup.sql` untuk cleanup data existing:
+- STEP 1: SELECT duplikat (read-only, aman)
+- STEP 2: DELETE duplikat, keep yang `created_at` paling awal
+- STEP 3: Verifikasi 0 rows duplikat tersisa
+- Setelah cleanup: jalankan Reclassify di `/review`
+
+### File Baru / Diubah
+- **NEW** `src/components/review/AutocompleteInput.tsx`
+- **NEW** `src/hooks/useKeywordRuleValues.ts`
+- **NEW** `src/app/api/keyword-rules/values/route.ts`
+- **UPDATED** `src/components/review/AddRuleModal.tsx`
+- **UPDATED** `src/components/review/KeywordRulesTab.tsx`
+- **UPDATED** `src/hooks/useKeywordRule.ts` (simplified, hapus server-side duplicate check)
+
+---
+
+## 2. SJ Rekap Alokasi — Filter Refactor
+
+### Sebelumnya
+Halaman `/sj/report` punya 3 dropdown terpisah: Tujuan (searchable), Jenis Barang (searchable), Status SJ. Terlalu banyak komponen di filter panel, tidak efisien.
+
+### Sesudahnya
+Semua filter kolom digabung ke 1 **dropdown CARI** dengan 7 pilihan:
+1. Semua Field
+2. Tujuan (cari kode/nama)
+3. Jenis Barang
+4. Status SJ (ketik: Draft / Submitted / Completed)
+5. No. SJ
+6. Serial Number
+7. Pembawa
+8. Keterangan ← tambahan baru
+
+Placeholder input dinamis sesuai field yang dipilih (mis. pilih Status → placeholder "Draft / Submitted / Completed").
+
+### Rename Periode
+"7 Hari" → **"Minggu Ini"** (lebih natural). Update di label chip + slug untuk filename Excel.
+
+### Dynamic Excel Filename
+Nama file Excel sekarang mencerminkan filter aktif:
+
+| Filter Aktif | Nama File |
+|---|---|
+| Tanpa filter | `Report-Alokasi-Semua-Periode-YYYY-MM-DD.xlsx` |
+| Minggu Ini | `Report-Alokasi-Minggu-Ini-YYYY-MM-DD.xlsx` |
+| Minggu Ini + Jenis=CPU | `Report-Alokasi-Minggu-Ini-sort-by-Jenis-CPU-YYYY-MM-DD.xlsx` |
+| Custom + SN=50185 | `Report-Alokasi-2026-06-01-sd-2026-06-08-sort-by-SN-50185-YYYY-MM-DD.xlsx` |
+
+### File Diubah
+- **UPDATED** `src/app/sj/report/page.tsx` — filter refactor + dynamic filename
+
+---
+
+## 3. Rename Sidebar & Headings
+
+Perubahan naming di dropdown "Surat Jalan Manual":
+- **"List Surat Jalan"** → **"Daftar Surat Jalan"** (+ heading halaman `/sj/list`)
+- **"Report"** → **"Rekap Alokasi"** (+ heading halaman `/sj/report`)
+
+---
+
+## 4. Monitoring DAT — Major Overhaul
+
+### Filter System Baru: Multi-Field Tag Filter
+
+Sebelumnya monitoring hanya punya filter CGA chip + 1 search box sederhana.
+
+Sekarang pakai **multi-field tag filter** dengan AND logic antar tag:
+1. Pilih field dari dropdown (Jenis/Merk/Kode Aset/Kategori Oracle/Deskripsi)
+2. Ketik value → tekan Enter → jadi tag berwarna
+3. Ganti field → ketik lagi → tag baru ditambahkan
+4. Logic: AND antar semua tag (Jenis:CPU **AND** Merk:Zyrex)
+
+**Warna tag per field:**
+- Jenis → cyan
+- Merk → violet
+- Kode Aset → blue
+- Kategori Oracle → amber
+- Deskripsi → slate
+
+**Cost Center chips** tetap single-select (ALL/CGA1/CGA2/CGA3), AND dengan tag filter.
+
+### Fix Cost Center Badge di Tabel
+
+**Masalah:** Data `toko` di DB berisi nama panjang "CGA1 – CADANGAN GENERAL AFFAIRS 1", bukan kode singkat "CGA1". Badge tampil panjang dan merusak layout.
+
+**Fix:** Fungsi `extractCGACode()` dengan regex `/CGA\d/i` — parse nama panjang → kode singkat. Dipakai di CGABadge, filter chip comparison, dan Excel exporter.
+
+```ts
+function extractCGACode(toko: string): string {
+  const match = toko.match(/CGA\d/i);
+  return match ? match[0].toUpperCase() : toko;
+}
+```
+
+**CGABadge** sekarang tampil kode singkat dengan warna signature:
+- CGA1 → emerald
+- CGA2 → amber
+- CGA3 → rose
+
+### Kolom Tabel Reorder
+
+**Sebelum:** Jenis | Merk | Cost Center | Kategori Oracle | Kode Aset | Qty | Deskripsi | Perolehan
+
+**Sesudah:** Kategori Oracle | Jenis | Merk | Cost Center | Kode Aset | Deskripsi | Qty | Perolehan | **Tercatat** ← tambahan
+
+Data auto-sorted by 5 kolom pertama: Kategori Oracle → Jenis → Merk → Cost Center → Kode Aset.
+
+### Horizontal Scroll
+Tabel dibungkus `overflow-x-auto` + `min-w-[1380px]` untuk accommodate 9 kolom.
+
+### Export Excel 2 Sheet
+
+**Sheet 1 — Summary:**
+Group per Jenis × Cost Center dengan subtotal per Jenis + Grand Total.
+Kolom: Jenis | Cost Center | Total Item | Total Qty | Biaya Perolehan | Jumlah Tercatat
+
+**Sheet 2 — Detail DAT:**
+1 row = 1 aset, sorted Jenis → Cost Center.
+Kolom: No | Jenis | Merk | Cost Center | Kategori Oracle | Kode Aset | Deskripsi | Qty | Biaya Perolehan | Jumlah Tercatat
+
+**Nama file dinamis:**
+- `Monitoring-DAT-Semua-CGA-sort-by-Jenis-CPU-Super-Blender-2026-06-09.xlsx`
+
+### File Baru / Diubah
+- **NEW** `src/components/monitoring/TagInput.tsx`
+- **NEW** `src/lib/monitoringExporter.ts`
+- **UPDATED** `src/app/monitoring/page.tsx`
+- **UPDATED** `src/app/api/monitoring/route.ts`
+- **UPDATED** `src/hooks/useMonitoring.ts`
+
+---
+
+## Status Akhir Sesi (9 Juni 2026)
+
+### Selesai Hari Ini
+- ✅ Keyword Rule Consistency (autocomplete + disable submit on mismatch)
+- ✅ SQL migration cleanup duplikat existing
+- ✅ SJ Rekap Alokasi filter refactor (7-field unified search)
+- ✅ Dynamic Excel filename
+- ✅ Rename sidebar: Daftar SJ + Rekap Alokasi
+- ✅ Monitoring DAT overhaul (multi-field tag filter + Excel export 2 sheet)
+- ✅ extractCGACode fix untuk data DB nama panjang
+- ✅ Kolom tabel reorder + sort + Tercatat column
+
+### Next Priority
+- Sesi 4 SJ Manual: Monitoring alokasi (checkbox mutasi Oracle)
+- Closing snapshots architecture (DAT/LPP Closing upload)
 - LPP Web Tracking integration
 - Authentication & Role Management

@@ -3,25 +3,25 @@
 import { memo, useState, useMemo, useCallback, useRef, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
-import SearchableDropdown from "@/components/sj/SearchableDropdown";
 import { useSJReport, type SJReportItem } from "@/hooks/useSJReport";
 import { exportSJReportToExcel } from "@/lib/excelExporter";
 
+// ─── Types ────────────────────────────────────────────────────────────────
 type PeriodPreset = "all" | "today" | "yesterday" | "week" | "month" | "custom";
-type StatusFilter = "all" | "draft" | "submitted" | "completed";
-type SearchField  = "all" | "no_sj" | "sn" | "pembawa";
+type SearchField  =
+  | "all" | "no_sj" | "sn" | "pembawa"
+  | "tujuan" | "jenis" | "status" | "keterangan";
 
 const PAGE_SIZE = 30;
 
-// ─── Custom Styled Dropdown (consistent dengan tema) ──────────────────────
-interface StyledSelectProps<T extends string> {
+// ─── StyledSelect (sama pattern existing) ────────────────────────────────
+function StyledSelect<T extends string>({
+  value, onChange, options,
+}: {
   value: T;
   onChange: (v: T) => void;
   options: { value: T; label: string }[];
-  placeholder?: string;
-}
-
-function StyledSelect<T extends string>({ value, onChange, options }: StyledSelectProps<T>) {
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -37,30 +37,24 @@ function StyledSelect<T extends string>({ value, onChange, options }: StyledSele
 
   return (
     <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
+      <button type="button" onClick={() => setOpen(!open)}
         className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg border bg-white/[0.04] text-[12px] text-white/80 transition-all ${
           open ? "border-cyan-500/50 bg-white/[0.06]" : "border-white/[0.08] hover:border-white/[0.15]"
         }`}
       >
         <span className="truncate">{selected?.label ?? "Pilih..."}</span>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform shrink-0 ${open ? "rotate-180" : ""}`}>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          className={`transition-transform shrink-0 ${open ? "rotate-180" : ""}`}>
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
-
       {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[140px] bg-[#0d1117] border border-white/[0.1] rounded-lg shadow-2xl shadow-black/50 overflow-hidden">
+        <div className="absolute z-50 mt-1 w-full min-w-[160px] bg-[#0d1117] border border-white/[0.1] rounded-lg shadow-2xl shadow-black/50 overflow-hidden max-h-72 overflow-y-auto">
           {options.map(opt => (
-            <button
-              key={opt.value}
-              type="button"
+            <button key={opt.value} type="button"
               onClick={() => { onChange(opt.value); setOpen(false); }}
               className={`w-full text-left px-3 py-1.5 text-[12px] transition-all ${
-                opt.value === value
-                  ? "bg-cyan-500/10 text-cyan-300"
-                  : "text-white/70 hover:bg-white/[0.04]"
+                opt.value === value ? "bg-cyan-500/10 text-cyan-300" : "text-white/70 hover:bg-white/[0.04]"
               }`}
             >
               {opt.label}
@@ -82,28 +76,23 @@ function formatTanggal(iso: string): string {
 
 function isInDateRange(tanggal: string, from: string, to: string): boolean {
   if (!from && !to) return true;
-  const d = tanggal;
-  if (from && d < from) return false;
-  if (to && d > to) return false;
+  if (from && tanggal < from) return false;
+  if (to   && tanggal > to)   return false;
   return true;
 }
 
 function getPresetRange(preset: PeriodPreset): { from: string; to: string } {
-  const today = new Date();
+  const today    = new Date();
   const todayStr = today.toISOString().slice(0, 10);
 
-  if (preset === "today") {
-    return { from: todayStr, to: todayStr };
-  }
+  if (preset === "today")     return { from: todayStr, to: todayStr };
   if (preset === "yesterday") {
-    const y = new Date();
-    y.setDate(y.getDate() - 1);
-    const yStr = y.toISOString().slice(0, 10);
-    return { from: yStr, to: yStr };
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    const s = y.toISOString().slice(0, 10);
+    return { from: s, to: s };
   }
   if (preset === "week") {
-    const w = new Date();
-    w.setDate(w.getDate() - 6);
+    const w = new Date(); w.setDate(w.getDate() - 6);
     return { from: w.toISOString().slice(0, 10), to: todayStr };
   }
   if (preset === "month") {
@@ -113,16 +102,68 @@ function getPresetRange(preset: PeriodPreset): { from: string; to: string } {
   return { from: "", to: "" };
 }
 
+// ── Label untuk display & nama file ───────────────────────────────────────
+const PERIOD_LABEL: Record<PeriodPreset, string> = {
+  all:       "Semua Periode",
+  today:     "Hari Ini",
+  yesterday: "Kemarin",
+  week:      "Minggu Ini",      // ← diganti sesuai permintaan
+  month:     "Bulan Ini",
+  custom:    "Custom",
+};
+
 function getPeriodLabel(preset: PeriodPreset, from: string, to: string): string {
-  if (preset === "all") return "Semua Periode";
-  if (preset === "today") return "Hari Ini";
-  if (preset === "yesterday") return "Kemarin";
-  if (preset === "week") return "7 Hari Terakhir";
-  if (preset === "month") return "Bulan Ini";
-  if (from && to) {
+  if (preset === "custom" && from && to)
     return `${formatTanggal(from)} - ${formatTanggal(to)}`;
+  if (preset === "custom") return "Custom";
+  return PERIOD_LABEL[preset];
+}
+
+// ── Slug untuk nama file Excel ─────────────────────────────────────────────
+const PERIOD_SLUG: Record<PeriodPreset, string> = {
+  all:       "Semua-Periode",
+  today:     "Hari-Ini",
+  yesterday: "Kemarin",
+  week:      "Minggu-Ini",
+  month:     "Bulan-Ini",
+  custom:    "Custom",
+};
+
+const SEARCH_FIELD_LABEL: Record<SearchField, string> = {
+  all:        "Semua",
+  no_sj:      "No-SJ",
+  sn:         "SN",
+  pembawa:    "Pembawa",
+  tujuan:     "Tujuan",
+  jenis:      "Jenis",
+  status:     "Status",
+  keterangan: "Keterangan",
+};
+
+/**
+ * Build nama file Excel berdasarkan filter aktif.
+ * Format: Report-Alokasi-{Periode}-sort-by-{Field}-{Value}
+ * Contoh: Report-Alokasi-Minggu-Ini-sort-by-Jenis-CPU
+ */
+function buildExcelFilename(
+  periodPreset: PeriodPreset,
+  dateFrom: string,
+  dateTo: string,
+  searchField: SearchField,
+  search: string,
+): string {
+  const period = periodPreset === "custom" && dateFrom && dateTo
+    ? `${dateFrom}-sd-${dateTo}`
+    : PERIOD_SLUG[periodPreset];
+
+  const cleanSearch = search.trim().replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-_]/g, "");
+
+  if (searchField !== "all" && cleanSearch) {
+    const fieldLabel = SEARCH_FIELD_LABEL[searchField];
+    return `Report-Alokasi-${period}-sort-by-${fieldLabel}-${cleanSearch}`;
   }
-  return "Custom";
+
+  return `Report-Alokasi-${period}`;
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────
@@ -151,7 +192,7 @@ const Pagination = memo(({ page, totalPages, onPage, totalItems, pageSize }: {
 }) => {
   if (totalPages <= 1) return null;
   const from = (page - 1) * pageSize + 1;
-  const to = Math.min(page * pageSize, totalItems);
+  const to   = Math.min(page * pageSize, totalItems);
   return (
     <div className="flex items-center justify-between border-t border-white/5 px-5 py-3">
       <p className="text-xs text-white/30">
@@ -160,7 +201,8 @@ const Pagination = memo(({ page, totalPages, onPage, totalItems, pageSize }: {
       <div className="flex items-center gap-1">
         <PageBtn onClick={() => onPage(page - 1)} disabled={page === 1}>‹</PageBtn>
         {buildPageNums(page, totalPages).map((p, i) =>
-          p === "…" ? <span key={`e-${i}`} className="px-1 text-xs text-white/20">…</span>
+          p === "…"
+            ? <span key={`e-${i}`} className="px-1 text-xs text-white/20">…</span>
             : <PageBtn key={p} onClick={() => onPage(p as number)} active={p === page}>{p}</PageBtn>
         )}
         <PageBtn onClick={() => onPage(page + 1)} disabled={page === totalPages}>›</PageBtn>
@@ -180,10 +222,13 @@ function buildPageNums(current: number, total: number): (number | "…")[] {
   return pages;
 }
 
-const PageBtn = memo(({ active, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean; children: React.ReactNode }) => (
+const PageBtn = memo(({ active, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  active?: boolean; children: React.ReactNode;
+}) => (
   <button {...props} className={`flex h-7 min-w-7 items-center justify-center rounded-lg px-2 text-xs font-medium transition-colors ${
-    active ? "border border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
-           : "text-white/40 hover:bg-white/5 hover:text-white disabled:pointer-events-none disabled:opacity-25"
+    active
+      ? "border border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
+      : "text-white/40 hover:bg-white/5 hover:text-white disabled:pointer-events-none disabled:opacity-25"
   }`}>{children}</button>
 ));
 PageBtn.displayName = "PageBtn";
@@ -195,13 +240,11 @@ export default function SJReportPage() {
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("all");
   const [dateFrom, setDateFrom]         = useState("");
   const [dateTo, setDateTo]             = useState("");
-  const [tujuanFilter, setTujuanFilter] = useState<string>("");
-  const [jenisFilter, setJenisFilter]   = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [searchField, setSearchField]   = useState<SearchField>("all");
   const [search, setSearch]             = useState("");
   const [page, setPage]                 = useState(1);
 
+  // Period preset handler
   const handlePeriodPreset = useCallback((preset: PeriodPreset) => {
     setPeriodPreset(preset);
     setPage(1);
@@ -219,56 +262,44 @@ export default function SJReportPage() {
     setDateTo(v); setPeriodPreset("custom"); setPage(1);
   }, []);
 
-  const tujuanOptions = useMemo(() => {
-    const map = new Map<string, { value: string; label: string }>();
-    for (const it of items) {
-      if (it.tujuan_id && !map.has(it.tujuan_id)) {
-        map.set(it.tujuan_id, {
-          value: it.tujuan_id,
-          label: `${it.tujuan_kode} — ${it.tujuan_nama}`,
-        });
-      }
-    }
-    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [items]);
-
-  const jenisOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const it of items) {
-      if (it.jenis) set.add(it.jenis);
-    }
-    return Array.from(set)
-      .sort((a, b) => a.localeCompare(b))
-      .map(j => ({ value: j, label: j }));
-  }, [items]);
-
+  // ── Filter logic ───────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     let result = items;
 
+    // Date range
     if (dateFrom || dateTo) {
       result = result.filter(it => isInDateRange(it.tanggal, dateFrom, dateTo));
     }
-    if (tujuanFilter) {
-      result = result.filter(it => it.tujuan_id === tujuanFilter);
-    }
-    if (jenisFilter) {
-      result = result.filter(it => it.jenis === jenisFilter);
-    }
-    if (statusFilter !== "all") {
-      result = result.filter(it => it.status === statusFilter);
-    }
+
+    // Search by kolom
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       result = result.filter(it => {
-        if (searchField === "no_sj"   || searchField === "all") if (it.no_sj.toLowerCase().includes(q)) return true;
-        if (searchField === "sn"      || searchField === "all") if (it.serial_number.toLowerCase().includes(q)) return true;
-        if (searchField === "pembawa" || searchField === "all") if (it.pembawa.toLowerCase().includes(q)) return true;
-        return false;
+        switch (searchField) {
+          case "no_sj":      return it.no_sj.toLowerCase().includes(q);
+          case "sn":         return it.serial_number.toLowerCase().includes(q);
+          case "pembawa":    return it.pembawa.toLowerCase().includes(q);
+          case "tujuan":     return (it.tujuan_kode + " " + it.tujuan_nama).toLowerCase().includes(q);
+          case "jenis":      return it.jenis.toLowerCase().includes(q);
+          case "status":     return it.status.toLowerCase().includes(q) ||
+                                    (STATUS_LABEL[it.status] ?? it.status).toLowerCase().includes(q);
+          case "keterangan": return it.keterangan.toLowerCase().includes(q);
+          default: // "all"
+            return (
+              it.no_sj.toLowerCase().includes(q) ||
+              it.serial_number.toLowerCase().includes(q) ||
+              it.pembawa.toLowerCase().includes(q) ||
+              (it.tujuan_kode + " " + it.tujuan_nama).toLowerCase().includes(q) ||
+              it.jenis.toLowerCase().includes(q) ||
+              it.status.toLowerCase().includes(q) ||
+              it.keterangan.toLowerCase().includes(q)
+            );
+        }
       });
     }
 
     return result;
-  }, [items, dateFrom, dateTo, tujuanFilter, jenisFilter, statusFilter, search, searchField]);
+  }, [items, dateFrom, dateTo, search, searchField]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = useMemo(
@@ -276,53 +307,46 @@ export default function SJReportPage() {
     [filtered, page]
   );
 
+  // Reset filter
   const handleReset = useCallback(() => {
     setPeriodPreset("all");
     setDateFrom(""); setDateTo("");
-    setTujuanFilter(""); setJenisFilter("");
-    setStatusFilter("all");
     setSearchField("all"); setSearch("");
     setPage(1);
   }, []);
 
+  // Export Excel dengan nama file dinamis
   const handleExport = useCallback(() => {
     if (filtered.length === 0) {
       alert("Tidak ada data untuk diekspor. Sesuaikan filter terlebih dahulu.");
       return;
     }
+    const filename = buildExcelFilename(periodPreset, dateFrom, dateTo, searchField, search);
     const periodLabel = getPeriodLabel(periodPreset, dateFrom, dateTo);
-    exportSJReportToExcel({
-      items: filtered,
-      filename: "Laporan-Surat-Jalan",
-      periodLabel,
-    });
-  }, [filtered, periodPreset, dateFrom, dateTo]);
+    exportSJReportToExcel({ items: filtered, filename, periodLabel });
+  }, [filtered, periodPreset, dateFrom, dateTo, searchField, search]);
 
-  const uniqueSJ      = new Set(filtered.map(it => it.sj_id)).size;
-  const uniqueTujuan  = new Set(filtered.map(it => it.tujuan_id).filter(Boolean)).size;
-  const totalQty      = filtered.reduce((s, it) => s + (it.qty ?? 0), 0);
-  const periodLabel   = getPeriodLabel(periodPreset, dateFrom, dateTo);
+  // Stats
+  const uniqueSJ     = new Set(filtered.map(it => it.sj_id)).size;
+  const uniqueTujuan = new Set(filtered.map(it => it.tujuan_id).filter(Boolean)).size;
+  const totalQty     = filtered.reduce((s, it) => s + (it.qty ?? 0), 0);
+  const periodLabel  = getPeriodLabel(periodPreset, dateFrom, dateTo);
 
-  // Detect kalau ada filter aktif (untuk highlight Reset button)
-  const hasActiveFilter =
-    periodPreset !== "all" ||
-    !!tujuanFilter || !!jenisFilter ||
-    statusFilter !== "all" ||
-    !!search.trim();
+  const hasActiveFilter = periodPreset !== "all" || !!search.trim();
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#080e18] text-white">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Report Surat Jalan" />
+        <Topbar title="Rekap Alokasi" />
         <main className="flex-1 overflow-y-auto px-6 py-5">
 
           {/* Header */}
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-lg font-semibold tracking-tight text-white">Report Surat Jalan</h1>
+              <h1 className="text-lg font-semibold tracking-tight text-white">Rekap Alokasi</h1>
               <p className="mt-0.5 text-xs text-white/40">
-                Filter dan export laporan pengiriman barang berdasarkan periode, tujuan, jenis, dan kriteria lain
+                Filter dan export laporan pengiriman barang berdasarkan periode dan kriteria pencarian
               </p>
             </div>
             <button
@@ -350,7 +374,7 @@ export default function SJReportPage() {
                   { v: "all" as PeriodPreset,       label: "Semua"     },
                   { v: "today" as PeriodPreset,     label: "Hari Ini"  },
                   { v: "yesterday" as PeriodPreset, label: "Kemarin"   },
-                  { v: "week" as PeriodPreset,      label: "7 Hari"    },
+                  { v: "week" as PeriodPreset,      label: "Minggu Ini"},
                   { v: "month" as PeriodPreset,     label: "Bulan Ini" },
                   { v: "custom" as PeriodPreset,    label: "Custom"    },
                 ]).map(p => (
@@ -370,17 +394,13 @@ export default function SJReportPage() {
             {periodPreset === "custom" && (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11px] text-white/40 ml-1">Dari:</span>
-                <input
-                  type="date"
-                  value={dateFrom}
+                <input type="date" value={dateFrom}
                   onChange={(e) => handleDateFrom(e.target.value)}
                   suppressHydrationWarning
                   className="bg-white/[0.04] border border-white/[0.08] text-slate-300 text-[12px] rounded-lg px-2 py-1.5 focus:outline-none focus:border-cyan-500/50"
                 />
                 <span className="text-[11px] text-white/40">Sampai:</span>
-                <input
-                  type="date"
-                  value={dateTo}
+                <input type="date" value={dateTo}
                   onChange={(e) => handleDateTo(e.target.value)}
                   suppressHydrationWarning
                   className="bg-white/[0.04] border border-white/[0.08] text-slate-300 text-[12px] rounded-lg px-2 py-1.5 focus:outline-none focus:border-cyan-500/50"
@@ -388,67 +408,40 @@ export default function SJReportPage() {
               </div>
             )}
 
-            {/* Row 3: Multi filter — Tujuan + Jenis + Status (semua pakai styled dropdown) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[10px] font-semibold uppercase tracking-widest text-white/40 mb-1.5">Tujuan</label>
-                <SearchableDropdown
-                  options={[{ value: "", label: "Semua Tujuan" }, ...tujuanOptions]}
-                  value={tujuanFilter}
-                  onChange={(v) => { setTujuanFilter(v); setPage(1); }}
-                  placeholder="Pilih tujuan..."
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-semibold uppercase tracking-widest text-white/40 mb-1.5">Jenis Barang</label>
-                <SearchableDropdown
-                  options={[{ value: "", label: "Semua Jenis" }, ...jenisOptions]}
-                  value={jenisFilter}
-                  onChange={(v) => { setJenisFilter(v); setPage(1); }}
-                  placeholder="Pilih jenis..."
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-semibold uppercase tracking-widest text-white/40 mb-1.5">Status SJ</label>
-                <StyledSelect<StatusFilter>
-                  value={statusFilter}
-                  onChange={(v) => { setStatusFilter(v); setPage(1); }}
-                  options={[
-                    { value: "all",       label: "Semua Status" },
-                    { value: "draft",     label: "Draft" },
-                    { value: "submitted", label: "Submitted" },
-                    { value: "completed", label: "Completed" },
-                  ]}
-                />
-              </div>
-            </div>
-
-            {/* Row 4: Search + Reset (Reset jadi button styled jingga) */}
+            {/* Row 3: Search by field + input + Reset */}
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/[0.04]">
               <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40 mr-1">Cari</span>
-              <div className="w-[140px]">
+              <div className="w-[160px]">
                 <StyledSelect<SearchField>
                   value={searchField}
                   onChange={(v) => { setSearchField(v); setPage(1); }}
                   options={[
-                    { value: "all",     label: "Semua Field" },
-                    { value: "no_sj",   label: "No. SJ" },
-                    { value: "sn",      label: "Serial Number" },
-                    { value: "pembawa", label: "Pembawa" },
+                    { value: "all",        label: "Semua Field"   },
+                    { value: "tujuan",     label: "Tujuan"        },
+                    { value: "jenis",      label: "Jenis Barang"  },
+                    { value: "status",     label: "Status SJ"     },
+                    { value: "no_sj",      label: "No. SJ"        },
+                    { value: "sn",         label: "Serial Number" },
+                    { value: "pembawa",    label: "Pembawa"       },
+                    { value: "keterangan", label: "Keterangan"    },
                   ]}
                 />
               </div>
-              <div className="relative flex-1 max-w-xs">
+              <div className="relative flex-1 max-w-sm">
                 <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
                   width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="11" cy="11" r="8" />
                   <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
-                <input
-                  type="text"
-                  value={search}
+                <input type="text" value={search}
                   onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                  placeholder="Cari..."
+                  placeholder={
+                    searchField === "status"
+                      ? "Draft / Submitted / Completed"
+                      : searchField === "tujuan"
+                      ? "Cari kode atau nama tujuan..."
+                      : "Cari..."
+                  }
                   suppressHydrationWarning
                   className="w-full bg-white/[0.04] border border-white/[0.08] text-slate-300 text-[12px] placeholder:text-slate-600 rounded-xl pl-8 pr-3 py-1.5 focus:outline-none focus:border-cyan-500/50"
                 />
@@ -472,7 +465,8 @@ export default function SJReportPage() {
           <div className="mb-3 flex items-center justify-between text-[11px]">
             <p className="text-white/40">
               Menampilkan <span className="text-white/80 font-semibold">{filtered.length.toLocaleString()} item</span>
-              {" "}dari <span className="text-white/60">{uniqueSJ}</span> Surat Jalan ke <span className="text-white/60">{uniqueTujuan}</span> tujuan
+              {" "}dari <span className="text-white/60">{uniqueSJ}</span> Surat Jalan ke{" "}
+              <span className="text-white/60">{uniqueTujuan}</span> tujuan
               {" "}— Total Qty: <span className="text-white/60">{totalQty.toLocaleString()}</span>
             </p>
             <p className="text-white/30">
@@ -480,11 +474,10 @@ export default function SJReportPage() {
             </p>
           </div>
 
-          {/* Table — wrap dengan overflow-x-auto */}
+          {/* Table */}
           <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] shadow-xl shadow-black/30">
             <div className="overflow-x-auto">
               <div className="min-w-[1380px]">
-                {/* Table header */}
                 <div className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_70px_220px_90px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
                   <span>Tanggal</span>
                   <span>No. SJ</span>
@@ -502,7 +495,9 @@ export default function SJReportPage() {
                 {loading ? (
                   <div className="divide-y divide-white/5">
                     {Array.from({ length: 8 }).map((_, i) => (
-                      <div key={i} className="px-4 py-3"><div className="h-4 bg-white/5 rounded w-3/4 animate-pulse" /></div>
+                      <div key={i} className="px-4 py-3">
+                        <div className="h-4 bg-white/5 rounded w-3/4 animate-pulse" />
+                      </div>
                     ))}
                   </div>
                 ) : filtered.length === 0 ? (
@@ -516,7 +511,8 @@ export default function SJReportPage() {
                   <>
                     <div className="divide-y divide-white/[0.04]">
                       {paginated.map((it) => (
-                        <div key={it.item_id} className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_70px_220px_90px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
+                        <div key={it.item_id}
+                          className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_70px_220px_90px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
                           <span className="text-white/60">{formatTanggal(it.tanggal)}</span>
                           <span className="font-mono text-cyan-400 truncate" title={it.no_sj}>{it.no_sj}</span>
                           <div className="min-w-0">

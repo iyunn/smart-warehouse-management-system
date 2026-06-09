@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -8,63 +8,66 @@ const supabase = createClient(
 
 const FETCH_SIZE = 1000
 
-export async function GET() {
+// GET /api/monitoring
+// Return semua aset DAT (assets_raw + assets_clean join)
+// Filter dilakukan client-side untuk konsistensi pattern
+export async function GET(_req: NextRequest) {
   try {
-    // Fetch semua aset dengan classification join
-    let allRows: any[] = []
+    let allData: any[] = []
     let from = 0
 
     while (true) {
       const { data, error } = await supabase
-        .from('assets_raw')
+        .from('assets_clean')
         .select(`
           id,
-          kode_asset,
-          deskripsi,
-          toko,
-          kategori_oracle,
-          assets_clean (jenis, merk)
+          jenis,
+          merk,
+          confidence,
+          raw:assets_raw!inner (
+            id,
+            kode_asset,
+            deskripsi,
+            toko,
+            kategori_oracle,
+            kuantitas,
+            biaya_perolehan,
+            jumlah_tercatat
+          )
         `)
         .range(from, from + FETCH_SIZE - 1)
 
       if (error) throw new Error(error.message)
-
       const batch = data ?? []
-      allRows = [...allRows, ...batch]
-
+      allData = [...allData, ...batch]
       if (batch.length < FETCH_SIZE) break
       from += FETCH_SIZE
-      if (from > 50000) break
+      if (from > 100000) break
     }
 
-    // Map data + tambah tag dummy "Pending"
-    const assets = allRows.map((row: any) => {
-      const cleanData = Array.isArray(row.assets_clean) ? row.assets_clean[0] : row.assets_clean
-      const tokoCode  = row.toko?.split(' - ')[0]?.trim() ?? row.toko ?? '-'
-
+    // Flatten ke 1 row per aset
+    const assets = allData.map((item: any) => {
+      const raw = Array.isArray(item.raw) ? item.raw[0] : item.raw
       return {
-        id:          row.id,
-        kode_asset:  row.kode_asset,
-        deskripsi:   row.deskripsi,
-        kategori:    row.kategori_oracle,
-        jenis:       cleanData?.jenis ?? 'Unknown',
-        merk:        cleanData?.merk  ?? 'Unknown',
-        toko:        row.toko,
-        toko_code:   tokoCode,
-        // Tag dummy — semua Pending karena LPP belum ada
-        reconciliation_tag: 'Pending',
+        clean_id:          item.id,
+        jenis:             item.jenis ?? 'Unknown',
+        merk:              item.merk ?? 'Unknown',
+        confidence:        item.confidence ?? 'low',
+        kode_asset:        raw?.kode_asset ?? '',
+        deskripsi:         raw?.deskripsi ?? '',
+        toko:              raw?.toko ?? '',
+        kategori_oracle:   raw?.kategori_oracle ?? '',
+        kuantitas:         raw?.kuantitas ?? 1,
+        biaya_perolehan:   raw?.biaya_perolehan ?? 0,
+        jumlah_tercatat:   raw?.jumlah_tercatat ?? 0,
       }
     })
 
-    return NextResponse.json({
-      assets,
-      total: assets.length,
-    })
+    return NextResponse.json({ assets, total: assets.length })
 
   } catch (error) {
-    console.error('[monitoring]', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal Server Error' },
+      { error: error instanceof Error ? error.message : 'Error' },
       { status: 500 }
     )
   }

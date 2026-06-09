@@ -346,12 +346,12 @@ export default function SJListPage() {
     <div className="flex h-screen overflow-hidden bg-[#080e18] text-white">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="List Surat Jalan" />
+        <Topbar title="Daftar Surat Jalan" />
         <main className="flex-1 overflow-y-auto px-6 py-5">
 
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-lg font-semibold tracking-tight text-white">List Surat Jalan</h1>
+              <h1 className="text-lg font-semibold tracking-tight text-white">Daftar Surat Jalan</h1>
               <p className="mt-0.5 text-xs text-white/40">
                 Kelola seluruh Surat Jalan yang sudah dibuat — print, edit, reschedule, atau hapus
               </p>

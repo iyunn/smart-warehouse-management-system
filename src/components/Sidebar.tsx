@@ -73,9 +73,9 @@ const navItems: NavItem[] = [
     icon: icons.sj,
     children: [
       { id: "sj-buat",   label: "Buat Surat Jalan", href: "/sj/buat"    },
-      { id: "sj-list",   label: "List Surat Jalan", href: "/sj/list"    },
+      { id: "sj-list",   label: "Daftar Surat Jalan", href: "/sj/list"    },
       { id: "sj-tujuan", label: "Master Tujuan",    href: "/sj/tujuan"  },
-      { id: "sj-report", label: "Report",           href: "/sj/report"  },
+      { id: "sj-report", label: "Rekap Alokasi",    href: "/sj/report"  },
     ],
   },
   { id: "reports",  label: "Reports",  icon: icons.reports,  href: "/reports" },

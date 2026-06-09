@@ -1,142 +1,362 @@
 "use client";
 
-import { memo, useMemo, useState, useCallback } from "react";
+import { memo, useState, useMemo, useCallback, useRef, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
-import SummaryCard from "@/components/SummaryCard";
-import { useMonitoring, type MonitoringAsset } from "@/hooks/useMonitoring";
+import { useMonitoring } from "@/hooks/useMonitoring";
+import { exportMonitoringToExcel, buildMonitoringFilename } from "@/lib/monitoringExporter";
 
-type TabType = "dat" | "lpp";
-type CGAFilter = "ALL" | "CGA1" | "CGA2" | "CGA3";
+type CostCenter  = "ALL" | "CGA1" | "CGA2" | "CGA3";
+type SearchField = "jenis" | "merk" | "kode_asset" | "kategori_oracle" | "deskripsi";
 
-const PAGE_SIZE = 20;
+// Tag punya field + value masing-masing
+interface FilterTag {
+  field: SearchField;
+  value: string;
+  label: string; // display: "Jenis: CPU"
+}
 
+const PAGE_SIZE = 30;
+
+// ─── Field config ─────────────────────────────────────────────────────────
+const FIELD_OPTIONS: { value: SearchField; label: string }[] = [
+  { value: "jenis",           label: "Jenis"           },
+  { value: "merk",            label: "Merk"            },
+  { value: "kode_asset",      label: "Kode Aset"       },
+  { value: "kategori_oracle", label: "Kategori Oracle" },
+  { value: "deskripsi",       label: "Deskripsi"       },
+];
+
+const FIELD_LABEL: Record<SearchField, string> = {
+  jenis:           "Jenis",
+  merk:            "Merk",
+  kode_asset:      "Kode Aset",
+  kategori_oracle: "Kategori",
+  deskripsi:       "Deskripsi",
+};
+
+// ─── CGA config ───────────────────────────────────────────────────────────
 const CGA_BADGE: Record<string, string> = {
   CGA1: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20",
   CGA2: "bg-amber-500/10 text-amber-300 border-amber-500/20",
   CGA3: "bg-rose-500/10 text-rose-300 border-rose-500/20",
 };
 
-// ─── Pagination ──────────────────────────────────────────────────────────────
-interface PaginationProps {
+// Extract kode CGA dari nama panjang DB
+// "CGA1 – CADANGAN GENERAL AFFAIRS 1" → "CGA1"
+function extractCGACode(toko: string): string {
+  const match = toko.match(/CGA\d/i);
+  return match ? match[0].toUpperCase() : toko;
+}
+
+const CGABadge = memo(({ toko }: { toko: string }) => {
+  const code = extractCGACode(toko);
+  return (
+    <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-md border ${
+      CGA_BADGE[code] ?? "bg-white/5 text-white/50 border-white/10"
+    }`}>{code}</span>
+  );
+});
+CGABadge.displayName = "CGABadge";
+
+// ─── StyledSelect ─────────────────────────────────────────────────────────
+function StyledSelect<T extends string>({
+  value, onChange, options,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const selected = options.find(o => o.value === value);
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setOpen(!open)}
+        className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg border bg-white/[0.04] text-[12px] text-white/80 transition-all ${
+          open ? "border-cyan-500/50 bg-white/[0.06]" : "border-white/[0.08] hover:border-white/[0.15]"
+        }`}
+      >
+        <span className="truncate">{selected?.label ?? "Pilih..."}</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          className={`transition-transform shrink-0 ${open ? "rotate-180" : ""}`}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full min-w-[140px] bg-[#0d1117] border border-white/[0.1] rounded-lg shadow-2xl shadow-black/50 overflow-hidden">
+          {options.map(opt => (
+            <button key={opt.value} type="button"
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={`w-full text-left px-3 py-1.5 text-[12px] transition-all ${
+                opt.value === value ? "bg-cyan-500/10 text-cyan-300" : "text-white/70 hover:bg-white/[0.04]"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Multi-field Tag Input ────────────────────────────────────────────────
+// User pilih field → ketik value → Enter → jadi tag "Jenis: CPU"
+// Ganti field dropdown → ketik lagi → tag baru "Merk: Zyrex"
+// Logic filter: AND antar tag
+
+interface MultiFieldTagInputProps {
+  tags: FilterTag[];
+  onChange: (tags: FilterTag[]) => void;
+}
+
+const MultiFieldTagInput = memo(({ tags, onChange }: MultiFieldTagInputProps) => {
+  const [selectedField, setSelectedField] = useState<SearchField>("jenis");
+  const [input, setInput] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const addTag = useCallback((val: string) => {
+    const trimmed = val.trim();
+    if (!trimmed) return;
+    // Cek duplikat field+value yang sama
+    const exists = tags.some(t => t.field === selectedField && t.value.toLowerCase() === trimmed.toLowerCase());
+    if (exists) { setInput(""); return; }
+    const newTag: FilterTag = {
+      field: selectedField,
+      value: trimmed,
+      label: `${FIELD_LABEL[selectedField]}: ${trimmed}`,
+    };
+    onChange([...tags, newTag]);
+    setInput("");
+  }, [tags, selectedField, onChange]);
+
+  const removeTag = useCallback((idx: number) => {
+    onChange(tags.filter((_, i) => i !== idx));
+  }, [tags, onChange]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addTag(input);
+    } else if (e.key === "Backspace" && input === "" && tags.length > 0) {
+      removeTag(tags.length - 1);
+    }
+  }, [input, tags, addTag, removeTag]);
+
+  // Warna per field untuk tag
+  const TAG_COLORS: Record<SearchField, string> = {
+    jenis:           "bg-cyan-500/15 border-cyan-500/25 text-cyan-300",
+    merk:            "bg-violet-500/15 border-violet-500/25 text-violet-300",
+    kode_asset:      "bg-blue-500/15 border-blue-500/25 text-blue-300",
+    kategori_oracle: "bg-amber-500/15 border-amber-500/25 text-amber-300",
+    deskripsi:       "bg-slate-500/15 border-slate-500/25 text-slate-300",
+  };
+
+  return (
+    <div className="flex items-start gap-2 flex-wrap">
+      {/* Field selector */}
+      <div className="w-[145px] shrink-0">
+        <StyledSelect<SearchField>
+          value={selectedField}
+          onChange={setSelectedField}
+          options={FIELD_OPTIONS}
+        />
+      </div>
+
+      {/* Tag container + input */}
+      <div
+        className="flex flex-wrap items-center gap-1.5 flex-1 min-h-[34px] min-w-[200px] rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-1.5 cursor-text focus-within:border-cyan-500/50 transition-all"
+        onClick={() => inputRef.current?.focus()}
+      >
+        {tags.map((tag, idx) => (
+          <span key={`${tag.field}-${tag.value}`}
+            className={`inline-flex items-center gap-1 text-[11px] font-medium rounded-md px-2 py-0.5 border ${TAG_COLORS[tag.field]}`}>
+            <span className="opacity-60 text-[9px] mr-0.5">{FIELD_LABEL[tag.field]}:</span>
+            {tag.value}
+            <button type="button"
+              onClick={(e) => { e.stopPropagation(); removeTag(idx); }}
+              className="opacity-60 hover:opacity-100 transition-opacity ml-0.5"
+            >
+              <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M1 1l8 8M9 1L1 9" />
+              </svg>
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={() => { if (input.trim()) addTag(input); }}
+          placeholder={tags.length === 0 ? `Ketik ${FIELD_LABEL[selectedField]} lalu Enter...` : ""}
+          suppressHydrationWarning
+          className="flex-1 min-w-[120px] bg-transparent text-[12px] text-slate-300 placeholder:text-slate-600 outline-none"
+        />
+      </div>
+    </div>
+  );
+});
+MultiFieldTagInput.displayName = "MultiFieldTagInput";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+function formatRupiah(n: number): string {
+  if (n === 0) return "—";
+  if (n >= 1_000_000_000) return `Rp ${(n / 1_000_000_000).toFixed(1)}M`;
+  if (n >= 1_000_000)     return `Rp ${(n / 1_000_000).toFixed(1)}jt`;
+  return `Rp ${n.toLocaleString("id-ID")}`;
+}
+
+// ─── Pagination ───────────────────────────────────────────────────────────
+const Pagination = memo(({ page, totalPages, onPage, totalItems, pageSize }: {
   page: number; totalPages: number; onPage: (p: number) => void;
   totalItems: number; pageSize: number;
-}
-const Pagination = memo(({ page, totalPages, onPage, totalItems, pageSize }: PaginationProps) => {
+}) => {
   if (totalPages <= 1) return null;
   const from = (page - 1) * pageSize + 1;
-  const to = Math.min(page * pageSize, totalItems);
+  const to   = Math.min(page * pageSize, totalItems);
   return (
     <div className="flex items-center justify-between border-t border-white/5 px-5 py-3">
       <p className="text-xs text-white/30">
-        Menampilkan <span className="text-white/60">{from}–{to}</span> dari <span className="text-white/60">{totalItems.toLocaleString()}</span> aset
+        Menampilkan <span className="text-white/60">{from}–{to}</span> dari{" "}
+        <span className="text-white/60">{totalItems.toLocaleString()}</span> aset
       </p>
       <div className="flex items-center gap-1">
-        <PageBtn onClick={() => onPage(page - 1)} disabled={page === 1}>‹</PageBtn>
-        {buildPageNums(page, totalPages).map((p, i) =>
-          p === "…" ? <span key={`e-${i}`} className="px-1 text-xs text-white/20">…</span>
-            : <PageBtn key={p} onClick={() => onPage(p as number)} active={p === page}>{p}</PageBtn>
+        <PBtn onClick={() => onPage(page - 1)} disabled={page === 1}>‹</PBtn>
+        {buildPNums(page, totalPages).map((p, i) =>
+          p === "…"
+            ? <span key={`e-${i}`} className="px-1 text-xs text-white/20">…</span>
+            : <PBtn key={p} onClick={() => onPage(p as number)} active={p === page}>{p}</PBtn>
         )}
-        <PageBtn onClick={() => onPage(page + 1)} disabled={page === totalPages}>›</PageBtn>
+        <PBtn onClick={() => onPage(page + 1)} disabled={page === totalPages}>›</PBtn>
       </div>
     </div>
   );
 });
 Pagination.displayName = "Pagination";
 
-function buildPageNums(current: number, total: number): (number | "…")[] {
+function buildPNums(cur: number, total: number): (number | "…")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
   const pages: (number | "…")[] = [1];
-  if (current > 3) pages.push("…");
-  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) pages.push(i);
-  if (current < total - 2) pages.push("…");
+  if (cur > 3) pages.push("…");
+  for (let i = Math.max(2, cur - 1); i <= Math.min(total - 1, cur + 1); i++) pages.push(i);
+  if (cur < total - 2) pages.push("…");
   pages.push(total);
   return pages;
 }
 
-interface PageBtnProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+const PBtn = memo(({ active, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   active?: boolean; children: React.ReactNode;
-}
-const PageBtn = memo(({ active, children, ...props }: PageBtnProps) => (
+}) => (
   <button {...props} className={`flex h-7 min-w-7 items-center justify-center rounded-lg px-2 text-xs font-medium transition-colors ${
-    active ? "border border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
-           : "text-white/40 hover:bg-white/5 hover:text-white disabled:pointer-events-none disabled:opacity-25"
+    active
+      ? "border border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
+      : "text-white/40 hover:bg-white/5 hover:text-white disabled:pointer-events-none disabled:opacity-25"
   }`}>{children}</button>
 ));
-PageBtn.displayName = "PageBtn";
+PBtn.displayName = "PBtn";
 
-// ─── Table Header ────────────────────────────────────────────────────────────
-const TableHeader = memo(() => (
-  <div className="grid grid-cols-[150px_120px_120px_70px_120px_1fr_110px] gap-3 border-b border-white/[0.06] px-5 py-3">
-    {["Kategori", "Jenis", "Merk", "Cost Center", "Kode Aset", "Deskripsi", "Status"].map((h) => (
-      <span key={h} className="text-[10px] font-semibold uppercase tracking-widest text-white/25">{h}</span>
-    ))}
-  </div>
-));
-TableHeader.displayName = "TableHeader";
-
-// ─── Table Row ───────────────────────────────────────────────────────────────
-const TableRow = memo(({ asset }: { asset: MonitoringAsset }) => {
-  const cgaBadge = CGA_BADGE[asset.toko_code] ?? "bg-white/5 text-white/40 border-white/10";
-  return (
-    <div className="grid grid-cols-[150px_120px_120px_70px_120px_1fr_110px] gap-3 items-center border-b border-white/[0.04] px-5 py-3 hover:bg-white/[0.02] transition-colors">
-      <span className="text-[11px] text-white/50 truncate" title={asset.kategori}>{asset.kategori || "-"}</span>
-      <span className="text-[11px] text-white/70 truncate">{asset.jenis}</span>
-      <span className="text-[11px] text-white/70 truncate">{asset.merk}</span>
-      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border w-fit ${cgaBadge}`}>{asset.toko_code}</span>
-      <span className="text-[11px] font-mono text-white/60 truncate">{asset.kode_asset}</span>
-      <span className="text-[11px] text-white/50 truncate" title={asset.deskripsi}>{asset.deskripsi}</span>
-      <span className="text-[10px] font-medium px-2 py-1 rounded-md bg-white/[0.04] text-white/40 border border-white/[0.06] w-fit">
-        ⏳ Pending
-      </span>
-    </div>
-  );
-});
-TableRow.displayName = "TableRow";
-
-// ─── Page ────────────────────────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────
 export default function MonitoringPage() {
   const { assets, loading } = useMonitoring();
-  const [activeTab, setActiveTab] = useState<TabType>("dat");
-  const [cgaFilter, setCgaFilter] = useState<CGAFilter>("ALL");
-  const [search, setSearch]       = useState("");
-  const [page, setPage]           = useState(1);
 
-  // Filter assets
+  const [activeTab, setActiveTab]   = useState<"dat" | "lpp">("dat");
+  const [costCenter, setCostCenter] = useState<CostCenter>("ALL");
+  const [filterTags, setFilterTags] = useState<FilterTag[]>([]);
+  const [page, setPage]             = useState(1);
+
+  // ── Filter logic ────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    let list = assets;
-    if (cgaFilter !== "ALL") list = list.filter(a => a.toko_code === cgaFilter);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(a =>
-        a.kode_asset?.toLowerCase().includes(q) ||
-        a.deskripsi?.toLowerCase().includes(q)
+    let result = assets;
+
+    // Cost center filter — bandingkan kode extracted
+    if (costCenter !== "ALL") {
+      result = result.filter(a => extractCGACode(a.toko) === costCenter);
+    }
+
+    // AND logic: semua tag harus match
+    if (filterTags.length > 0) {
+      result = result.filter(a =>
+        filterTags.every(tag => {
+          const q = tag.value.toLowerCase();
+          switch (tag.field) {
+            case "jenis":           return a.jenis.toLowerCase().includes(q);
+            case "merk":            return a.merk.toLowerCase().includes(q);
+            case "kode_asset":      return a.kode_asset.toLowerCase().includes(q);
+            case "kategori_oracle": return a.kategori_oracle.toLowerCase().includes(q);
+            case "deskripsi":       return a.deskripsi.toLowerCase().includes(q);
+            default:                return true;
+          }
+        })
       );
     }
-    return list;
-  }, [assets, cgaFilter, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    return result;
+  }, [assets, costCenter, filterTags]);
+
+  // Sort by 5 kolom: Kategori → Jenis → Merk → Cost Center (kode) → Kode Aset
+  const sorted = useMemo(() => [...filtered].sort((a, b) => {
+    const ca = extractCGACode(a.toko);
+    const cb = extractCGACode(b.toko);
+    return (
+      a.kategori_oracle.localeCompare(b.kategori_oracle) ||
+      a.jenis.localeCompare(b.jenis) ||
+      a.merk.localeCompare(b.merk) ||
+      ca.localeCompare(cb) ||
+      a.kode_asset.localeCompare(b.kode_asset)
+    );
+  }), [filtered]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const paginated  = useMemo(
-    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [filtered, page]
+    () => sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [sorted, page]
   );
 
-  const handleCgaFilter = useCallback((f: CGAFilter) => { setCgaFilter(f); setPage(1); }, []);
-  const handleSearch    = useCallback((v: string)    => { setSearch(v); setPage(1); }, []);
-  const handleTab       = useCallback((t: TabType)   => { setActiveTab(t); setPage(1); setSearch(""); setCgaFilter("ALL"); }, []);
+  const handleReset = useCallback(() => {
+    setCostCenter("ALL");
+    setFilterTags([]);
+    setPage(1);
+  }, []);
 
-  // Summary per tab
-  const summaryDAT = {
-    total: assets.length,
-    pendingSjWt: assets.length, // dummy: semua pending
-    sinkron: 0,
-  };
-  const summaryLPP = {
-    total: 0,
-    belumMutasiDAT: 0,
-    sinkron: 0,
-  };
+  const handleTagChange = useCallback((tags: FilterTag[]) => {
+    setFilterTags(tags);
+    setPage(1);
+  }, []);
+
+  const handleExport = useCallback(() => {
+    if (filtered.length === 0) {
+      alert("Tidak ada data untuk diekspor.");
+      return;
+    }
+    // Build tags string untuk filename
+    const tagSlugs = filterTags.map(t => `${FIELD_LABEL[t.field]}-${t.value}`);
+    exportMonitoringToExcel({
+      assets: filtered,
+      searchField: filterTags.length > 0 ? filterTags[0].field : "all",
+      tags: tagSlugs,
+      costCenter,
+    });
+  }, [filtered, filterTags, costCenter]);
+
+  // Summary stats
+  const totalItem      = filtered.length;
+  const totalQty       = filtered.reduce((s, a) => s + a.kuantitas, 0);
+  const totalPerolehan = filtered.reduce((s, a) => s + a.biaya_perolehan, 0);
+  const totalTercatat  = filtered.reduce((s, a) => s + a.jumlah_tercatat, 0);
+
+  const hasActiveFilter = costCenter !== "ALL" || filterTags.length > 0;
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#080e18] text-white">
@@ -145,167 +365,191 @@ export default function MonitoringPage() {
         <Topbar title="Monitoring" />
         <main className="flex-1 overflow-y-auto px-6 py-5">
 
-          {/* Page header */}
-          <div className="mb-5">
-            <h1 className="text-lg font-semibold tracking-tight text-white">Monitoring</h1>
-            <p className="mt-0.5 text-xs text-white/40">
-              Monitoring rekonsiliasi aset antara DAT Oracle dan LPP Web Tracking
-            </p>
+          {/* Header */}
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight text-white">Monitoring Aset</h1>
+              <p className="mt-0.5 text-xs text-white/40">
+                Monitor status aset DAT. Gunakan filter multi-kolom untuk analisis spesifik.
+              </p>
+            </div>
+            {activeTab === "dat" && (
+              <button onClick={handleExport}
+                disabled={loading || filtered.length === 0}
+                className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50 disabled:pointer-events-none">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Export Excel
+              </button>
+            )}
           </div>
 
-          {/* Tab switcher */}
-          <div className="mb-5 flex items-center gap-1 rounded-xl border border-white/[0.06] bg-white/[0.02] p-1 w-fit">
+          {/* Tabs */}
+          <div className="mb-4 flex items-center gap-1 border-b border-white/[0.06] pb-0">
             {([
-              { id: "dat", label: "DAT Monitoring", desc: "Belum ada SJ Web Tracking" },
-              { id: "lpp", label: "LPP Monitoring", desc: "Belum dimutasi Oracle" },
-            ] as { id: TabType; label: string; desc: string }[]).map((tab) => (
-              <button key={tab.id} onClick={() => handleTab(tab.id)}
-                className={`flex flex-col items-start gap-0 rounded-lg px-4 py-2 text-left transition-all ${
-                  activeTab === tab.id ? "bg-white/10 shadow-sm" : "hover:bg-white/[0.04]"
-                }`}>
-                <span className={`text-xs font-medium ${activeTab === tab.id ? "text-white" : "text-white/40"}`}>{tab.label}</span>
-                <span className={`text-[10px] ${activeTab === tab.id ? "text-white/50" : "text-white/25"}`}>{tab.desc}</span>
+              { id: "dat" as const, label: "DAT Monitoring" },
+              { id: "lpp" as const, label: "LPP Monitoring" },
+            ]).map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 text-[12px] font-medium border-b-2 transition-all -mb-px ${
+                  activeTab === tab.id
+                    ? "border-cyan-400 text-cyan-300"
+                    : "border-transparent text-white/40 hover:text-white/70"
+                }`}
+              >
+                {tab.label}
               </button>
             ))}
           </div>
 
-          {/* Summary cards per tab */}
-          <div className="mb-5 grid grid-cols-1 md:grid-cols-3 gap-3">
-            {activeTab === "dat" ? (
-              <>
-                <SummaryCard
-                  title="Total DAT Aset"
-                  value={loading ? "—" : summaryDAT.total.toLocaleString()}
-                  subtitle="Semua aset gudang"
-                  accentColor="cyan"
-                  icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /></svg>}
-                />
-                <SummaryCard
-                  title="Pending SJ WT"
-                  value={loading ? "—" : summaryDAT.pendingSjWt.toLocaleString()}
-                  subtitle="Belum ada di Web Tracking"
-                  accentColor="amber"
-                  icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
-                />
-                <SummaryCard
-                  title="Sinkron"
-                  value={loading ? "—" : summaryDAT.sinkron.toLocaleString()}
-                  subtitle="DAT & WT match"
-                  accentColor="violet"
-                  icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12" /></svg>}
-                />
-              </>
-            ) : (
-              <>
-                <SummaryCard
-                  title="Total LPP"
-                  value="—"
-                  subtitle="Data LPP belum tersedia"
-                  accentColor="cyan"
-                  icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /></svg>}
-                />
-                <SummaryCard
-                  title="Belum Mutasi DAT"
-                  value="—"
-                  subtitle="Sudah keluar via WT, DAT belum"
-                  accentColor="amber"
-                  icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
-                />
-                <SummaryCard
-                  title="Sinkron"
-                  value="—"
-                  subtitle="LPP & DAT match"
-                  accentColor="violet"
-                  icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12" /></svg>}
-                />
-              </>
-            )}
-          </div>
-
-          {/* Table */}
-          {activeTab === "dat" ? (
-            <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] shadow-xl shadow-black/30">
-
-              {/* Toolbar */}
-              <div className="border-b border-white/[0.06] px-5 py-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-1.5">
-                  {(["ALL", "CGA1", "CGA2", "CGA3"] as CGAFilter[]).map(f => (
-                    <button key={f} onClick={() => handleCgaFilter(f)}
-                      className={`text-[11px] px-3 py-1.5 rounded-lg font-medium transition-all border ${
-                        cgaFilter === f
-                          ? "bg-white/10 text-white border-white/20"
-                          : "text-slate-500 border-transparent hover:text-slate-300 hover:border-white/10"
-                      }`}>
-                      {f === "ALL" ? "Semua" : f}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-slate-600 text-[11px] hidden sm:block">
-                    <span className="text-slate-400 font-mono">{filtered.length.toLocaleString()}</span>
-                    {filtered.length !== assets.length && (
-                      <> / <span className="text-slate-600 font-mono">{assets.length.toLocaleString()}</span></>
-                    )}{" "}aset
-                  </span>
-                  <div className="relative">
-                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none"
-                      width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="11" cy="11" r="8" />
-                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <input
-                      type="text"
-                      value={search}
-                      onChange={(e) => handleSearch(e.target.value)}
-                      placeholder="Cari kode atau deskripsi..."
-                      suppressHydrationWarning
-                      className="bg-white/[0.04] border border-white/[0.08] text-slate-300 text-[12px] placeholder:text-slate-600 rounded-xl pl-8 pr-3 py-1.5 w-56 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {loading ? (
-                <div className="divide-y divide-white/5">
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="flex items-center gap-4 px-5 py-3.5">
-                      <div className="h-3 rounded bg-white/5 w-1/3 animate-pulse" />
-                      <div className="h-3 w-20 rounded bg-white/5 animate-pulse" />
-                      <div className="h-3 w-16 rounded bg-white/5 animate-pulse" />
-                    </div>
-                  ))}
-                </div>
-              ) : filtered.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-24">
-                  <p className="text-sm text-white/40">Tidak ada aset ditemukan</p>
-                </div>
-              ) : (
-                <>
-                  <TableHeader />
-                  <div className="divide-y divide-white/[0.04]">
-                    {paginated.map(asset => <TableRow key={asset.id} asset={asset} />)}
-                  </div>
-                  <Pagination page={page} totalPages={totalPages} onPage={setPage} totalItems={filtered.length} pageSize={PAGE_SIZE} />
-                </>
-              )}
+          {activeTab === "lpp" ? (
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] py-20 text-center">
+              <p className="text-sm text-white/40">Data LPP Web Tracking belum tersedia</p>
+              <p className="text-xs text-white/25 mt-1">Fitur ini akan aktif setelah integrasi LPP selesai</p>
             </div>
           ) : (
-            /* LPP Tab — empty state */
-            <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.015] p-12 flex flex-col items-center text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] text-white/30 mb-4">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <line x1="9" y1="9" x2="15" y2="15" />
-                  <line x1="15" y1="9" x2="9" y2="15" />
-                </svg>
-              </div>
-              <h3 className="text-sm font-semibold text-white/60 mb-1">Belum ada data LPP Web Tracking</h3>
-              <p className="text-xs text-white/30 max-w-md">
-                Fitur upload dan monitoring LPP Web Tracking akan tersedia setelah modul LPP Web Tracking dibangun.
-              </p>
-            </div>
-          )}
+            <>
+              {/* Filter Panel */}
+              <div className="mb-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
 
+                {/* Row 1: Cost center chips */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40">Cost Center</span>
+                  <div className="flex items-center gap-1.5">
+                    {(["ALL", "CGA1", "CGA2", "CGA3"] as CostCenter[]).map(cc => (
+                      <button key={cc} onClick={() => { setCostCenter(cc); setPage(1); }}
+                        className={`text-[11px] px-3 py-1.5 rounded-lg font-medium transition-all border ${
+                          costCenter === cc
+                            ? "bg-white/10 text-white border-white/20"
+                            : "text-slate-500 border-transparent hover:text-slate-300 hover:border-white/10"
+                        }`}
+                      >
+                        {cc}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Row 2: Multi-field tag filter + Reset */}
+                <div className="pt-2 border-t border-white/[0.04] space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40 shrink-0">Filter Kolom</span>
+                    <p className="text-[10px] text-white/25">
+                      Pilih kolom → ketik value → Enter. Tambah kolom lain untuk filter AND.
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-2 flex-wrap">
+                    <div className="flex-1">
+                      <MultiFieldTagInput tags={filterTags} onChange={handleTagChange} />
+                    </div>
+                    <button
+                      onClick={handleReset}
+                      disabled={!hasActiveFilter}
+                      className="flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/40 disabled:opacity-40 disabled:pointer-events-none transition-all shrink-0"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 12a9 9 0 1 0 9-9" />
+                        <polyline points="3 4 3 10 9 10" />
+                      </svg>
+                      Reset Filter
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary cards */}
+              <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: "Total Item",      value: loading ? "—" : totalItem.toLocaleString(),   color: "text-cyan-300"    },
+                  { label: "Total Qty",       value: loading ? "—" : totalQty.toLocaleString(),    color: "text-violet-300"  },
+                  { label: "Biaya Perolehan", value: loading ? "—" : formatRupiah(totalPerolehan), color: "text-amber-300"   },
+                  { label: "Jumlah Tercatat", value: loading ? "—" : formatRupiah(totalTercatat),  color: "text-emerald-300" },
+                ].map(c => (
+                  <div key={c.label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+                    <p className="text-[10px] text-white/40 uppercase tracking-widest">{c.label}</p>
+                    <p className={`text-lg font-bold mt-1 ${c.color}`}>{c.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Result info */}
+              <div className="mb-3 flex items-center justify-between text-[11px]">
+                <p className="text-white/40">
+                  Menampilkan{" "}
+                  <span className="text-white/80 font-semibold">{sorted.length.toLocaleString()} aset</span>
+                  {filterTags.length > 0 && (
+                    <span className="text-white/30">
+                      {" "}— {filterTags.map(t => (
+                        <span key={`${t.field}-${t.value}`} className="text-white/50 mx-0.5">
+                          {t.label}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              {/* Table dengan horizontal scroll */}
+              <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] shadow-xl shadow-black/30">
+                <div className="overflow-x-auto">
+                  <div className="min-w-[1380px]">
+                    <div className="grid grid-cols-[150px_150px_120px_80px_120px_1fr_50px_110px_110px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+                      <span>Kategori Oracle</span>
+                      <span>Jenis</span>
+                      <span>Merk</span>
+                      <span>Cost Center</span>
+                      <span>Kode Aset</span>
+                      <span>Deskripsi</span>
+                      <span className="text-right">Qty</span>
+                      <span className="text-right">Perolehan</span>
+                      <span className="text-right">Tercatat</span>
+                    </div>
+
+                    {loading ? (
+                      <div className="divide-y divide-white/5">
+                        {Array.from({ length: 8 }).map((_, i) => (
+                          <div key={i} className="px-4 py-3">
+                            <div className="h-4 bg-white/5 rounded w-3/4 animate-pulse" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : filtered.length === 0 ? (
+                      <div className="py-16 text-center">
+                        <p className="text-sm text-white/40">Tidak ada data untuk filter ini</p>
+                        <button onClick={handleReset} className="mt-3 text-xs text-amber-400 hover:text-amber-300">
+                          Reset filter →
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-white/[0.04]">
+                        {paginated.map((a) => (
+                          <div key={a.clean_id}
+                            className="grid grid-cols-[150px_150px_120px_80px_120px_1fr_50px_110px_110px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
+                            <span className="text-white/50 truncate text-[10px]" title={a.kategori_oracle}>{a.kategori_oracle}</span>
+                            <span className="text-white/80 font-medium truncate" title={a.jenis}>{a.jenis}</span>
+                            <span className="text-white/60 truncate" title={a.merk}>{a.merk}</span>
+                            <div><CGABadge toko={a.toko} /></div>
+                            <span className="font-mono text-[10px] text-cyan-400/70 truncate" title={a.kode_asset}>{a.kode_asset}</span>
+                            <span className="text-white/50 truncate text-[10px]" title={a.deskripsi}>{a.deskripsi}</span>
+                            <span className="text-right font-mono text-white/70">{a.kuantitas}</span>
+                            <span className="text-right text-[10px] text-white/50 font-mono">{formatRupiah(a.biaya_perolehan)}</span>
+                            <span className="text-right text-[10px] text-white/40 font-mono">{formatRupiah(a.jumlah_tercatat)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <Pagination
+                  page={page} totalPages={totalPages} onPage={setPage}
+                  totalItems={sorted.length} pageSize={PAGE_SIZE}
+                />
+              </div>
+            </>
+          )}
         </main>
       </div>
     </div>
