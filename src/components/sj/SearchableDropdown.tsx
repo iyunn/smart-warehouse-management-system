@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, useRef, useEffect, useMemo } from "react";
+import { memo, useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 
 interface Option {
@@ -28,13 +28,16 @@ function SearchableDropdown({
   disabled = false,
   allowCustom = false,
 }: SearchableDropdownProps) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
+  const [open, setOpen]         = useState(false);
+  const [search, setSearch]     = useState("");
+  const [highlightIdx, setHighlightIdx] = useState(0);
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
-  const [mounted, setMounted] = useState(false);
+  const [mounted, setMounted]   = useState(false);
 
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef  = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const listRef     = useRef<HTMLDivElement>(null);
+  const inputRef    = useRef<HTMLInputElement>(null);
 
   useEffect(() => setMounted(true), []);
 
@@ -43,13 +46,16 @@ function SearchableDropdown({
     if (!open || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
     setPosition({
-      top: rect.bottom + 4,
-      left: rect.left,
+      top:   rect.bottom + 4,
+      left:  rect.left,
       width: rect.width,
     });
+    setHighlightIdx(0);
+    // Auto-focus search input saat open
+    setTimeout(() => inputRef.current?.focus(), 20);
   }, [open]);
 
-  // Click outside
+  // Click outside + scroll/resize → close
   useEffect(() => {
     if (!open) return;
     function handleClick(e: MouseEvent) {
@@ -62,7 +68,6 @@ function SearchableDropdown({
         setSearch("");
       }
     }
-    // Scroll/resize → close
     function handleScrollOrResize() {
       setOpen(false);
       setSearch("");
@@ -86,22 +91,56 @@ function SearchableDropdown({
     );
   }, [options, search]);
 
-  const selected = options.find(o => o.value === value);
-  const displayLabel = selected?.label ?? (allowCustom && value ? value : "");
+  // Reset highlight saat filtered berubah
+  useEffect(() => { setHighlightIdx(0); }, [filtered]);
 
-  function handleSelect(val: string) {
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (!listRef.current) return;
+    const items = listRef.current.querySelectorAll<HTMLButtonElement>("[data-item]");
+    const el = items[highlightIdx];
+    if (el) el.scrollIntoView({ block: "nearest" });
+  }, [highlightIdx]);
+
+  const handleSelect = useCallback((val: string) => {
     onChange(val);
     setOpen(false);
     setSearch("");
-  }
+  }, [onChange]);
 
-  function handleCustomSubmit() {
+  const handleCustomSubmit = useCallback(() => {
     if (allowCustom && search.trim()) {
       onChange(search.trim());
       setOpen(false);
       setSearch("");
     }
-  }
+  }, [allowCustom, search, onChange]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightIdx(i => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIdx(i => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (filtered.length > 0 && filtered[highlightIdx]) {
+        handleSelect(filtered[highlightIdx].value);
+      } else if (allowCustom && search.trim()) {
+        handleCustomSubmit();
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+      setSearch("");
+    }
+  }, [open, filtered, highlightIdx, handleSelect, allowCustom, search, handleCustomSubmit]);
+
+  const selected = options.find(o => o.value === value);
+  const displayLabel = selected?.label ?? (allowCustom && value ? value : "");
 
   return (
     <>
@@ -121,19 +160,19 @@ function SearchableDropdown({
         <span className={`truncate text-left ${displayLabel ? "text-white/80" : "text-white/30"}`}>
           {displayLabel || placeholder}
         </span>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform shrink-0 ${open ? "rotate-180" : ""}`}>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          className={`transition-transform shrink-0 ${open ? "rotate-180" : ""}`}>
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
 
-      {/* Dropdown via Portal — bebas dari overflow:hidden parent */}
       {open && mounted && createPortal(
         <div
           ref={dropdownRef}
           style={{
             position: "fixed",
-            top: position.top,
-            left: position.left,
+            top:   position.top,
+            left:  position.left,
             width: position.width,
             zIndex: 9999,
           }}
@@ -148,23 +187,20 @@ function SearchableDropdown({
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
               <input
+                ref={inputRef}
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && allowCustom) handleCustomSubmit();
-                  if (e.key === "Escape") setOpen(false);
-                }}
-                placeholder="Cari..."
-                autoFocus
+                onKeyDown={handleKeyDown}
+                placeholder="Cari... (↑↓ navigasi, Enter pilih)"
                 suppressHydrationWarning
                 className="w-full bg-white/[0.04] border border-white/[0.06] text-white/80 text-[12px] placeholder:text-slate-600 rounded-md pl-7 pr-2 py-1 focus:outline-none focus:border-cyan-500/40"
               />
             </div>
           </div>
 
-          {/* Options */}
-          <div className="max-h-56 overflow-y-auto">
+          {/* Options list */}
+          <div ref={listRef} className="max-h-56 overflow-y-auto">
             {filtered.length === 0 ? (
               <div className="py-4 text-center text-xs text-white/30">
                 {allowCustom && search.trim() ? (
@@ -172,20 +208,27 @@ function SearchableDropdown({
                     onClick={handleCustomSubmit}
                     className="text-cyan-400 hover:text-cyan-300 px-3 py-1.5 hover:bg-white/[0.04] rounded-md transition-all"
                   >
-                    Gunakan: <span className="font-semibold">"{search.trim()}"</span>
+                    Gunakan: <span className="font-semibold">&quot;{search.trim()}&quot;</span>
                   </button>
                 ) : (
                   "Tidak ada hasil"
                 )}
               </div>
             ) : (
-              filtered.map((opt) => (
+              filtered.map((opt, idx) => (
                 <button
                   key={opt.value}
+                  data-item
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()} // prevent blur sebelum click
                   onClick={() => handleSelect(opt.value)}
-                  className={`w-full flex flex-col items-start px-3 py-2 text-[12px] hover:bg-white/[0.04] transition-all ${
-                    opt.value === value ? "bg-cyan-500/10 text-cyan-300" : "text-white/70"
+                  onMouseEnter={() => setHighlightIdx(idx)}
+                  className={`w-full flex flex-col items-start px-3 py-2 text-[12px] transition-all ${
+                    idx === highlightIdx
+                      ? "bg-cyan-500/15 text-cyan-200"
+                      : opt.value === value
+                        ? "bg-cyan-500/10 text-cyan-300"
+                        : "text-white/70 hover:bg-white/[0.04]"
                   }`}
                 >
                   <span className="font-medium truncate w-full text-left">{opt.label}</span>
