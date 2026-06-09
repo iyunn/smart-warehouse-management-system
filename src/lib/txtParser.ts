@@ -18,13 +18,44 @@ function cellToString(value: string): string {
 }
 
 /**
- * Parse angka format Indonesia: ' 6.190.000 ' → 6190000
- * Titik = pemisah ribuan, koma = desimal (jarang di Oracle)
+ * Parse angka dari Oracle DAT export.
+ * Format yang mungkin muncul:
+ * - "2.383.000"       → 2383000     (titik = ribuan, integer)
+ * - "10.164.583,33"   → 10164583    (titik = ribuan, koma = desimal)
+ * - "10164583.33"     → 10164583    (titik = desimal, tidak ada ribuan)
+ * - "2383000"         → 2383000     (plain integer)
+ * - " - "             → 0
  */
 function cellToNumber(value: string): number {
   const str = value.trim();
   if (!str || str === "-" || str === " - ") return 0;
-  const cleaned = str.replace(/\./g, "").replace(/,/g, ".");
+
+  let cleaned: string;
+
+  if (str.includes(",")) {
+    // Format Indonesia: titik=ribuan, koma=desimal (e.g. "10.164.583,33")
+    cleaned = str.replace(/\./g, "").replace(",", ".");
+  } else {
+    const dotParts = str.split(".");
+    if (dotParts.length === 1) {
+      // Tidak ada titik → plain integer
+      cleaned = str;
+    } else if (dotParts.length > 2) {
+      // Lebih dari 1 titik → semua titik adalah ribuan (e.g. "2.383.000")
+      cleaned = str.replace(/\./g, "");
+    } else {
+      // Tepat 1 titik: cek panjang bagian setelah titik
+      const decimalPart = dotParts[dotParts.length - 1];
+      if (decimalPart.length <= 2) {
+        // e.g. "10164583.33" → titik adalah desimal, biarkan
+        cleaned = str;
+      } else {
+        // e.g. "2.550" → titik adalah ribuan, hapus
+        cleaned = str.replace(/\./g, "");
+      }
+    }
+  }
+
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : Math.round(num);
 }
