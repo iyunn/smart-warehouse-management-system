@@ -298,7 +298,10 @@ export default function SJReportPage() {
       });
     }
 
-    return result;
+    // Sort by No. SJ desc (terbaru di atas) → urutan asc (item dalam 1 SJ berurutan)
+    return [...result].sort((a, b) =>
+      b.no_sj.localeCompare(a.no_sj) || a.urutan - b.urutan
+    );
   }, [items, dateFrom, dateTo, search, searchField]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -338,13 +341,13 @@ export default function SJReportPage() {
     <div className="flex h-screen overflow-hidden bg-[#080e18] text-white">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Rekap Alokasi" />
+        <Topbar title="Report Surat Jalan" />
         <main className="flex-1 overflow-y-auto px-6 py-5">
 
           {/* Header */}
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-lg font-semibold tracking-tight text-white">Rekap Alokasi</h1>
+              <h1 className="text-lg font-semibold tracking-tight text-white">Report Surat Jalan</h1>
               <p className="mt-0.5 text-xs text-white/40">
                 Filter dan export laporan pengiriman barang berdasarkan periode dan kriteria pencarian
               </p>
