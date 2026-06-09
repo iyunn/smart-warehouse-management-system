@@ -35,29 +35,39 @@ export async function POST(req: Request) {
       result: classifyAsset(item.deskripsi, keywordRules ?? []),
     }))
 
-    // ── 3. Bulk upsert assets_raw ─────────────────────────────────────────────
+    // ── 3. DELETE semua assets_raw yang ada (full replace strategy) ───────────
+    // DAT adalah full snapshot — aset yang tidak ada di file terbaru berarti
+    // sudah dimutasi keluar dari CGA. assets_clean ikut terhapus via CASCADE.
+    const { error: deleteError } = await supabase
+      .from('assets_raw')
+      .delete()
+      .neq('kode_asset', '')   // delete all rows (neq '' = semua row)
+
+    if (deleteError) {
+      console.error('[route] delete error:', deleteError)
+      return NextResponse.json({ success: false, error: `Gagal hapus data lama: ${deleteError.message}` })
+    }
+
+    // ── 4. Bulk insert assets_raw (bukan upsert — semua sudah dihapus) ────────
     const rawRows = classifiedData.map(({ raw }: any) => raw)
 
-    const { data: upsertedRaw, error: rawError } = await supabase
+    const { data: insertedRaw, error: rawError } = await supabase
       .from('assets_raw')
-      .upsert(rawRows, {
-        onConflict: 'kode_asset',
-        ignoreDuplicates: false,
-      })
+      .insert(rawRows)
       .select('id, kode_asset')
 
     if (rawError) {
-      console.error('[route] assets_raw upsert error:', rawError)
+      console.error('[route] assets_raw insert error:', rawError)
       return NextResponse.json({ success: false, error: rawError.message })
     }
 
-    // ── 4. Map kode_asset → raw_id ────────────────────────────────────────────
+    // ── 5. Map kode_asset → raw_id ────────────────────────────────────────────
     const rawIdMap = new Map<string, string>()
-    for (const row of upsertedRaw ?? []) {
+    for (const row of insertedRaw ?? []) {
       rawIdMap.set(row.kode_asset, row.id)
     }
 
-    // ── 5. Bulk upsert assets_clean ───────────────────────────────────────────
+    // ── 6. Bulk insert assets_clean ───────────────────────────────────────────
     const cleanRows = classifiedData
       .map(({ raw, result }: any) => {
         const rawId = rawIdMap.get(raw.kode_asset)
@@ -77,19 +87,16 @@ export async function POST(req: Request) {
 
     const { error: cleanError } = await supabase
       .from('assets_clean')
-      .upsert(cleanRows, {
-        onConflict: 'raw_id',
-        ignoreDuplicates: false,
-      })
+      .insert(cleanRows)
 
     if (cleanError) {
-      console.error('[route] assets_clean upsert error:', cleanError)
+      console.error('[route] assets_clean insert error:', cleanError)
       // Tidak fatal — raw sudah tersimpan, clean bisa di-reclassify nanti
     }
 
     return NextResponse.json({
-      success: true,
-      inserted: upsertedRaw?.length ?? 0,
+      success:  true,
+      inserted: insertedRaw?.length ?? 0,
       preview:  classifiedData.slice(0, 5).map(({ result }: any) => result),
     })
 
