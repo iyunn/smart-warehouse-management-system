@@ -6,7 +6,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// ── Server-side cache (5 menit TTL) ─────────────────────────────────────────
 let cachedJenis: string[] | null = null
 let lastFetched = 0
 const CACHE_TTL = 5 * 60 * 1000
@@ -18,8 +17,6 @@ export async function GET() {
       return NextResponse.json({ jenis: cachedJenis, cached: true })
     }
 
-    // Fetch DISTINCT jenis dari assets_clean (selain Unknown)
-    // Pagination via loop untuk bypass limit 1000
     let allRows: any[] = []
     let from = 0
     const FETCH_SIZE = 1000
@@ -39,7 +36,6 @@ export async function GET() {
       if (from > 50000) break
     }
 
-    // DISTINCT di JS
     const uniqueSet = new Set<string>()
     for (const row of allRows) {
       if (row.jenis) uniqueSet.add(row.jenis)
@@ -55,4 +51,11 @@ export async function GET() {
       { status: 500 }
     )
   }
+}
+
+// DELETE /api/sj/master/jenis — invalidate cache
+export async function DELETE() {
+  cachedJenis = null
+  lastFetched = 0
+  return NextResponse.json({ success: true, message: 'Jenis cache invalidated' })
 }

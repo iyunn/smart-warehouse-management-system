@@ -24,6 +24,20 @@ interface UseKeywordRuleReturn {
   submit: () => Promise<boolean>;
 }
 
+/**
+ * Invalidate semua cache yang terdampak setelah add/edit rule:
+ * - /api/keyword-rules/values (suggestion di AddRuleModal)
+ * - /api/sj/master/jenis (dropdown jenis di form Buat SJ)
+ * - /api/sj/master/merk (dropdown merk di form Buat SJ)
+ *
+ * Fire-and-forget: tidak perlu await, tidak block UI.
+ */
+function invalidateAllCaches() {
+  fetch("/api/keyword-rules/values", { method: "DELETE" }).catch(() => {});
+  fetch("/api/sj/master/jenis",      { method: "DELETE" }).catch(() => {});
+  fetch("/api/sj/master/merk",       { method: "DELETE" }).catch(() => {});
+}
+
 export function useKeywordRule(): UseKeywordRuleReturn {
   const [open, setOpen] = useState(false);
   const [targetAsset, setTargetAsset] = useState<AssetClean | null>(null);
@@ -75,15 +89,18 @@ export function useKeywordRule(): UseKeywordRuleReturn {
     setSubmitError("");
 
     try {
-      // Consistency dijaga di UI level — submit button di-disable oleh modal
-      // saat AutocompleteInput detect mismatch case-insensitive.
       const { error } = await supabase.from("keyword_rules").insert({
-        keyword: form.keyword.trim().toUpperCase(),
+        keyword:   form.keyword.trim().toUpperCase(),
         rule_type: form.rule_type,
-        value: form.value.trim(),
+        value:     form.value.trim(),
       });
 
       if (error) throw new Error(error.message);
+
+      // Invalidate semua cache setelah rule baru tersimpan
+      // Supaya suggestion + dropdown SJ langsung fresh tanpa tunggu TTL
+      invalidateAllCaches();
+
       setSubmitStatus("success");
       return true;
     } catch (err) {

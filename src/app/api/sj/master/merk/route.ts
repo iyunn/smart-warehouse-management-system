@@ -52,3 +52,10 @@ export async function GET() {
     )
   }
 }
+
+// DELETE /api/sj/master/merk — invalidate cache
+export async function DELETE() {
+  cachedMerk = null
+  lastFetched = 0
+  return NextResponse.json({ success: true, message: 'Merk cache invalidated' })
+}

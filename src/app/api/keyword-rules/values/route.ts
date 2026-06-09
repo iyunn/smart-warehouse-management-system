@@ -6,7 +6,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// In-memory cache 5 menit
 type CacheEntry = { data: string[]; expires: number }
 const cache = new Map<string, CacheEntry>()
 const CACHE_TTL_MS = 5 * 60 * 1000
@@ -22,8 +21,10 @@ function setCached(key: string, data: string[]) {
   cache.set(key, { data, expires: Date.now() + CACHE_TTL_MS })
 }
 
-// GET /api/keyword-rules/values?type=jenis|merk
-// Return unique values dari keyword_rules untuk autocomplete suggestion
+export function invalidateKRValuesCache() {
+  cache.clear()
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
@@ -50,7 +51,6 @@ export async function GET(req: NextRequest) {
 
     if (error) throw new Error(error.message)
 
-    // Dedupe case-insensitive — keep first occurrence (preserve user's casing)
     const seen = new Set<string>()
     const unique: string[] = []
     for (const row of data ?? []) {
@@ -74,4 +74,10 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+// DELETE /api/keyword-rules/values — invalidate cache
+export async function DELETE() {
+  cache.clear()
+  return NextResponse.json({ success: true, message: 'Cache invalidated' })
 }
