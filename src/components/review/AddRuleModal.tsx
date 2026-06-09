@@ -2,6 +2,8 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useKeywordRule } from "@/hooks/useKeywordRule";
+import { useKeywordRuleValues } from "@/hooks/useKeywordRuleValues";
+import AutocompleteInput from "@/components/review/AutocompleteInput";
 
 interface AddRuleModalProps {
   assetId?: string;
@@ -50,9 +52,13 @@ const selectCls =
 export const AddRuleModal = memo(({ assetId, onClose, onSuccess }: AddRuleModalProps) => {
   const { form, updateField, submit, submitStatus, submitError } = useKeywordRule();
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [valueMismatch, setValueMismatch] = useState(false); // ← state baru
   const firstInputRef = useRef<HTMLInputElement>(null);
 
   const isNoMerk = form.rule_type === "no_merk";
+
+  const suggestionType = isNoMerk ? null : (form.rule_type as "jenis" | "merk");
+  const { values: suggestions, loading: loadingSuggestions } = useKeywordRuleValues(suggestionType);
 
   useEffect(() => {
     injectStyle(OVERLAY_ANIM, "arm-anim");
@@ -66,7 +72,6 @@ export const AddRuleModal = memo(({ assetId, onClose, onSuccess }: AddRuleModalP
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // Kalau tipe no_merk, value diisi otomatis "Non-Merk"
   useEffect(() => {
     if (isNoMerk) updateField("value", "Non-Merk");
   }, [isNoMerk, updateField]);
@@ -79,6 +84,7 @@ export const AddRuleModal = memo(({ assetId, onClose, onSuccess }: AddRuleModalP
   }, [form, isNoMerk]);
 
   const handleSave = useCallback(async () => {
+    setErrors({});
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
     const success = await submit();
@@ -94,6 +100,9 @@ export const AddRuleModal = memo(({ assetId, onClose, onSuccess }: AddRuleModalP
     if (e.target === e.currentTarget) onClose();
   }, [onClose]);
 
+  // Submit disabled kalau: sedang submit OR ada mismatch case di value
+  const isSubmitDisabled = submitStatus === "submitting" || valueMismatch;
+
   return (
     <div
       role="dialog" aria-modal="true" aria-label="Tambah Keyword Rule"
@@ -108,7 +117,6 @@ export const AddRuleModal = memo(({ assetId, onClose, onSuccess }: AddRuleModalP
       >
         <div className="absolute inset-x-0 top-0 h-px rounded-t-2xl bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
 
-        {/* Header */}
         <div className="flex items-start justify-between px-6 pt-5 pb-4">
           <div>
             <h2 className="text-base font-semibold text-white">Tambah Keyword Rule</h2>
@@ -124,10 +132,8 @@ export const AddRuleModal = memo(({ assetId, onClose, onSuccess }: AddRuleModalP
 
         <div className="mx-6 h-px bg-white/5" />
 
-        {/* Body */}
         <div className="flex flex-col gap-4 px-6 py-5">
 
-          {/* Keyword */}
           <Field label="Keyword" required>
             <input
               ref={firstInputRef}
@@ -136,17 +142,18 @@ export const AddRuleModal = memo(({ assetId, onClose, onSuccess }: AddRuleModalP
               onChange={(e) => updateField("keyword", e.target.value)}
               placeholder="e.g. RAK BUAH, LOCKER, MEJA KAYU"
               className={inputCls}
+              suppressHydrationWarning
             />
             {errors.keyword && <p className="text-xs text-red-400">{errors.keyword}</p>}
           </Field>
 
-          {/* Tipe Rule */}
           <Field label="Tipe Rule" required>
             <div className="relative">
               <select
                 value={form.rule_type}
                 onChange={(e) => updateField("rule_type", e.target.value as "jenis" | "merk" | "no_merk")}
                 className={selectCls}
+                suppressHydrationWarning
               >
                 <option value="merk">Merk</option>
                 <option value="jenis">Jenis</option>
@@ -159,21 +166,24 @@ export const AddRuleModal = memo(({ assetId, onClose, onSuccess }: AddRuleModalP
             </div>
           </Field>
 
-          {/* Value — disembunyikan kalau no_merk */}
           {!isNoMerk && (
             <Field label={form.rule_type === "merk" ? "Merk" : "Jenis Barang"} required>
-              <input
-                type="text"
+              <AutocompleteInput
                 value={form.value}
-                onChange={(e) => updateField("value", e.target.value)}
+                onChange={(v) => updateField("value", v)}
+                suggestions={suggestions}
+                loading={loadingSuggestions}
                 placeholder={form.rule_type === "merk" ? "Contoh: SAMSUNG" : "Contoh: Laptop"}
                 className={inputCls}
+                onMismatchChange={({ hasMismatch }) => setValueMismatch(hasMismatch)}
               />
               {errors.value && <p className="text-xs text-red-400">{errors.value}</p>}
+              <p className="text-[10.5px] text-white/30 leading-relaxed">
+                Pilih dari suggestion untuk menjaga konsistensi data. Value yang sama (case-insensitive) wajib pakai casing yang sudah ada.
+              </p>
             </Field>
           )}
 
-          {/* Info hint untuk no_merk */}
           {isNoMerk && (
             <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3.5 py-3">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400 mt-0.5 shrink-0">
@@ -190,14 +200,17 @@ export const AddRuleModal = memo(({ assetId, onClose, onSuccess }: AddRuleModalP
           )}
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-end gap-2 border-t border-white/5 px-6 py-4">
           <button onClick={onClose} disabled={submitStatus === "submitting"}
             className="rounded-lg px-4 py-2 text-sm text-white/50 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-40">
             Batal
           </button>
-          <button onClick={handleSave} disabled={submitStatus === "submitting"}
-            className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-5 py-2 text-sm font-medium text-cyan-300 shadow-sm transition-all duration-150 hover:bg-cyan-500/20 hover:text-cyan-200 disabled:opacity-50">
+          <button
+            onClick={handleSave}
+            disabled={isSubmitDisabled}
+            title={valueMismatch ? "Casing tidak konsisten — pilih suggestion existing dulu" : undefined}
+            className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-5 py-2 text-sm font-medium text-cyan-300 shadow-sm transition-all duration-150 hover:bg-cyan-500/20 hover:text-cyan-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-cyan-500/10"
+          >
             {submitStatus === "submitting" ? (
               <><Spinner />Menyimpan…</>
             ) : (

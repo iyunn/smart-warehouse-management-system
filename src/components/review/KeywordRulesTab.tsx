@@ -3,6 +3,8 @@
 import { memo, useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import type { KeywordRule } from "@/lib/reviewTypes";
+import { useKeywordRuleValues } from "@/hooks/useKeywordRuleValues";
+import AutocompleteInput from "@/components/review/AutocompleteInput";
 
 // ─── Edit Modal ───────────────────────────────────────────────────────────────
 
@@ -23,6 +25,18 @@ const EditRuleModal = memo(({ rule, onClose, onSaved }: EditRuleModalProps) => {
   const [value, setValue] = useState(rule.value);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [valueMismatch, setValueMismatch] = useState(false);
+
+  const isNoMerk = ruleType === "no_merk";
+  const suggestionType = isNoMerk ? null : ruleType as "jenis" | "merk";
+  const { values: suggestions, loading: loadingSuggestions } = useKeywordRuleValues(suggestionType);
+
+  // ── Filter suggestions: exclude value rule yang sedang di-edit ─────────
+  // Supaya kalau user edit rule "CPU" tanpa ubah value, tidak ke-detect mismatch dengan dirinya sendiri
+  // Logic: kalau ada multiple rule dengan value sama persis, OK; kalau cuma 1 (yaitu rule ini), filter out
+  // Untuk simplicity: tetap pakai suggestions apa adanya, mismatch check tetap valid karena
+  // case-sensitive equal akan return null (existing === trimmed check di AutocompleteInput)
+  // Selama user tidak ubah casing value, tidak akan trigger mismatch.
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -30,24 +44,47 @@ const EditRuleModal = memo(({ rule, onClose, onSaved }: EditRuleModalProps) => {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  useEffect(() => {
+    if (isNoMerk && value !== "Non-Merk") setValue("Non-Merk");
+  }, [isNoMerk, value]);
+
   const handleSave = useCallback(async () => {
     if (!keyword.trim()) { setError("Keyword wajib diisi"); return; }
-    if (!value.trim()) { setError("Value wajib diisi"); return; }
+    if (!isNoMerk && !value.trim()) { setError("Value wajib diisi"); return; }
+
     setSaving(true);
     setError("");
-    const { error: sbError } = await supabase
-      .from("keyword_rules")
-      .update({ keyword: keyword.trim().toUpperCase(), rule_type: ruleType, value: value.trim() })
-      .eq("id", rule.id!);
-    setSaving(false);
-    if (sbError) { setError(sbError.message); return; }
-    onSaved();
-    onClose();
-  }, [keyword, ruleType, value, rule.id, onClose, onSaved]);
+
+    try {
+      const { error: sbError } = await supabase
+        .from("keyword_rules")
+        .update({
+          keyword: keyword.trim().toUpperCase(),
+          rule_type: ruleType,
+          value: value.trim(),
+        })
+        .eq("id", rule.id!);
+
+      if (sbError) {
+        setError(sbError.message);
+        setSaving(false);
+        return;
+      }
+
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan.");
+    } finally {
+      setSaving(false);
+    }
+  }, [keyword, ruleType, value, rule.id, isNoMerk, onClose, onSaved]);
 
   const handleBackdrop = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) onClose();
   }, [onClose]);
+
+  const isSaveDisabled = saving || valueMismatch;
 
   return (
     <div onClick={handleBackdrop} style={{ animation: "fadeIn 180ms ease both" }}
@@ -70,31 +107,64 @@ const EditRuleModal = memo(({ rule, onClose, onSaved }: EditRuleModalProps) => {
         <div className="flex flex-col gap-4 px-6 py-5">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold tracking-widest uppercase text-cyan-400/80">Keyword <span className="text-cyan-400">*</span></label>
-            <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} className={inputCls} placeholder="e.g. DAIKIN, AC SPLIT WALL" />
+            <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} className={inputCls}
+              placeholder="e.g. DAIKIN, AC SPLIT WALL" suppressHydrationWarning />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold tracking-widest uppercase text-cyan-400/80">Tipe Rule <span className="text-cyan-400">*</span></label>
             <div className="relative">
-              <select value={ruleType} onChange={(e) => setRuleType(e.target.value as "jenis" | "merk")} className={selectCls}>
+              <select value={ruleType}
+                onChange={(e) => setRuleType(e.target.value as "jenis" | "merk" | "no_merk")}
+                className={selectCls} suppressHydrationWarning>
                 <option value="merk">Merk</option>
                 <option value="jenis">Jenis</option>
+                <option value="no_merk">No Merk (barang generic / tidak bermerek)</option>
               </select>
               <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4l4 4 4-4" /></svg>
             </div>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold tracking-widest uppercase text-cyan-400/80">
-              {ruleType === "merk" ? "Merk" : "Jenis Barang"} <span className="text-cyan-400">*</span>
-            </label>
-            <input type="text" value={value} onChange={(e) => setValue(e.target.value)} className={inputCls}
-              placeholder={ruleType === "merk" ? "Contoh: DAIKIN" : "Contoh: AC Split"} />
-          </div>
+
+          {!isNoMerk && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold tracking-widest uppercase text-cyan-400/80">
+                {ruleType === "merk" ? "Merk" : "Jenis Barang"} <span className="text-cyan-400">*</span>
+              </label>
+              <AutocompleteInput
+                value={value}
+                onChange={setValue}
+                suggestions={suggestions}
+                loading={loadingSuggestions}
+                placeholder={ruleType === "merk" ? "Contoh: DAIKIN" : "Contoh: AC Split"}
+                className={inputCls}
+                onMismatchChange={({ hasMismatch }) => setValueMismatch(hasMismatch)}
+              />
+              <p className="text-[10.5px] text-white/30 leading-relaxed">
+                Value yang sama (case-insensitive) wajib pakai casing yang sudah ada — untuk konsistensi data.
+              </p>
+            </div>
+          )}
+
+          {isNoMerk && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3.5 py-3">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400 mt-0.5 shrink-0">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <p className="text-xs text-amber-300/80 leading-relaxed">
+                Aset yang cocok dengan keyword ini akan ditandai sebagai <span className="font-semibold text-amber-300">Non-Merk</span>.
+              </p>
+            </div>
+          )}
+
           {error && <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">{error}</p>}
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-white/5 px-6 py-4">
           <button onClick={onClose} disabled={saving} className="rounded-lg px-4 py-2 text-sm text-white/50 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-40">Batal</button>
-          <button onClick={handleSave} disabled={saving}
-            className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-5 py-2 text-sm font-medium text-cyan-300 shadow-sm transition-all hover:bg-cyan-500/20 hover:text-cyan-200 disabled:opacity-50">
+          <button
+            onClick={handleSave}
+            disabled={isSaveDisabled}
+            title={valueMismatch ? "Casing tidak konsisten — pilih suggestion existing dulu" : undefined}
+            className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-5 py-2 text-sm font-medium text-cyan-300 shadow-sm transition-all hover:bg-cyan-500/20 hover:text-cyan-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-cyan-500/10"
+          >
             {saving ? (<><svg className="animate-spin" width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6.5 1.5A5 5 0 1 1 1.5 6.5" /></svg>Menyimpan…</>) : (<><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 6.5l3.5 3.5 5.5-6" /></svg>Simpan</>)}
           </button>
         </div>
@@ -119,11 +189,9 @@ const DeleteConfirmModal = memo(({ rule, onClose, onDeleted }: DeleteConfirmProp
   const handleDelete = useCallback(async () => {
     setDeleting(true);
 
-    // 1. Hapus rule dari DB
     const { error } = await supabase.from("keyword_rules").delete().eq("id", rule.id!);
     if (error) { setDeleting(false); return; }
 
-    // 2. Trigger targeted revert via API
     setStatus("reverting");
     try {
       const body: Record<string, string> = {};
@@ -135,9 +203,7 @@ const DeleteConfirmModal = memo(({ rule, onClose, onDeleted }: DeleteConfirmProp
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-    } catch (_) {
-      // revert gagal tidak bloking — data bisa difix manual
-    }
+    } catch (_) {}
 
     setDeleting(false);
     onDeleted(rule);
@@ -266,7 +332,6 @@ export default function KeywordRulesTab({ onRulesChanged }: KeywordRulesTabProps
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] shadow-xl shadow-black/30">
 
-      {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-3">
         <span className="text-[11px] text-white/40">
           <span className="text-white/70 font-mono">{filtered.length}</span> rule
@@ -276,19 +341,17 @@ export default function KeywordRulesTab({ onRulesChanged }: KeywordRulesTabProps
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari keyword, value..."
+            placeholder="Cari keyword, value..." suppressHydrationWarning
             className="bg-white/[0.04] border border-white/[0.08] text-slate-300 text-[12px] placeholder:text-slate-600 rounded-xl pl-8 pr-3 py-1.5 w-52 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all" />
         </div>
       </div>
 
-      {/* Table header */}
       <div className="grid grid-cols-[1fr_80px_1fr_80px] gap-4 border-b border-white/[0.06] px-5 py-3">
         {["Keyword", "Tipe", "Value", ""].map((h, i) => (
           <span key={i} className="text-[10px] font-semibold uppercase tracking-widest text-white/25">{h}</span>
         ))}
       </div>
 
-      {/* Rows */}
       {loading ? (
         <div className="divide-y divide-white/5">
           {Array.from({ length: 5 }).map((_, i) => (

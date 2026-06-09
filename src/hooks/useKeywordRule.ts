@@ -2,9 +2,8 @@
 
 import { useState, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import type { AssetClean, RuleFormState, RULE_FORM_EMPTY } from "../lib/reviewTypes";
+import type { AssetClean, RuleFormState } from "../lib/reviewTypes";
 
-// Re-export blank so callers don't need to import from reviewTypes
 const BLANK: RuleFormState = {
   keyword: "",
   rule_type: "merk",
@@ -27,7 +26,6 @@ interface UseKeywordRuleReturn {
 
 export function useKeywordRule(): UseKeywordRuleReturn {
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [targetAsset, setTargetAsset] = useState<AssetClean | null>(null);
   const [form, setForm] = useState<RuleFormState>(BLANK);
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>("idle");
@@ -35,7 +33,6 @@ export function useKeywordRule(): UseKeywordRuleReturn {
 
   const openModal = useCallback((asset: AssetClean) => {
     setTargetAsset(asset);
-    // Auto-fill: derive keyword from first meaningful word of description
     const keyword =
       asset.original_description
         ?.split(/\s+/)
@@ -46,10 +43,7 @@ export function useKeywordRule(): UseKeywordRuleReturn {
     setForm({
       keyword,
       rule_type: "merk",
-      value:
-        asset.merk !== "Unknown"
-          ? asset.merk
-          : "",
+      value: asset.merk !== "Unknown" ? asset.merk : "",
     });
     setSubmitStatus("idle");
     setSubmitError("");
@@ -81,6 +75,8 @@ export function useKeywordRule(): UseKeywordRuleReturn {
     setSubmitError("");
 
     try {
+      // Consistency dijaga di UI level — submit button di-disable oleh modal
+      // saat AutocompleteInput detect mismatch case-insensitive.
       const { error } = await supabase.from("keyword_rules").insert({
         keyword: form.keyword.trim().toUpperCase(),
         rule_type: form.rule_type,
