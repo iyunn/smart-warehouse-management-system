@@ -138,15 +138,18 @@ Kolom: Kategori | Jenis | Merk | Cost Center (badge warna) | Kode Aset | Deskrip
 
 Filter: ALL/CGA1/CGA2/CGA3, search by kode/deskripsi, pagination client-side.
 
-### Upload Pipeline (TXT Parser)
-Status: ✅ Completed dengan auto-detect delimiter
+### Upload Pipeline (TXT Parser + Full Replace Strategy)
+Status: ✅ Completed — ⚠ Bug Aktif (lihat Known Issues)
 
 - TXT parser support delimiter PIPE `|` dan TAB `\t` (auto-detect)
-- Bulk upsert: 2 queries vs 8,310 sequential sebelumnya
-- Performance test (dataset ALL DAT): 51,459 baris dalam 85.6 detik
-- Saat ini dataset CGA-only ~4,145 baris, upload bahkan lebih cepat
-- `ON CONFLICT (kode_asset) DO UPDATE` untuk seamless re-upload
+- Smart number parsing: handle format titik-ribuan, koma-desimal, maupun titik-desimal Oracle
 - Kolom finansial: `kuantitas`, `biaya_perolehan`, `jumlah_tercatat`
+- **Strategi upload: Full Replace (Delete-then-Insert)**
+  - DELETE semua `assets_raw` sebelum insert (`assets_clean` ikut terhapus via CASCADE)
+  - INSERT fresh dari file (batch 500 rows)
+  - DAT adalah full snapshot — aset tidak ada di file = sudah dimutasi keluar CGA
+  - Menggantikan strategi upsert lama yang tidak bisa deteksi aset yang hilang
+- ⚠ Bug aktif: hanya 27/4527 rows masuk DB setelah insert (lihat Known Issues)
 
 ### Asset Classification Engine
 Status: ✅ Completed
@@ -721,6 +724,12 @@ src/
 
 ## Current Issues
 
+### ⚠ Upload DAT Delete-then-Insert Bug (AKTIF - PRIORITAS)
+- Setelah diubah ke full replace strategy, INSERT hanya masuk 27 dari 4527 rows
+- DELETE sudah benar (verified: `COUNT(*) = 0` setelah delete)
+- Suspect: data yang dikirim dari client ke `/api/process` hanya 27 rows
+- File yang perlu dicek: `UploadSection.tsx`, `batchProcessor.ts`
+
 ### Dashboard Placeholders
 - Baris 2, 3, 5, 6 masih placeholder (menunggu data LPP & Closing)
 - LPP belum ada data sama sekali
@@ -739,7 +748,7 @@ src/
 - Belum ada activity logging system
 
 ### Hydration Warning
-- Input fields kadang trigger hydration warning dari browser extensions yang inject attribute
+- Input fields kadang trigger hydration warning dari browser extensions
 - Sudah di-suppress dengan `suppressHydrationWarning`
 
 ## Accepted Technical Debt
@@ -766,6 +775,15 @@ src/
 ---
 
 # 10. Recent Major Changes Log
+
+## 10 Juni 2026
+- **Bulk insert 928 master tujuan** via SQL dari Excel (list-tujuan.xlsx)
+- **Rekap Alokasi sort** by No. SJ desc (terbaru di atas), item urutan asc
+- **Upload DAT: Full Replace Strategy** — DELETE semua assets_raw dulu, INSERT fresh (batch 500). DAT adalah full snapshot, aset tidak ada di file = sudah dimutasi keluar CGA
+- **`/api/process/route.ts`** diubah dari upsert ke delete-then-insert
+- **cellToNumber fix** — smart dot detection untuk Oracle DAT mixed decimal format
+- **BUG AKTIF:** hanya 27/4527 rows masuk DB setelah insert — suspect di UploadSection.tsx / batchProcessor.ts
+- **Planned:** fitur "Changed" di Classification (prev_jenis/prev_merk + ACC/Revert aksi)
 
 ## 9 Juni 2026 (Sore — Bug Fixes)
 - **SearchableDropdown** — keyboard nav (↑↓Enter), Tab to next field, scroll fix, forwardRef

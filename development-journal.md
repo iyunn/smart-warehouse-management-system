@@ -1407,3 +1407,111 @@ Setelah deploy fix ini, **upload ulang file DAT** agar data di DB ter-parse ulan
 
 ### Action Required
 - ⚠ Upload ulang file DAT TXT setelah deploy — data `jumlah_tercatat` di DB perlu di-refresh dengan parser baru
+
+---
+
+# Selasa, 9 Juni 2026 (Sesi Malam)
+
+## Ringkasan Sesi
+
+Sesi fokus pada: bulk insert master tujuan, keputusan arsitektur upload DAT, implementasi delete-then-insert pipeline, perencanaan fitur "Changed" di Classification, dan berbagai bug fix minor.
+
+---
+
+## 1. Bulk Insert 928 Master Tujuan
+
+928 data tujuan di-import dari file Excel (`list-tujuan.xlsx`) via SQL INSERT yang di-generate otomatis dari Python script. Query pakai `ON CONFLICT (kode) DO UPDATE SET nama = EXCLUDED.nama` supaya aman kalau ada kode yang sudah exist (tidak error duplikat).
+
+---
+
+## 2. Rekap Alokasi — Sort by No. SJ Desc
+
+Tabel di halaman `/sj/report` (Rekap Alokasi) sekarang di-sort by **No. SJ descending** (terbaru di atas), lalu urutan item dalam SJ yang sama ascending.
+
+Sort by No. SJ string sudah otomatis sort by tanggal juga karena format `SJ-Manual/CGA/YYYY/MM/XXXX` embed tahun dan bulan di dalam string.
+
+**File Diubah:**
+- **UPDATED** `src/app/sj/report/page.tsx`
+
+---
+
+## 3. Keputusan Arsitektur Upload DAT — Full Replace Strategy
+
+### Konteks
+Diskusi tentang bagaimana sistem menyikapi 3 skenario saat upload DAT terbaru:
+1. Nomor DAT yang masih ada → overwrite dengan data terbaru
+2. Nomor DAT yang sudah dimutasi Oracle (hilang dari file) → harus hilang dari DB
+3. Nomor DAT baru (mutasi masuk ke CGA) → harus masuk DB
+
+### Keputusan: Delete-then-Insert (Full Replace)
+
+Alasan:
+- DAT Oracle adalah **full snapshot** — isinya seluruh DAT di CGA pada hari request
+- Aset yang tidak ada di file terbaru = sudah dimutasi keluar CGA
+- Upsert lama tidak bisa deteksi aset yang hilang → DB lama-lama nyampah dengan aset stale
+- Full replace = DB selalu cermin kondisi gudang hari ini, tidak lebih tidak kurang
+
+History aset yang keluar CGA **tidak disimpan di DB** — akan ditangani nanti via fitur Rekap Alokasi (target fitur masa depan).
+
+### Implementasi
+Upload DAT baru
+→ DELETE semua assets_raw (assets_clean ikut terhapus via CASCADE)
+→ INSERT fresh dari file (batch 500 rows)
+→ Classifier jalan otomatis
+
+Keyword rules **tidak tersentuh** — di tabel terpisah, tidak ikut cascade.
+
+**File Diubah:**
+- **UPDATED** `src/app/api/process/route.ts` — dari upsert ke delete-then-insert
+
+### Bug Aktif
+Setelah implementasi, INSERT hanya masuk **27 dari 4527 rows**. DELETE sudah benar (verified: `COUNT(*) = 0` setelah delete). Berarti masalah di sisi **client** — data yang dikirim dari frontend ke `/api/process` kemungkinan hanya 27 rows bukan 4527. File yang perlu dicek: `UploadSection.tsx` dan `batchProcessor.ts`. Belum resolved saat akhir sesi.
+
+---
+
+## 4. Perencanaan Fitur "Changed" di Classification
+
+### Konsep
+Filter baru di halaman Classification (sejajar dengan Semua/Unknown Jenis/Unknown Merk) untuk menampilkan aset yang **Jenis atau Merk berubah** setelah upload DAT terbaru. Filter "Keduanya" akan dihapus karena tidak berguna.
+
+### Keputusan Desain
+- Trigger: **hanya** perubahan saat upload DAT baru (bukan karena edit keyword rule)
+- Aksi per aset: **ACC** (accept perubahan baru) atau **Revert** (kembalikan ke nilai lama)
+- Storage: tambah kolom `prev_jenis` + `prev_merk` di `assets_clean`
+
+### Constraint dengan Delete-then-Insert
+Delete-then-insert menghapus `assets_clean` via CASCADE sebelum insert baru → nilai lama hilang sebelum bisa dibandingkan. Solusi: **backup nilai lama ke Map di memory** sebelum DELETE, compare setelah classify ulang.
+
+### Status: BELUM DIKERJAKAN
+Dikerjakan setelah delete-then-insert pipeline bug selesai di-fix.
+
+---
+
+## 5. Fix Minor Lainnya
+
+### cellToNumber & Upload Ulang DAT
+Setelah fix `cellToNumber` (sesi 9 Juni sore), user perlu upload ulang DAT TXT agar data `jumlah_tercatat` yang salah di DB ter-overwrite dengan nilai yang benar.
+
+### SearchableDropdown — Tab ke Kolom Berikutnya
+Setelah pilih item di dropdown (Enter atau klik), Tab key sekarang bisa pindah fokus ke kolom berikutnya di form Buat SJ. Flow: Jenis → Tab → Merk → Tab → SN → Tab → Qty → dst.
+
+---
+
+## Status Akhir Sesi (10 Juni 2026)
+
+### Selesai
+- ✅ Bulk insert 928 master tujuan dari Excel
+- ✅ Rekap Alokasi sort by No. SJ desc
+- ✅ Keputusan arsitektur: full replace strategy untuk upload DAT
+- ✅ Delete-then-insert implemented di `/api/process/route.ts`
+
+### Bug Aktif
+- ⚠ **Delete-then-insert: hanya 27/4527 rows masuk DB** — DELETE benar, INSERT bermasalah. Suspect di `UploadSection.tsx` / `batchProcessor.ts`. Belum resolved.
+
+### Next Priority
+1. **Fix bug delete-then-insert** (27 rows issue) — PRIORITAS
+2. Fitur "Changed" di Classification (prev_jenis/prev_merk + ACC/Revert)
+3. Sesi 4 SJ Manual: Monitoring alokasi (checkbox mutasi Oracle)
+4. Closing snapshots architecture
+5. LPP Web Tracking integration
+6. Authentication & Role Management
