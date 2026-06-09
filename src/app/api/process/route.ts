@@ -48,26 +48,35 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: `Gagal hapus data lama: ${deleteError.message}` })
     }
 
-    // ── 4. Bulk insert assets_raw (bukan upsert — semua sudah dihapus) ────────
+    // ── 4. Batch insert assets_raw (500 rows per batch) ─────────────────────
+    // Supabase limit ~1000 rows per request — batching untuk aman
+    const BATCH_SIZE = 500
     const rawRows = classifiedData.map(({ raw }: any) => raw)
 
-    const { data: insertedRaw, error: rawError } = await supabase
-      .from('assets_raw')
-      .insert(rawRows)
-      .select('id, kode_asset')
+    let allInsertedRaw: { id: string; kode_asset: string }[] = []
 
-    if (rawError) {
-      console.error('[route] assets_raw insert error:', rawError)
-      return NextResponse.json({ success: false, error: rawError.message })
+    for (let i = 0; i < rawRows.length; i += BATCH_SIZE) {
+      const batch = rawRows.slice(i, i + BATCH_SIZE)
+      const { data: batchResult, error: rawError } = await supabase
+        .from('assets_raw')
+        .insert(batch)
+        .select('id, kode_asset')
+
+      if (rawError) {
+        console.error(`[route] assets_raw insert error batch ${i}:`, rawError)
+        return NextResponse.json({ success: false, error: rawError.message })
+      }
+
+      allInsertedRaw = [...allInsertedRaw, ...(batchResult ?? [])]
     }
 
     // ── 5. Map kode_asset → raw_id ────────────────────────────────────────────
     const rawIdMap = new Map<string, string>()
-    for (const row of insertedRaw ?? []) {
+    for (const row of allInsertedRaw) {
       rawIdMap.set(row.kode_asset, row.id)
     }
 
-    // ── 6. Bulk insert assets_clean ───────────────────────────────────────────
+    // ── 6. Batch insert assets_clean (500 rows per batch) ────────────────────
     const cleanRows = classifiedData
       .map(({ raw, result }: any) => {
         const rawId = rawIdMap.get(raw.kode_asset)
@@ -85,18 +94,21 @@ export async function POST(req: Request) {
       })
       .filter(Boolean)
 
-    const { error: cleanError } = await supabase
-      .from('assets_clean')
-      .insert(cleanRows)
+    for (let i = 0; i < cleanRows.length; i += BATCH_SIZE) {
+      const batch = cleanRows.slice(i, i + BATCH_SIZE)
+      const { error: cleanError } = await supabase
+        .from('assets_clean')
+        .insert(batch)
 
-    if (cleanError) {
-      console.error('[route] assets_clean insert error:', cleanError)
-      // Tidak fatal — raw sudah tersimpan, clean bisa di-reclassify nanti
+      if (cleanError) {
+        console.error(`[route] assets_clean insert error batch ${i}:`, cleanError)
+        // Tidak fatal — raw sudah tersimpan, clean bisa di-reclassify nanti
+      }
     }
 
     return NextResponse.json({
       success:  true,
-      inserted: insertedRaw?.length ?? 0,
+      inserted: allInsertedRaw.length,
       preview:  classifiedData.slice(0, 5).map(({ result }: any) => result),
     })
 
