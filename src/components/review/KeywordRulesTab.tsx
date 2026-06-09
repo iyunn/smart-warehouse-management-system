@@ -1,6 +1,13 @@
 "use client";
 
 import { memo, useCallback, useEffect, useState } from "react";
+
+// Invalidate semua cache yang terdampak setelah edit/delete rule
+function invalidateAllCaches() {
+  fetch("/api/keyword-rules/values", { method: "DELETE" }).catch(() => {});
+  fetch("/api/sj/master/jenis",      { method: "DELETE" }).catch(() => {});
+  fetch("/api/sj/master/merk",       { method: "DELETE" }).catch(() => {});
+}
 import { supabase } from "@/lib/supabaseClient";
 import type { KeywordRule } from "@/lib/reviewTypes";
 import { useKeywordRuleValues } from "@/hooks/useKeywordRuleValues";
@@ -71,6 +78,7 @@ const EditRuleModal = memo(({ rule, onClose, onSaved }: EditRuleModalProps) => {
         return;
       }
 
+      invalidateAllCaches();
       onSaved();
       onClose();
     } catch (err) {
@@ -206,6 +214,7 @@ const DeleteConfirmModal = memo(({ rule, onClose, onDeleted }: DeleteConfirmProp
       });
     } catch (_) {}
 
+    invalidateAllCaches();
     setDeleting(false);
     onDeleted(rule);
     onClose();
