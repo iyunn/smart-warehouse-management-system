@@ -30,6 +30,7 @@ export function exportSJReportToExcel({
     "Nama Tujuan":   it.tujuan_nama,
     "Pembawa":       it.pembawa,
     "Penerima":      it.penerima,
+    "Kode Aset":     it.kode_asset || "—",
     "Jenis":         it.jenis,
     "Merk":          it.merk,
     "Serial Number": it.serial_number,
@@ -54,6 +55,7 @@ export function exportSJReportToExcel({
     { wch: 25 },  // Nama Tujuan
     { wch: 18 },  // Pembawa
     { wch: 28 },  // Penerima
+    { wch: 20 },  // Kode Aset
     { wch: 20 },  // Jenis
     { wch: 15 },  // Merk
     { wch: 18 },  // Serial Number
