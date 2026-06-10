@@ -94,6 +94,38 @@ export async function POST(req: Request) {
       }
     }
 
+    // ── 6. Re-apply tag "Allocated" berdasarkan surat_jalan_items ───────────
+    // DAT full-replace menghapus assets_clean via CASCADE, sehingga tag
+    // "Allocated" ikut hilang. Step ini me-restore tag untuk kode_asset yang
+    // sudah pernah diinput di Rekap Alokasi — tanpa ini user harus input ulang
+    // setiap kali upload DAT baru.
+    // Pakai rawIdMap yang sudah dibangun di step 4 untuk lookup O(1).
+    {
+      const { data: allocatedItems } = await supabase
+        .from('surat_jalan_items')
+        .select('kode_asset')
+        .not('kode_asset', 'is', null)
+
+      if (allocatedItems && allocatedItems.length > 0) {
+        // Kumpulkan raw_id yang perlu di-tag dari rawIdMap
+        const rawIdsToTag = allocatedItems
+          .map((it: any) => rawIdMap.get(it.kode_asset))
+          .filter(Boolean) as string[]
+
+        // Deduplicate — satu raw_id mungkin muncul di beberapa SJ item
+        const uniqueRawIds = [...new Set(rawIdsToTag)]
+
+        // Batch update assets_clean tag = 'Allocated' (500 per batch)
+        for (let i = 0; i < uniqueRawIds.length; i += BATCH_SIZE) {
+          const batch = uniqueRawIds.slice(i, i + BATCH_SIZE)
+          await supabase
+            .from('assets_clean')
+            .update({ tag: 'Allocated' })
+            .in('raw_id', batch)
+        }
+      }
+    }
+
     return NextResponse.json({
       success:  true,
       inserted: allInsertedRaw.length,
