@@ -233,21 +233,28 @@ const PageBtn = memo(({ active, children, ...props }: React.ButtonHTMLAttributes
 ));
 PageBtn.displayName = "PageBtn";
 
-// ─── Allocation Cell (Sesi 4) ──────────────────────────────────────────────
+// ─── Allocation Cell (Sesi 4 + Lock) ───────────────────────────────────────
 // Input kode aset + checkbox mutasi Oracle, inline per row.
 // - Save onBlur (input) / onChange (checkbox) → PATCH /api/sj/report
 // - Isi kode aset → checkbox auto-true
 // - Barang non-AT (is_aktiva=false) → checkbox disabled (anti salah ceklist)
+//
+// Lock (isMutated=true) → render teks statis, tidak bisa diedit:
+//   - Lock by DAT (kode hilang dari assets_raw) → permanen, tanpa escape hatch
+//     (DAT sumber kebenaran, mutasi tidak bisa dibantah)
+//   - Lock by manual (checkbox on, kode kosong) → ada tombol "Batalkan"
+//     untuk koreksi false positive
 interface AllocationState {
   kode_asset: string;
   mutasi_oracle: boolean;
 }
 
 const AllocationCell = memo(({
-  itemId, isAktiva, initialKode, initialMutasi, onSaved,
+  itemId, isAktiva, isMutated, initialKode, initialMutasi, onSaved,
 }: {
   itemId: string;
   isAktiva: boolean;
+  isMutated: boolean;
   initialKode: string;
   initialMutasi: boolean;
   onSaved: (itemId: string, next: AllocationState) => void;
@@ -255,12 +262,14 @@ const AllocationCell = memo(({
   const [kode, setKode]     = useState(initialKode);
   const [mutasi, setMutasi] = useState(initialMutasi);
   const [saving, setSaving] = useState(false);
-  const lastSaved = useRef<AllocationState>({ kode_asset: initialKode, mutasi_oracle: initialMutasi });
+  const lastSaved  = useRef<AllocationState>({ kode_asset: initialKode, mutasi_oracle: initialMutasi });
+  const mutasiRef  = useRef(initialMutasi); // track nilai mutasi terkini, bebas stale closure
 
-  // Sync kalau data dari server berubah (mis. setelah refetch)
+  // Sync state + ref kalau data dari server berubah (mis. setelah refetch)
   useEffect(() => {
     setKode(initialKode);
     setMutasi(initialMutasi);
+    mutasiRef.current = initialMutasi;
     lastSaved.current = { kode_asset: initialKode, mutasi_oracle: initialMutasi };
   }, [initialKode, initialMutasi]);
 
@@ -286,6 +295,10 @@ const AllocationCell = memo(({
       if (json.success) {
         lastSaved.current = next;
         onSaved(itemId, next);
+      } else if (res.status === 409) {
+        // Item sudah terkunci di server — revert tampilan ke nilai tersimpan
+        setKode(lastSaved.current.kode_asset);
+        setMutasi(lastSaved.current.mutasi_oracle);
       }
     } catch {
       // diam — biarkan user retry; nilai lokal tetap tampil
@@ -296,19 +309,64 @@ const AllocationCell = memo(({
 
   const handleKodeBlur = useCallback(() => {
     const trimmed = kode.trim();
-    // Isi kode → auto-centang mutasi (kecuali non-AT, tetap false)
-    const nextMutasi = trimmed && isAktiva ? true : (trimmed ? false : mutasi);
-    setMutasi(nextMutasi);
+    // Baca mutasi terkini dari ref — bebas dari stale closure.
+    // Kalau kode dikosongkan: reset mutasi ke false (bukan ambil nilai lama).
+    // Kalau kode diisi: auto-centang (kalau AT).
+    const currentMutasi = mutasiRef.current;
+    const nextMutasi = trimmed
+      ? (isAktiva ? true : false)
+      : false; // kode dikosongkan → reset mutasi, jangan carry over nilai lama
+    if (nextMutasi !== currentMutasi) {
+      mutasiRef.current = nextMutasi;
+      setMutasi(nextMutasi);
+    }
     persist({ kode_asset: trimmed, mutasi_oracle: nextMutasi });
-  }, [kode, mutasi, isAktiva, persist]);
+  }, [kode, isAktiva, persist]);
 
   const handleCheckbox = useCallback(() => {
     if (!isAktiva) return; // disabled untuk non-AT
-    const next = !mutasi;
+    const next = !mutasiRef.current;
+    mutasiRef.current = next;
     setMutasi(next);
     persist({ kode_asset: kode.trim(), mutasi_oracle: next });
-  }, [mutasi, kode, isAktiva, persist]);
+  }, [kode, isAktiva, persist]);
 
+  // ── Mode LOCKED: render teks statis ───────────────────────────────────────
+  if (isMutated) {
+    const lockedByDAT = !!kode.trim(); // ada kode → lock by DAT; kode kosong → lock manual
+    return (
+      <div className="flex items-center gap-1.5">
+        {kode.trim() ? (
+          <span className="font-mono text-[10px] text-emerald-400/80 truncate" title={kode}>{kode}</span>
+        ) : (
+          <span className="text-[10px] text-white/30">—</span>
+        )}
+        <span
+          className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-md border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 whitespace-nowrap"
+          title={lockedByDAT
+            ? "Sudah dimutasi — kode aset hilang dari DAT terbaru"
+            : "Dikonfirmasi mutasi secara manual"}
+        >
+          ✓ Dimutasi
+        </span>
+        {/* Escape hatch hanya untuk lock manual (false positive bisa dikoreksi).
+            Lock by DAT tidak bisa dibatalkan — DAT sumber kebenaran. */}
+        {!lockedByDAT && (
+          <button
+            type="button"
+            onClick={() => { setMutasi(false); persist({ kode_asset: "", mutasi_oracle: false }); }}
+            className="text-[9px] text-white/30 hover:text-rose-300 underline decoration-dotted"
+            title="Batalkan konfirmasi mutasi manual"
+          >
+            batalkan
+          </button>
+        )}
+        {saving && <span className="text-[9px] text-white/30">…</span>}
+      </div>
+    );
+  }
+
+  // ── Mode NORMAL: input + checkbox ─────────────────────────────────────────
   return (
     <div className="flex items-center gap-2">
       <input
@@ -633,6 +691,12 @@ export default function SJReportPage() {
                         const alloc = allocOverride[it.item_id];
                         const kodeVal   = alloc ? alloc.kode_asset    : it.kode_asset;
                         const mutasiVal = alloc ? alloc.mutasi_oracle : it.mutasi_oracle;
+                        // is_mutated dari server (lock by DAT). Kalau user baru
+                        // konfirmasi manual lewat override (kode kosong + mutasi on),
+                        // lock langsung tanpa nunggu refetch.
+                        const isMutatedVal = alloc
+                          ? (alloc.kode_asset ? it.is_mutated : alloc.mutasi_oracle)
+                          : it.is_mutated;
                         return (
                         <div key={it.item_id}
                           className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_70px_180px_90px_170px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
@@ -653,6 +717,7 @@ export default function SJReportPage() {
                           <AllocationCell
                             itemId={it.item_id}
                             isAktiva={it.is_aktiva}
+                            isMutated={isMutatedVal}
                             initialKode={kodeVal}
                             initialMutasi={mutasiVal}
                             onSaved={handleAllocSaved}

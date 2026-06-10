@@ -36,6 +36,49 @@ export async function GET() {
       if (from > 100000) break
     }
 
+    // ── Deteksi mutasi: ambil semua kode_asset yang MASIH ada di DAT ─────────
+    // DAT (assets_raw) adalah sumber kebenaran. Kalau kode aset yang sudah
+    // diinput di SJ TIDAK ada lagi di assets_raw, berarti aset itu sudah
+    // dimutasi keluar CGA → alokasi di-lock (tidak bisa diedit lagi).
+    //
+    // Guard: kalau assets_raw kosong (DAT belum pernah diupload), JANGAN
+    // anggap semua kode sudah mutasi (false positive). hasDAT = false.
+    let activeKodeSet: Set<string> | null = null
+    {
+      let rawCodes: string[] = []
+      let rawFrom = 0
+      while (true) {
+        const { data: rawBatch, error: rawErr } = await supabase
+          .from('assets_raw')
+          .select('kode_asset')
+          .range(rawFrom, rawFrom + FETCH_SIZE - 1)
+        if (rawErr) throw new Error(rawErr.message)
+        const b = rawBatch ?? []
+        rawCodes = [...rawCodes, ...b.map((r: any) => r.kode_asset).filter(Boolean)]
+        if (b.length < FETCH_SIZE) break
+        rawFrom += FETCH_SIZE
+        if (rawFrom > 100000) break
+      }
+      // hasDAT true hanya kalau ada minimal 1 baris di assets_raw
+      if (rawCodes.length > 0) activeKodeSet = new Set(rawCodes)
+    }
+
+    // Helper: tentukan apakah item terkunci (sudah dimutasi).
+    // Lock terjadi kalau SALAH SATU benar:
+    //   K1. kode_asset diinput DAN tidak ada di DAT (mutasi confirmed by system)
+    //   K2. mutasi_oracle_status = true DAN kode_asset kosong
+    //       (user konfirmasi manual tanpa kode aset — admin Oracle pakai Excel sendiri)
+    function computeIsMutated(kode: string, mutasi: boolean): boolean {
+      const k = (kode ?? '').trim()
+      if (k) {
+        // K1 — hanya berlaku kalau DAT sudah ada (hasDAT)
+        return activeKodeSet !== null && !activeKodeSet.has(k)
+      }
+      // K2 — kode kosong tapi sudah dicentang mutasi
+      return !!mutasi
+    }
+
+
     // Flatten: ratakan ke 1 row per item
     const flatItems = allItems.map((it: any) => {
       const sj = Array.isArray(it.sj) ? it.sj[0] : it.sj
@@ -56,6 +99,7 @@ export async function GET() {
         keterangan:      it.keterangan ?? '',
         mutasi_oracle:   !!it.mutasi_oracle_status,
         kode_asset:      it.kode_asset ?? '',
+        is_mutated:      computeIsMutated(it.kode_asset, !!it.mutasi_oracle_status),
         // SJ info
         sj_id:           sj?.id,
         no_sj:           sj?.no_sj ?? '',
@@ -115,7 +159,7 @@ export async function PATCH(req: Request) {
 
     const newKode = (kode_asset ?? '').trim()
 
-    // ── 1. Ambil kode_asset lama untuk deteksi perubahan ────────────────────
+    // ── 1. Ambil state lama untuk deteksi perubahan + lock guard ────────────
     const { data: oldItem, error: fetchErr } = await supabase
       .from('surat_jalan_items')
       .select('kode_asset')
@@ -124,6 +168,41 @@ export async function PATCH(req: Request) {
 
     if (fetchErr) throw new Error(fetchErr.message)
     const oldKode = (oldItem?.kode_asset ?? '').trim()
+
+    // ── Lock guard (server-side) ────────────────────────────────────────────
+    // UI sudah disable input untuk item terkunci, tapi guard ini mencegah
+    // bypass via request langsung. Evaluasi pakai state LAMA (sebelum update).
+    //
+    // Lock by DAT (K1): oldKode ada DAN tidak ada di assets_raw → mutasi
+    //   confirmed by system → TOLAK semua perubahan (permanen).
+    //
+    // Lock by manual (K2): oldMutasi true DAN oldKode kosong → konfirmasi
+    //   manual → IZINKAN unlock (escape hatch). User boleh membatalkan kalau
+    //   request-nya memang untuk reset (kode kosong + mutasi false).
+    if (oldKode) {
+      const { data: rawExists } = await supabase
+        .from('assets_raw')
+        .select('id')
+        .eq('kode_asset', oldKode)
+        .maybeSingle()
+
+      // Cek hasDAT — hindari false positive saat assets_raw benar-benar kosong
+      const { count: datCount } = await supabase
+        .from('assets_raw')
+        .select('*', { count: 'exact', head: true })
+
+      const hasDAT = (datCount ?? 0) > 0
+      const lockedByDAT = hasDAT && !rawExists?.id
+
+      if (lockedByDAT) {
+        return NextResponse.json(
+          { error: 'Item sudah dimutasi (kode hilang dari DAT) dan terkunci permanen.', locked: true },
+          { status: 409 }
+        )
+      }
+    }
+    // Lock manual (K2) sengaja TIDAK ditolak — biarkan request lewat agar
+    // tombol "batalkan" di UI berfungsi me-reset kode_asset + mutasi_oracle.
 
     // ── 2. Update item ──────────────────────────────────────────────────────
     const { error: updErr } = await supabase
