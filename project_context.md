@@ -233,6 +233,16 @@ Status: ✅ Completed (3 dari 4 sesi + Print feature)
 
 **Sidebar:** Dropdown "Surat Jalan Manual" dengan 4 sub-menu (auto-expand kalau child aktif).
 
+### ✅ Surat Jalan Sesi 4 — Alokasi Aset & Mutasi Oracle (10 Juni 2026)
+- Input kode aset + checkbox mutasi Oracle per item di Rekap Alokasi (onBlur save,
+  local override state, disabled untuk non-AT)
+- Tag "Allocated" di assets_clean — partial index, 2-step write via assets_raw lookup,
+  auto-cleanup kalau kode diubah/dikosongkan
+- Badge "Allocated" di Monitoring DAT + kolom "Status Alokasi" di Excel export
+- Dashboard warning cards (ganti welcome banner): Belum Input Kode Aset, Belum Mutasi
+  Oracle, Belum Mutasi WT (placeholder LPP/WT)
+- SQL migration: kolom tag + partial index di assets_clean
+
 ---
 
 ## Features In Progress
@@ -249,13 +259,13 @@ Monitoring alokasi:
 
 ## Features Planned
 
-### Surat Jalan Manual — Sesi 4
-Status: 📌 Planned
-
-Monitoring alokasi:
-- List barang yang sudah dialokasikan via SJ
-- Checkbox "sudah mutasi Oracle" per item
-- Deteksi fisik dikirim tapi belum dimutasi Oracle
+### 🎯 Next (Updated 10 Juni 2026)
+- Closing snapshot architecture (upload closing DAT/LPP + dashboard baris 3 & 5)
+- LPP Web Tracking integration (upload LPP, reconciliation DAT vs LPP, aktifkan
+  dashboard baris 2 & monitoring tab LPP, aktifkan warning card Belum Mutasi WT)
+- Authentication (Supabase Auth, role Admin/Viewer, protected routes)
+- Hapus status "draft" dari SJ (dipertimbangkan — simplifikasi flow)
+- Filter "Allocated only" di Monitoring (nice to have)
 
 ### DAT/LPP Closing Architecture
 Status: 📌 Planned (architecture sudah diputuskan, implementasi TBA)

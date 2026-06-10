@@ -1497,7 +1497,7 @@ Setelah pilih item di dropdown (Enter atau klik), Tab key sekarang bisa pindah f
 
 ---
 
-## Status Akhir Sesi (10 Juni 2026)
+## Rabu, 10 Juni 2026 (Status Akhir Sesi)
 
 ### Selesai
 - ✅ Bulk insert 928 master tujuan dari Excel
@@ -1515,3 +1515,112 @@ Setelah pilih item di dropdown (Enter atau klik), Tab key sekarang bisa pindah f
 4. Closing snapshots architecture
 5. LPP Web Tracking integration
 6. Authentication & Role Management
+
+## Sesi — 10 Juni 2026 (SJ Sesi 4: Alokasi Aset & Mutasi Oracle)
+
+### 1. Latar Belakang & Kebutuhan
+
+Setelah fitur Surat Jalan Manual (Sesi 1–3) selesai, sistem bisa mencatat pengiriman
+aset keluar CGA secara digital. Namun tidak ada mekanisme untuk memverifikasi apakah
+aset yang sudah dikirim fisik juga sudah diproses mutasi di sistem Oracle ERP perusahaan.
+Gap ini menyebabkan potensi discrepancy antara data fisik (sudah dikirim) dan data
+Oracle (belum dimutasi), yang berdampak pada akurasi laporan aset CGA.
+
+Kebutuhan bisnis yang melatarbelakangi:
+- User perlu tahu barang mana yang sudah dikirim tapi belum dimutasi Oracle
+- Aset yang sudah dialokasikan keluar perlu ditandai di database DAT agar monitoring
+  akurat (tidak dihitung sebagai aset aktif CGA)
+- Dashboard perlu menampilkan warning actionable, bukan sekadar info statis
+
+### 2. Pendekatan Teknis
+
+**A. Penyimpanan tag "Allocated"**
+Dipilih kolom `tag TEXT DEFAULT NULL` di `assets_clean` (Opsi persist di DB) dibanding
+virtual/computed via JOIN. Alasan: tag harus tetap ada walau data SJ diedit atau dihapus
+di masa depan, dan query monitoring tidak perlu JOIN tambahan ke `surat_jalan_items`
+setiap fetch — cukup baca kolom `tag` yang sudah ada.
+
+Trade-off: ada risiko orphan tag kalau aset di-upload ulang (DAT full replace akan
+hapus assets_clean via CASCADE, otomatis reset tag). Ini diterima karena upload DAT
+memang berarti data fresh — alokasi perlu diinput ulang.
+
+**B. Save alokasi onBlur, bukan auto-save per keystroke**
+Mengurangi jumlah PATCH request secara signifikan. User mengetik kode aset → blur
+(pindah kolom/klik lain) → baru tersimpan. Typo bisa dikoreksi dengan reinput langsung
+di kolom yang sama.
+
+**C. Local override state (allocOverride)**
+Setelah PATCH berhasil, state lokal diupdate via `allocOverride` Map tanpa refetch
+seluruh data dari server. Penting untuk performa di koneksi rendah — data rekap alokasi
+bisa ribuan row, refetch setiap save sangat tidak efisien.
+
+**D. Warning count via `count: exact, head: true`**
+Supabase mendukung query yang hanya mengembalikan COUNT tanpa transfer row data.
+Dipakai untuk 2 warning count di dashboard stats API — jauh lebih ringan dibanding
+fetch rows lalu hitung di server/client.
+
+**E. Partial index di assets_clean**
+```sql
+CREATE INDEX IF NOT EXISTS idx_assets_clean_tag
+ON assets_clean (tag) WHERE tag IS NOT NULL;
+```
+Mayoritas row `tag`-nya NULL (belum dialokasikan). Full index akan menyimpan ~4500
+entry NULL yang tidak berguna. Partial index hanya mengindex baris ber-tag, hemat
+storage dan lebih cepat untuk filter `WHERE tag = 'Allocated'`.
+
+### 3. Implementasi
+
+**Flow data alokasi (end-to-end):**
+```
+User input kode aset di Rekap Alokasi (onBlur)
+→ AllocationCell.persist() → PATCH /api/sj/report
+→ route: fetch kode lama dari DB
+→ UPDATE surat_jalan_items SET kode_asset, mutasi_oracle_status, mutasi_oracle_at
+→ SELECT assets_raw WHERE kode_asset = newKode (lookup raw_id)
+→ UPDATE assets_clean SET tag = 'Allocated' WHERE raw_id = rawId
+→ Kalau kode berubah: cek apakah kode lama masih dipakai SJ lain
+  → Kalau tidak dipakai: UPDATE assets_clean SET tag = NULL (bersihkan)
+→ Response: { success: true, tagged: boolean }
+→ Client: setAllocOverride(itemId, next) — update lokal tanpa refetch
+```
+
+**File yang dibuat/diubah:**
+| File | Jenis | Keterangan |
+|------|-------|------------|
+| `src/app/api/sj/report/route.ts` | Ubah | Tambah PATCH handler |
+| `src/app/api/monitoring/route.ts` | Ubah | Tambah field `tag` di SELECT |
+| `src/app/api/dashboard/stats/route.ts` | Ubah | Tambah warning counts |
+| `src/app/sj/report/page.tsx` | Ubah | AllocationCell + 2 kolom baru |
+| `src/app/monitoring/page.tsx` | Ubah | Badge "Allocated" |
+| `src/app/page.tsx` | Ubah | Ganti welcome banner → DashboardWarningCards |
+| `src/components/dashboard/DashboardWarningCards.tsx` | Baru | 3 warning card |
+| `src/hooks/useSJReport.ts` | Ubah | Tambah `kode_asset` di SJReportItem |
+| `src/hooks/useMonitoring.ts` | Ubah | Tambah `tag` di MonitoringAsset |
+| `src/lib/monitoringExporter.ts` | Ubah | Kolom "Status Alokasi" di Excel |
+| `src/lib/sjTypes.ts` | Ubah | Rapikan komentar field alokasi |
+
+**SQL migration:**
+```sql
+ALTER TABLE assets_clean ADD COLUMN IF NOT EXISTS tag TEXT DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_assets_clean_tag ON assets_clean (tag) WHERE tag IS NOT NULL;
+```
+
+### 4. Hasil dan Validasi
+
+- Input kode aset di Rekap Alokasi → badge "Allocated" muncul di Monitoring DAT
+  (dikonfirmasi langsung saat testing sesi ini)
+- Tag tersimpan di DB (`assets_clean.tag = 'Allocated'`) — bukan state lokal
+- Warning card di dashboard menampilkan count real-time dari DB
+- Export Excel Monitoring: kolom "Status Alokasi" muncul di sheet "Detail DAT"
+- Checkbox dan input disabled untuk barang non-AT (is_aktiva = false)
+- `npx tsc --noEmit` bersih tanpa error setelah fix import path
+
+### 5. Trade-off dan Keterbatasan
+
+| Aspek | Kelebihan | Keterbatasan |
+|-------|-----------|--------------|
+| Tag persist di DB | Tidak perlu JOIN saat query monitoring | Reset saat DAT di-upload ulang (by design) |
+| Save onBlur | Hemat request, UX natural | Tidak ada indikator "unsaved changes" eksplisit |
+| Local override | Tidak perlu refetch ribuan row | State hilang kalau user refresh halaman |
+| Warning count head:true | Sangat ringan, tidak transfer data | Tidak bisa tahu detail row mana yang bermasalah dari dashboard |
+| 2-step tag query | Bersih, tidak ada subquery kompleks | 2 round-trip ke DB per save (masih ringan untuk skala ini) |
