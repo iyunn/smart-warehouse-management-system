@@ -277,7 +277,37 @@ export default function UploadSection() {
 
     if (signal.aborted) return;
 
-    // Phase 2: Batch processing
+    // Phase 2: Clear existing data — sekali sebelum batch pertama
+    // Bagian dari Full Replace Strategy: DELETE semua assets_raw dulu,
+    // baru INSERT fresh. Dipisah dari /api/process agar tidak terpanggil
+    // di setiap batch request.
+    try {
+      const clearRes = await fetch("/api/process/clear", {
+        method: "POST",
+        signal,
+      });
+      const clearJson = await clearRes.json();
+      if (!clearJson.success) {
+        dispatch({
+          type: "ERROR",
+          message: "Gagal menghapus data lama.",
+          detail: clearJson.error ?? "Unknown error dari /api/process/clear",
+        });
+        return;
+      }
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      dispatch({
+        type: "ERROR",
+        message: "Gagal menghapus data lama.",
+        detail: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+
+    if (signal.aborted) return;
+
+    // Phase 3: Batch processing
     const { records, skippedRows } = parseResult;
     const totalBatches = Math.ceil(records.length / 500);
     dispatch({ type: "PROCESS_START", totalBatches });

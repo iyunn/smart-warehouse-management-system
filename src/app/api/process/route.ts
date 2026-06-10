@@ -35,21 +35,9 @@ export async function POST(req: Request) {
       result: classifyAsset(item.deskripsi, keywordRules ?? []),
     }))
 
-    // ── 3. DELETE semua assets_raw yang ada (full replace strategy) ───────────
-    // DAT adalah full snapshot — aset yang tidak ada di file terbaru berarti
-    // sudah dimutasi keluar dari CGA. assets_clean ikut terhapus via CASCADE.
-    const { error: deleteError } = await supabase
-      .from('assets_raw')
-      .delete()
-      .neq('kode_asset', '')   // delete all rows (neq '' = semua row)
-
-    if (deleteError) {
-      console.error('[route] delete error:', deleteError)
-      return NextResponse.json({ success: false, error: `Gagal hapus data lama: ${deleteError.message}` })
-    }
-
-    // ── 4. Batch insert assets_raw (500 rows per batch) ─────────────────────
-    // Supabase limit ~1000 rows per request — batching untuk aman
+    // ── 3. Batch insert assets_raw (500 rows per batch) ─────────────────────
+    // DELETE sudah dilakukan sekali via POST /api/process/clear
+    // sebelum batch pertama dikirim dari UploadSection.tsx.
     const BATCH_SIZE = 500
     const rawRows = classifiedData.map(({ raw }: any) => raw)
 
@@ -70,13 +58,13 @@ export async function POST(req: Request) {
       allInsertedRaw = [...allInsertedRaw, ...(batchResult ?? [])]
     }
 
-    // ── 5. Map kode_asset → raw_id ────────────────────────────────────────────
+    // ── 4. Map kode_asset → raw_id ────────────────────────────────────────────
     const rawIdMap = new Map<string, string>()
     for (const row of allInsertedRaw) {
       rawIdMap.set(row.kode_asset, row.id)
     }
 
-    // ── 6. Batch insert assets_clean (500 rows per batch) ────────────────────
+    // ── 5. Batch insert assets_clean (500 rows per batch) ────────────────────
     const cleanRows = classifiedData
       .map(({ raw, result }: any) => {
         const rawId = rawIdMap.get(raw.kode_asset)
