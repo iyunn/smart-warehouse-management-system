@@ -150,6 +150,7 @@ export function exportMonitoringToExcel(opts: MonitoringExportOptions): void {
       "Qty":              a.kuantitas,
       "Biaya Perolehan":  formatRupiah(a.biaya_perolehan),
       "Jumlah Tercatat":  formatRupiah(a.jumlah_tercatat),
+      "Status Alokasi":   a.tag === "Allocated" ? "Allocated" : "Belum Dialokasikan",
     }));
 
   // ── Build workbook ────────────────────────────────────────────────────
@@ -168,7 +169,7 @@ export function exportMonitoringToExcel(opts: MonitoringExportOptions): void {
 
   const ws2 = XLSX.utils.json_to_sheet(sheet2Rows);
   ws2["!cols"] = [
-    { wch: 5 },  // No
+    { wch: 5  }, // No
     { wch: 22 }, // Jenis
     { wch: 15 }, // Merk
     { wch: 12 }, // Cost Center
@@ -178,6 +179,7 @@ export function exportMonitoringToExcel(opts: MonitoringExportOptions): void {
     { wch: 6  }, // Qty
     { wch: 22 }, // Biaya Perolehan
     { wch: 22 }, // Jumlah Tercatat
+    { wch: 20 }, // Status Alokasi
   ];
   XLSX.utils.book_append_sheet(wb, ws2, "Detail DAT");
 

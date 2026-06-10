@@ -533,7 +533,14 @@ export default function MonitoringPage() {
                             <span className="text-white/60 truncate" title={a.merk}>{a.merk}</span>
                             <div><CGABadge toko={a.toko} /></div>
                             <span className="font-mono text-[10px] text-cyan-400/70 truncate" title={a.kode_asset}>{a.kode_asset}</span>
-                            <span className="text-white/50 truncate text-[10px]" title={a.deskripsi}>{a.deskripsi}</span>
+                            <span className="text-white/50 truncate text-[10px]" title={a.deskripsi}>
+                              {a.tag === "Allocated" && (
+                                <span className="inline-flex items-center mr-1.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-md border bg-blue-500/15 text-blue-300 border-blue-500/25 align-middle">
+                                  Allocated
+                                </span>
+                              )}
+                              {a.deskripsi}
+                            </span>
                             <span className="text-right font-mono text-white/70">{a.kuantitas}</span>
                             <span className="text-right text-[10px] text-white/50 font-mono">{formatRupiah(a.biaya_perolehan)}</span>
                             <span className="text-right text-[10px] text-white/40 font-mono">{formatRupiah(a.jumlah_tercatat)}</span>

@@ -14,6 +14,7 @@ export interface MonitoringAsset {
   kuantitas:       number;
   biaya_perolehan: number;
   jumlah_tercatat: number;
+  tag:             string | null;
 }
 
 export function useMonitoring() {

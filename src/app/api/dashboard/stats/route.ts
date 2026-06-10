@@ -14,6 +14,11 @@ export async function GET() {
       totalUnknownResult,
       lastUploadResult,
       assetsForBreakdownResult,
+      // ── Sesi 4: warning counts ────────────────────────────────────────────
+      // Barang AT yang sudah dikirim (ada SJ) tapi belum input kode aset
+      belumInputResult,
+      // Barang AT yang sudah input kode aset tapi belum dicentang mutasi Oracle
+      belumMutasiResult,
     ] = await Promise.all([
       supabase.from('assets_raw').select('*', { count: 'exact', head: true }),
 
@@ -31,6 +36,18 @@ export async function GET() {
       supabase.from('assets_raw')
         .select('toko, kuantitas, biaya_perolehan, jumlah_tercatat')
         .limit(10000),
+
+      // Belum input kode aset: item AT, kode_asset NULL
+      supabase.from('surat_jalan_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_aktiva', true)
+        .is('kode_asset', null),
+
+      // Belum mutasi Oracle: item AT, mutasi_oracle_status false
+      supabase.from('surat_jalan_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_aktiva', true)
+        .eq('mutasi_oracle_status', false),
     ])
 
     // ── Aggregate per cost center ───────────────────────────────────────────
@@ -80,6 +97,12 @@ export async function GET() {
         lppClosing: null,
       },
       breakdown,  // [{code: CGA1, items, qty, perolehan, tercatat}, ...]
+      // ── Sesi 4: warning counts ────────────────────────────────────────────
+      warnings: {
+        belumInputKodeAset: belumInputResult.count ?? 0,
+        belumMutasiOracle:  belumMutasiResult.count ?? 0,
+        belumMutasiWT:      null, // placeholder — aktif setelah integrasi LPP/WT
+      },
     })
 
   } catch (error) {

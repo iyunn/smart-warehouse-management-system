@@ -24,6 +24,7 @@ export async function GET(_req: NextRequest) {
           jenis,
           merk,
           confidence,
+          tag,
           raw:assets_raw!inner (
             id,
             kode_asset,
@@ -60,6 +61,7 @@ export async function GET(_req: NextRequest) {
         kuantitas:         raw?.kuantitas ?? 1,
         biaya_perolehan:   raw?.biaya_perolehan ?? 0,
         jumlah_tercatat:   raw?.jumlah_tercatat ?? 0,
+        tag:               item.tag ?? null,
       }
     })
 

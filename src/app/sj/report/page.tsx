@@ -233,9 +233,124 @@ const PageBtn = memo(({ active, children, ...props }: React.ButtonHTMLAttributes
 ));
 PageBtn.displayName = "PageBtn";
 
+// ─── Allocation Cell (Sesi 4) ──────────────────────────────────────────────
+// Input kode aset + checkbox mutasi Oracle, inline per row.
+// - Save onBlur (input) / onChange (checkbox) → PATCH /api/sj/report
+// - Isi kode aset → checkbox auto-true
+// - Barang non-AT (is_aktiva=false) → checkbox disabled (anti salah ceklist)
+interface AllocationState {
+  kode_asset: string;
+  mutasi_oracle: boolean;
+}
+
+const AllocationCell = memo(({
+  itemId, isAktiva, initialKode, initialMutasi, onSaved,
+}: {
+  itemId: string;
+  isAktiva: boolean;
+  initialKode: string;
+  initialMutasi: boolean;
+  onSaved: (itemId: string, next: AllocationState) => void;
+}) => {
+  const [kode, setKode]     = useState(initialKode);
+  const [mutasi, setMutasi] = useState(initialMutasi);
+  const [saving, setSaving] = useState(false);
+  const lastSaved = useRef<AllocationState>({ kode_asset: initialKode, mutasi_oracle: initialMutasi });
+
+  // Sync kalau data dari server berubah (mis. setelah refetch)
+  useEffect(() => {
+    setKode(initialKode);
+    setMutasi(initialMutasi);
+    lastSaved.current = { kode_asset: initialKode, mutasi_oracle: initialMutasi };
+  }, [initialKode, initialMutasi]);
+
+  const persist = useCallback(async (next: AllocationState) => {
+    // Skip kalau tidak ada perubahan dari state tersimpan terakhir
+    if (
+      next.kode_asset === lastSaved.current.kode_asset &&
+      next.mutasi_oracle === lastSaved.current.mutasi_oracle
+    ) return;
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/sj/report", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          item_id: itemId,
+          kode_asset: next.kode_asset,
+          mutasi_oracle_status: next.mutasi_oracle,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        lastSaved.current = next;
+        onSaved(itemId, next);
+      }
+    } catch {
+      // diam — biarkan user retry; nilai lokal tetap tampil
+    } finally {
+      setSaving(false);
+    }
+  }, [itemId, onSaved]);
+
+  const handleKodeBlur = useCallback(() => {
+    const trimmed = kode.trim();
+    // Isi kode → auto-centang mutasi (kecuali non-AT, tetap false)
+    const nextMutasi = trimmed && isAktiva ? true : (trimmed ? false : mutasi);
+    setMutasi(nextMutasi);
+    persist({ kode_asset: trimmed, mutasi_oracle: nextMutasi });
+  }, [kode, mutasi, isAktiva, persist]);
+
+  const handleCheckbox = useCallback(() => {
+    if (!isAktiva) return; // disabled untuk non-AT
+    const next = !mutasi;
+    setMutasi(next);
+    persist({ kode_asset: kode.trim(), mutasi_oracle: next });
+  }, [mutasi, kode, isAktiva, persist]);
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="text"
+        value={kode}
+        onChange={(e) => setKode(e.target.value)}
+        onBlur={handleKodeBlur}
+        placeholder={isAktiva ? "—" : "non-AT"}
+        disabled={!isAktiva}
+        suppressHydrationWarning
+        className={`w-[110px] bg-white/[0.04] border border-white/[0.08] text-[10px] font-mono placeholder:text-white/20 rounded-md px-2 py-1 focus:outline-none focus:border-cyan-500/50 transition-opacity ${
+          isAktiva ? "text-cyan-300 cursor-text" : "text-white/20 cursor-not-allowed opacity-40"
+        }`}
+      />
+      <label
+        className={`inline-flex items-center ${isAktiva ? "cursor-pointer" : "cursor-not-allowed opacity-40"}`}
+        title={isAktiva ? "Tandai sudah mutasi Oracle" : "Barang non-AT tidak perlu mutasi Oracle"}
+      >
+        <input
+          type="checkbox"
+          checked={mutasi}
+          onChange={handleCheckbox}
+          disabled={!isAktiva}
+          suppressHydrationWarning
+          className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-emerald-500"
+        />
+      </label>
+      {saving && <span className="text-[9px] text-white/30">…</span>}
+    </div>
+  );
+});
+AllocationCell.displayName = "AllocationCell";
+
 // ─── Main Page ────────────────────────────────────────────────────────────
 export default function SJReportPage() {
   const { items, loading } = useSJReport();
+
+  // Local override alokasi (biar tidak perlu refetch seluruh data setelah save)
+  const [allocOverride, setAllocOverride] = useState<Record<string, AllocationState>>({});
+  const handleAllocSaved = useCallback((itemId: string, next: AllocationState) => {
+    setAllocOverride((prev) => ({ ...prev, [itemId]: next }));
+  }, []);
 
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("all");
   const [dateFrom, setDateFrom]         = useState("");
@@ -480,8 +595,8 @@ export default function SJReportPage() {
           {/* Table */}
           <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] shadow-xl shadow-black/30">
             <div className="overflow-x-auto">
-              <div className="min-w-[1380px]">
-                <div className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_70px_220px_90px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+              <div className="min-w-[1560px]">
+                <div className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_70px_180px_90px_170px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
                   <span>Tanggal</span>
                   <span>No. SJ</span>
                   <span>Tujuan</span>
@@ -493,6 +608,7 @@ export default function SJReportPage() {
                   <span>Satuan</span>
                   <span>Keterangan</span>
                   <span>Status</span>
+                  <span>Kode Aset / Mutasi</span>
                 </div>
 
                 {loading ? (
@@ -513,9 +629,13 @@ export default function SJReportPage() {
                 ) : (
                   <>
                     <div className="divide-y divide-white/[0.04]">
-                      {paginated.map((it) => (
+                      {paginated.map((it) => {
+                        const alloc = allocOverride[it.item_id];
+                        const kodeVal   = alloc ? alloc.kode_asset    : it.kode_asset;
+                        const mutasiVal = alloc ? alloc.mutasi_oracle : it.mutasi_oracle;
+                        return (
                         <div key={it.item_id}
-                          className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_70px_220px_90px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
+                          className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_70px_180px_90px_170px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
                           <span className="text-white/60">{formatTanggal(it.tanggal)}</span>
                           <span className="font-mono text-cyan-400 truncate" title={it.no_sj}>{it.no_sj}</span>
                           <div className="min-w-0">
@@ -530,8 +650,16 @@ export default function SJReportPage() {
                           <span className="text-white/50">{it.satuan}</span>
                           <span className="text-white/50 truncate" title={it.keterangan}>{it.keterangan || "—"}</span>
                           <div><StatusBadge status={it.status} /></div>
+                          <AllocationCell
+                            itemId={it.item_id}
+                            isAktiva={it.is_aktiva}
+                            initialKode={kodeVal}
+                            initialMutasi={mutasiVal}
+                            onSaved={handleAllocSaved}
+                          />
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </>
                 )}

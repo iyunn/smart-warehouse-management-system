@@ -14,6 +14,7 @@ export interface SJReportItem {
   is_aktiva: boolean;
   keterangan: string;
   mutasi_oracle: boolean;
+  kode_asset: string;
   // SJ info
   sj_id: string;
   no_sj: string;

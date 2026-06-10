@@ -20,7 +20,7 @@ export async function GET() {
         .from('surat_jalan_items')
         .select(`
           id, urutan, jenis, merk, serial_number, qty, satuan,
-          is_baru, is_aktiva, keterangan, mutasi_oracle_status,
+          is_baru, is_aktiva, keterangan, mutasi_oracle_status, kode_asset,
           sj:surat_jalan!inner (
             id, no_sj, tanggal, pembawa, penerima, status, approved_by,
             tujuan:sj_tujuan (id, kode, nama)
@@ -55,6 +55,7 @@ export async function GET() {
         is_aktiva:       !!it.is_aktiva,
         keterangan:      it.keterangan ?? '',
         mutasi_oracle:   !!it.mutasi_oracle_status,
+        kode_asset:      it.kode_asset ?? '',
         // SJ info
         sj_id:           sj?.id,
         no_sj:           sj?.no_sj ?? '',
@@ -81,6 +82,107 @@ export async function GET() {
       items: flatItems,
       total: flatItems.length,
     })
+
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Error' },
+      { status: 500 }
+    )
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// PATCH /api/sj/report — update alokasi 1 item (kode_asset + mutasi_oracle)
+// ════════════════════════════════════════════════════════════════════════
+// Dipanggil onBlur dari kolom input di Rekap Alokasi.
+// Logic:
+//   - Update kode_asset + mutasi_oracle_status di surat_jalan_items
+//   - Kalau kode_asset diisi & cocok di assets_clean → tag 'Allocated'
+//   - Kalau kode_asset dikosongkan → bersihkan tag aset yang sebelumnya
+//     ter-tag oleh item ini (kalau tidak dipakai item lain)
+export async function PATCH(req: Request) {
+  try {
+    const body = await req.json()
+    const { item_id, kode_asset, mutasi_oracle_status } = body as {
+      item_id?: string
+      kode_asset?: string
+      mutasi_oracle_status?: boolean
+    }
+
+    if (!item_id) {
+      return NextResponse.json({ error: 'item_id wajib' }, { status: 400 })
+    }
+
+    const newKode = (kode_asset ?? '').trim()
+
+    // ── 1. Ambil kode_asset lama untuk deteksi perubahan ────────────────────
+    const { data: oldItem, error: fetchErr } = await supabase
+      .from('surat_jalan_items')
+      .select('kode_asset')
+      .eq('id', item_id)
+      .single()
+
+    if (fetchErr) throw new Error(fetchErr.message)
+    const oldKode = (oldItem?.kode_asset ?? '').trim()
+
+    // ── 2. Update item ──────────────────────────────────────────────────────
+    const { error: updErr } = await supabase
+      .from('surat_jalan_items')
+      .update({
+        kode_asset:           newKode || null,
+        mutasi_oracle_status: !!mutasi_oracle_status,
+        mutasi_oracle_at:     mutasi_oracle_status ? new Date().toISOString() : null,
+      })
+      .eq('id', item_id)
+
+    if (updErr) throw new Error(updErr.message)
+
+    // ── 3. Tag baru di assets_clean (kalau kode diisi & cocok) ──────────────
+    // assets_clean tidak punya kolom kode_asset langsung — relasinya via raw_id
+    // ke assets_raw. Jadi 2-step: cari raw_id dari kode, lalu tag clean-nya.
+    let tagged = false
+    if (newKode) {
+      const { data: rawRow } = await supabase
+        .from('assets_raw')
+        .select('id')
+        .eq('kode_asset', newKode)
+        .maybeSingle()
+
+      if (rawRow?.id) {
+        await supabase
+          .from('assets_clean')
+          .update({ tag: 'Allocated' })
+          .eq('raw_id', rawRow.id)
+        tagged = true
+      }
+    }
+
+    // ── 4. Bersihkan tag lama kalau kode berubah/dikosongkan ────────────────
+    // Hanya bersihkan kalau kode lama tidak dipakai item SJ lain.
+    if (oldKode && oldKode !== newKode) {
+      const { data: stillUsed } = await supabase
+        .from('surat_jalan_items')
+        .select('id')
+        .eq('kode_asset', oldKode)
+        .limit(1)
+
+      if (!stillUsed || stillUsed.length === 0) {
+        const { data: oldRaw } = await supabase
+          .from('assets_raw')
+          .select('id')
+          .eq('kode_asset', oldKode)
+          .maybeSingle()
+
+        if (oldRaw?.id) {
+          await supabase
+            .from('assets_clean')
+            .update({ tag: null })
+            .eq('raw_id', oldRaw.id)
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true, tagged })
 
   } catch (error) {
     return NextResponse.json(

@@ -18,6 +18,11 @@ export interface SJItem {
   is_baru: boolean;
   is_aktiva: boolean;
   keterangan: string;
+  // ── Sesi 4: Alokasi & Mutasi Oracle ──────────────────────────────────────
+  // kode_asset: kode aset yang diinput user di Rekap Alokasi (opsional).
+  // mutasi_oracle_status: apakah item ini sudah dimutasi di Oracle.
+  //   Auto-true saat kode_asset diisi, bisa di-uncheck manual.
+  //   Di-disable di UI kalau is_aktiva = false (barang non-AT).
   mutasi_oracle_status?: boolean;
   mutasi_oracle_at?: string;
   kode_asset?: string;
