@@ -74,6 +74,11 @@ function formatTanggal(iso: string): string {
   });
 }
 
+function formatHari(iso: string): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("id-ID", { weekday: "long" });
+}
+
 function isInDateRange(tanggal: string, from: string, to: string): boolean {
   if (!from && !to) return true;
   if (from && tanggal < from) return false;
@@ -653,8 +658,8 @@ export default function SJReportPage() {
           {/* Table */}
           <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] shadow-xl shadow-black/30">
             <div className="overflow-x-auto">
-              <div className="min-w-[1560px]">
-                <div className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_70px_180px_90px_170px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+              <div className="min-w-[1660px]">
+                <div className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_50px_70px_180px_90px_170px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
                   <span>Tanggal</span>
                   <span>No. SJ</span>
                   <span>Tujuan</span>
@@ -662,6 +667,7 @@ export default function SJReportPage() {
                   <span>Jenis</span>
                   <span>Merk</span>
                   <span>SN</span>
+                  <span>Baru</span>
                   <span className="text-right">Qty</span>
                   <span>Satuan</span>
                   <span>Keterangan</span>
@@ -699,8 +705,11 @@ export default function SJReportPage() {
                           : it.is_mutated;
                         return (
                         <div key={it.item_id}
-                          className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_70px_180px_90px_170px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
-                          <span className="text-white/60">{formatTanggal(it.tanggal)}</span>
+                          className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_50px_70px_180px_90px_170px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
+                          <div className="min-w-0">
+                            <p className="text-white/60">{formatTanggal(it.tanggal)}</p>
+                            <p className="text-[9px] text-white/30">{formatHari(it.tanggal)}</p>
+                          </div>
                           <span className="font-mono text-cyan-400 truncate" title={it.no_sj}>{it.no_sj}</span>
                           <div className="min-w-0">
                             <p className="text-white/80 truncate" title={it.tujuan_kode}>{it.tujuan_kode}</p>
@@ -710,6 +719,9 @@ export default function SJReportPage() {
                           <span className="text-white/70 truncate" title={it.jenis}>{it.jenis || "—"}</span>
                           <span className="text-white/60 truncate" title={it.merk}>{it.merk || "—"}</span>
                           <span className="font-mono text-white/50 truncate" title={it.serial_number}>{it.serial_number || "—"}</span>
+                          <span className={`text-[10px] font-medium ${it.is_baru ? "text-emerald-400" : "text-white/30"}`}>
+                            {it.is_baru ? "Baru" : "—"}
+                          </span>
                           <span className="text-right font-mono text-white/70">{it.qty}</span>
                           <span className="text-white/50">{it.satuan}</span>
                           <span className="text-white/50 truncate" title={it.keterangan}>{it.keterangan || "—"}</span>
