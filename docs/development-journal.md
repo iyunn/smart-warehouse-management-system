@@ -1516,7 +1516,7 @@ Setelah pilih item di dropdown (Enter atau klik), Tab key sekarang bisa pindah f
 5. LPP Web Tracking integration
 6. Authentication & Role Management
 
-## Sesi — 10 Juni 2026 (SJ Sesi 4: Alokasi Aset & Mutasi Oracle)
+# Sesi — 10 Juni 2026 (SJ Sesi 4: Alokasi Aset & Mutasi Oracle)
 
 ### 1. Latar Belakang & Kebutuhan
 
@@ -1624,3 +1624,40 @@ CREATE INDEX IF NOT EXISTS idx_assets_clean_tag ON assets_clean (tag) WHERE tag 
 | Local override | Tidak perlu refetch ribuan row | State hilang kalau user refresh halaman |
 | Warning count head:true | Sangat ringan, tidak transfer data | Tidak bisa tahu detail row mana yang bermasalah dari dashboard |
 | 2-step tag query | Bersih, tidak ada subquery kompleks | 2 round-trip ke DB per save (masih ringan untuk skala ini) |
+
+## Sesi — 10 Juni 2026 (SJ Sesi 4 Lanjutan: Lock Alokasi + Fix Stale Closure)
+
+### Fitur: Lock Alokasi saat Mutasi Confirmed
+
+**Latar belakang:** Setelah kode aset diinput di Rekap Alokasi, perlu ada mekanisme
+yang mencegah data diubah kalau mutasi sudah benar-benar terjadi — agar konsistensi
+data terjaga.
+
+**Dua kondisi lock:**
+- K1 (Lock by DAT): kode aset diinput tapi hilang dari assets_raw setelah upload DAT
+  baru → lock permanen, tidak bisa dibatalkan. DAT adalah sumber kebenaran.
+- K2 (Lock manual): checkbox mutasi dicentang tanpa kode aset (skenario user konfirmasi
+  tanpa tahu kode) → lock tapi ada tombol "batalkan" untuk koreksi false positive.
+
+**Tampilan locked:** teks statis + badge "✓ Dimutasi" (bukan input disabled).
+Lebih ringan dan intent lebih tegas sesuai prinsip optimal.
+
+**Guard berlapis:** UI render teks statis (tidak ada input), server tolak PATCH 409
+untuk lock by DAT (cegah bypass request langsung).
+
+### Bug Fix: Stale Closure di handleKodeBlur
+
+**Root cause:** `handleKodeBlur` capture `mutasi` dari closure lama. User ketik kode
+(mutasi auto-true) → hapus kode → blur → closure baca mutasi=true → persist
+`{kode:"", mutasi:true}` → K2 lock aktif tidak sengaja.
+
+**Fix:** Tambah `mutasiRef` yang selalu sync dengan nilai mutasi terkini. Semua handler
+baca dari ref, bukan closure. Kode dikosongkan → mutasi selalu reset false.
+
+### File yang Diubah
+| File | Perubahan |
+|------|-----------|
+| `src/app/api/sj/report/route.ts` | Tambah is_mutated di GET, lock guard di PATCH |
+| `src/app/sj/report/page.tsx` | Render kondisional locked/unlocked, fix stale closure |
+| `src/hooks/useSJReport.ts` | Tambah field is_mutated di type |
+

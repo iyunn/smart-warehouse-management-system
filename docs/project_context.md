@@ -92,7 +92,7 @@ Sistem ini bukan pengganti Oracle ERP maupun Web Tracking. Sistem ini berfungsi 
 
 ---
 
-# 2. Current Development State (per 7 Juni 2026)
+# 2. Current Development State ( per 10 Juni 2026 )
 
 ## Features Completed
 
@@ -233,15 +233,13 @@ Status: ✅ Completed (3 dari 4 sesi + Print feature)
 
 **Sidebar:** Dropdown "Surat Jalan Manual" dengan 4 sub-menu (auto-expand kalau child aktif).
 
-### ✅ Surat Jalan Sesi 4 — Alokasi Aset & Mutasi Oracle (10 Juni 2026)
-- Input kode aset + checkbox mutasi Oracle per item di Rekap Alokasi (onBlur save,
-  local override state, disabled untuk non-AT)
-- Tag "Allocated" di assets_clean — partial index, 2-step write via assets_raw lookup,
-  auto-cleanup kalau kode diubah/dikosongkan
-- Badge "Allocated" di Monitoring DAT + kolom "Status Alokasi" di Excel export
-- Dashboard warning cards (ganti welcome banner): Belum Input Kode Aset, Belum Mutasi
-  Oracle, Belum Mutasi WT (placeholder LPP/WT)
-- SQL migration: kolom tag + partial index di assets_clean
+### ✅ SJ Sesi 4 — Alokasi Aset & Mutasi Oracle (10 Juni 2026)
+- Input kode aset + checkbox mutasi Oracle per item di Rekap Alokasi
+- Tag "Allocated" di assets_clean, badge di Monitoring, kolom di Excel export  
+- Dashboard warning cards (ganti welcome banner)
+- Lock alokasi: K1 lock by DAT (permanen), K2 lock manual (ada escape hatch)
+- DAT sebagai sumber kebenaran — kode hilang dari DAT = mutasi confirmed = lock
+- Fix stale closure mutasiRef di AllocationCell
 
 ---
 
