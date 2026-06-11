@@ -11,6 +11,32 @@ export interface CGAStats {
   tercatat: number;
 }
 
+// ─── Sesi 4 Lanjutan: Rekap Pengiriman ────────────────────────────────────
+export interface MutasiProgress {
+  totalAT: number;        // semua item AT yang keluar via SJ submitted
+  sudahMutasi: number;    // dari totalAT, yang mutasi_oracle_status=true
+  belumMutasi: number;    // totalAT - sudahMutasi
+  progressPct: number;    // sudahMutasi / totalAT * 100
+  terlamaHari: number | null;  // umur item terlama yang belum mutasi (hari)
+}
+
+export interface TopJenis {
+  jenis: string;
+  total: number;
+}
+
+export interface DailyShipment {
+  tanggal: string;  // YYYY-MM-DD
+  total: number;    // jumlah item yang keluar di tanggal itu
+}
+
+export interface RekapPengiriman {
+  mutasiProgress: MutasiProgress;
+  topJenisBelumAlokasi: TopJenis[];   // top 5 dari assets_clean tag IS NULL
+  dailyShipment: DailyShipment[];     // bulan berjalan, semua tanggal terisi
+  bulanLabel: string;                  // "Juni 2026"
+}
+
 export interface DashboardStats {
   summary: {
     totalAsset: number;
@@ -25,6 +51,12 @@ export interface DashboardStats {
     lppClosing: string | null;
   };
   breakdown: CGAStats[];
+  warnings?: {
+    belumInputKodeAset: number;
+    belumMutasiOracle: number;
+    belumMutasiWT: number | null;
+  };
+  rekapPengiriman?: RekapPengiriman;
 }
 
 export function useDashboardStats() {

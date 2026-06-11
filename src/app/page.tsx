@@ -5,11 +5,11 @@ import Topbar from "@/components/Topbar";
 import DataStatusCards from "@/components/dashboard/DataStatusCards";
 import DashboardWarningCards from "@/components/dashboard/DashboardWarningCards";
 import CGASummaryCards from "@/components/dashboard/CGASummaryCards";
+import RekapPengirimanCards from "@/components/dashboard/RekapPengirimanCards";
 import {
   DATvsLPPPlaceholder,
   TrendClosingPlaceholder,
   ClosingVsUpdatePlaceholder,
-  RekapPengirimanPlaceholder,
 } from "@/components/dashboard/PlaceholderCards";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 
@@ -60,8 +60,14 @@ export default function DashboardPage() {
           {/* Baris 5: Closing vs Update (placeholder) */}
           <ClosingVsUpdatePlaceholder />
 
-          {/* Baris 6: Rekap Pengiriman (placeholder) */}
-          <RekapPengirimanPlaceholder />
+          {/* Baris 6: Rekap Pengiriman (LIVE) */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-2">Rekap Pengiriman dari Gudang ke Toko</p>
+            <RekapPengirimanCards
+              data={(data as any)?.rekapPengiriman ?? null}
+              loading={loading}
+            />
+          </div>
 
         </main>
       </div>
