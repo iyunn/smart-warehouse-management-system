@@ -92,7 +92,7 @@ Sistem ini bukan pengganti Oracle ERP maupun Web Tracking. Sistem ini berfungsi 
 
 ---
 
-# 2. Current Development State ( per 10 Juni 2026 )
+# 2. Current Development State ( per 11 Juni 2026 )
 
 ## Features Completed
 
@@ -241,30 +241,32 @@ Status: ✅ Completed (3 dari 4 sesi + Print feature)
 - DAT sebagai sumber kebenaran — kode hilang dari DAT = mutasi confirmed = lock
 - Fix stale closure mutasiRef di AllocationCell
 
+### ✅ SJ Sesi 4 Complete (11 Juni 2026)
+- Kolom Mutasi WT (independen, MutasiWTCell terpisah, hover-reveal batalkan)
+- Fix PATCH overwrite bug (conditional update per field)
+- Hover-reveal batalkan untuk Oracle & WT
+- Rekap Pengiriman dashboard live (3 card)
+- Re-apply tag Allocated otomatis saat upload DAT
+- Validasi duplikat kode aset + berbagai bugfix AllocationCell
+
 ---
 
 ## Features In Progress
 
-### Surat Jalan Manual — Sesi 4
-Status: 🚧 Planned (Next sesi)
-
-Monitoring alokasi:
-- List barang yang sudah dialokasikan via SJ
-- Checkbox "sudah mutasi Oracle" per item
-- Deteksi fisik dikirim tapi belum dimutasi Oracle
+tidak ada fitur yang sedang dikerjakan saat ini
 
 ---
 
 ## Features Planned
 
-### 🎯 Next (Updated 10 Juni 2026)
+### 🎯 Next (Updated 11 Juni 2026)
+- Warning card "Belum Mutasi WT" di dashboard — aktifkan dari placeholder
+  (kolom mutasi_wt_status sudah ada di DB)
+- Export Excel Rekap Alokasi — tambah kolom mutasi_wt
 - Closing snapshot architecture (upload closing DAT/LPP + dashboard baris 3 & 5)
-- LPP Web Tracking integration (upload LPP, reconciliation DAT vs LPP, aktifkan
-  dashboard baris 2 & monitoring tab LPP, aktifkan warning card Belum Mutasi WT)
+- LPP Web Tracking integration (upload LPP, reconciliation DAT vs LPP)
 - Authentication (Supabase Auth, role Admin/Viewer, protected routes)
-- Hapus status "draft" dari SJ (dipertimbangkan — simplifikasi flow)
-- Filter "Allocated only" di Monitoring (nice to have)
-- card "RINGKASAN ASET PER GUDANG" pada dashboard masih belum update datanya sesuai dengan table monitoring.
+- Bab 3 & 4 laporan TA — semua fitur core sudah cukup untuk ditulis
 
 ### DAT/LPP Closing Architecture
 Status: 📌 Planned (architecture sudah diputuskan, implementasi TBA)

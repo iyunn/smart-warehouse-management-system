@@ -1516,7 +1516,7 @@ Setelah pilih item di dropdown (Enter atau klik), Tab key sekarang bisa pindah f
 5. LPP Web Tracking integration
 6. Authentication & Role Management
 
-# Sesi — 10 Juni 2026 (SJ Sesi 4: Alokasi Aset & Mutasi Oracle)
+# Kamis, 11 Juni 2026 (SJ Sesi 4: Alokasi Aset & Mutasi Oracle)
 
 ### 1. Latar Belakang & Kebutuhan
 
@@ -1661,3 +1661,61 @@ baca dari ref, bukan closure. Kode dikosongkan → mutasi selalu reset false.
 | `src/app/sj/report/page.tsx` | Render kondisional locked/unlocked, fix stale closure |
 | `src/hooks/useSJReport.ts` | Tambah field is_mutated di type |
 
+## Sesi — 11 Juni 2026 (SJ Sesi 4 Lanjutan: Mutasi WT + Berbagai Fix)
+
+### Fitur & Fix
+
+**1. Kolom Mutasi WT di Rekap Alokasi**
+Checkbox independen per item untuk konfirmasi mutasi Web Tracking. Tidak ada relasi
+dengan kode_asset atau mutasi Oracle. Behavior: belum dicentang → checkbox normal;
+sudah dicentang → badge ungu "✓ WT" + tombol "batalkan" yang hanya muncul saat hover
+(hover-reveal pattern). Dipisah sebagai komponen `MutasiWTCell` terpisah dari
+`AllocationCell` agar tidak ada coupling antar kolom.
+
+SQL migration:
+```sql
+ALTER TABLE surat_jalan_items
+ADD COLUMN IF NOT EXISTS mutasi_wt_status BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS mutasi_wt_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+```
+
+**2. Fix PATCH overwrite bug**
+PATCH handler sebelumnya selalu update semua field (`kode_asset`, `mutasi_oracle_status`,
+`mutasi_wt_status`) sekaligus. Akibatnya saat `MutasiWTCell` centang WT tanpa kirim
+`kode_asset`, field `kode_asset` ter-overwrite jadi NULL. Fix: conditional update —
+hanya update field yang ada di request body.
+
+**3. Hover-reveal "batalkan" di Oracle & WT**
+Tombol "batalkan" untuk lock manual Oracle dan WT sebelumnya selalu tampil (jelek secara
+UX). Diganti dengan hover-reveal pattern: `opacity-0 group-hover:opacity-100` —
+tombol hanya muncul saat user hover di cell. Clean, tidak berantakan.
+
+**4. Rekap Pengiriman Dashboard (dari sesi sebelumnya)**
+3 card baru di dashboard menggantikan placeholder:
+- Card 1: Progres Mutasi Oracle (progress bar + 3 angka + terlama belum mutasi)
+- Card 2: Top 5 Jenis Barang Keluar bulan berjalan (2-step query karena PostgREST
+  join filter tidak reliable)
+- Card 3: Trend harian item keluar bulan berjalan (bar chart recharts)
+
+**5. Berbagai bugfix Rekap Alokasi**
+- Fix stale closure `mutasiRef` di `handleKodeBlur`
+- Fix lock bypass reset: izinkan reset `{kode:"", mutasi:false}` bypass K1 lock
+- Fix Rules of Hooks: `useMemo` tidak boleh di dalam `.map()`
+- Validasi duplikat kode aset client-side (border merah + pesan "kode sudah dipakai")
+- Kolom "Baru" (is_baru) ditambah antara SN dan Qty
+- Tanggal 2 baris: tanggal + nama hari (derive client-side)
+
+### File yang Diubah
+| File | Perubahan |
+|------|-----------|
+| `src/app/api/sj/report/route.ts` | Fix PATCH conditional update, tambah mutasi_wt |
+| `src/app/sj/report/page.tsx` | MutasiWTCell, hover-reveal, kolom Baru, tanggal+hari, duplikat validation |
+| `src/hooks/useSJReport.ts` | Tambah `mutasi_wt`, `is_mutated` di type |
+| `src/lib/sjTypes.ts` | Tambah `mutasi_wt_status`, `mutasi_wt_at` |
+| `src/app/api/dashboard/stats/route.ts` | 3 query rekap pengiriman |
+| `src/hooks/useDashboardStats.ts` | Type RekapPengiriman + turunannya |
+| `src/components/dashboard/RekapPengirimanCards.tsx` | Baru — 3 card rekap pengiriman |
+| `src/app/page.tsx` | Ganti RekapPengirimanPlaceholder → live |
+| `src/app/api/process/route.ts` | Re-apply tag Allocated setelah upload DAT |
+| `src/lib/excelExporter.ts` | Tambah kolom Kode Aset di export SJ |
+| `src/lib/monitoringExporter.ts` | Tambah kolom Status Alokasi di export Monitoring |
