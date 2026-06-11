@@ -264,6 +264,7 @@ Monitoring alokasi:
 - Authentication (Supabase Auth, role Admin/Viewer, protected routes)
 - Hapus status "draft" dari SJ (dipertimbangkan — simplifikasi flow)
 - Filter "Allocated only" di Monitoring (nice to have)
+- card "RINGKASAN ASET PER GUDANG" pada dashboard masih belum update datanya sesuai dengan table monitoring.
 
 ### DAT/LPP Closing Architecture
 Status: 📌 Planned (architecture sudah diputuskan, implementasi TBA)
