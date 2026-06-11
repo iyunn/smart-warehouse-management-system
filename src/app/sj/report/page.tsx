@@ -74,6 +74,11 @@ function formatTanggal(iso: string): string {
   });
 }
 
+function formatHari(iso: string): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("id-ID", { weekday: "long" });
+}
+
 function isInDateRange(tanggal: string, from: string, to: string): boolean {
   if (!from && !to) return true;
   if (from && tanggal < from) return false;
@@ -233,17 +238,6 @@ const PageBtn = memo(({ active, children, ...props }: React.ButtonHTMLAttributes
 ));
 PageBtn.displayName = "PageBtn";
 
-// ─── Allocation Cell (Sesi 4 + Lock) ───────────────────────────────────────
-// Input kode aset + checkbox mutasi Oracle, inline per row.
-// - Save onBlur (input) / onChange (checkbox) → PATCH /api/sj/report
-// - Isi kode aset → checkbox auto-true
-// - Barang non-AT (is_aktiva=false) → checkbox disabled (anti salah ceklist)
-//
-// Lock (isMutated=true) → render teks statis, tidak bisa diedit:
-//   - Lock by DAT (kode hilang dari assets_raw) → permanen, tanpa escape hatch
-//     (DAT sumber kebenaran, mutasi tidak bisa dibantah)
-//   - Lock by manual (checkbox on, kode kosong) → ada tombol "Batalkan"
-//     untuk koreksi false positive
 interface AllocationState {
   kode_asset: string;
   mutasi_oracle: boolean;
@@ -257,17 +251,16 @@ const AllocationCell = memo(({
   isMutated: boolean;
   initialKode: string;
   initialMutasi: boolean;
-  usedKodes: Set<string>;  // kode yang sudah dipakai item lain (untuk validasi duplikat)
+  usedKodes: Set<string>;
   onSaved: (itemId: string, next: AllocationState) => void;
 }) => {
   const [kode, setKode]         = useState(initialKode);
   const [mutasi, setMutasi]     = useState(initialMutasi);
   const [saving, setSaving]     = useState(false);
-  const [dupError, setDupError] = useState(false); // true kalau kode sudah dipakai item lain
+  const [dupError, setDupError] = useState(false);
   const lastSaved  = useRef<AllocationState>({ kode_asset: initialKode, mutasi_oracle: initialMutasi });
-  const mutasiRef  = useRef(initialMutasi); // track nilai mutasi terkini, bebas stale closure
+  const mutasiRef  = useRef(initialMutasi);
 
-  // Sync state + ref kalau data dari server berubah (mis. setelah refetch)
   useEffect(() => {
     setKode(initialKode);
     setMutasi(initialMutasi);
@@ -276,7 +269,6 @@ const AllocationCell = memo(({
   }, [initialKode, initialMutasi]);
 
   const persist = useCallback(async (next: AllocationState) => {
-    // Skip kalau tidak ada perubahan dari state tersimpan terakhir
     if (
       next.kode_asset === lastSaved.current.kode_asset &&
       next.mutasi_oracle === lastSaved.current.mutasi_oracle
@@ -298,12 +290,11 @@ const AllocationCell = memo(({
         lastSaved.current = next;
         onSaved(itemId, next);
       } else if (res.status === 409) {
-        // Item sudah terkunci di server — revert tampilan ke nilai tersimpan
         setKode(lastSaved.current.kode_asset);
         setMutasi(lastSaved.current.mutasi_oracle);
       }
     } catch {
-      // diam — biarkan user retry; nilai lokal tetap tampil
+      // diam — biarkan user retry
     } finally {
       setSaving(false);
     }
@@ -311,20 +302,13 @@ const AllocationCell = memo(({
 
   const handleKodeBlur = useCallback(() => {
     const trimmed = kode.trim();
-
-    // Validasi duplikat — cek apakah kode sudah dipakai item lain.
-    // Exclude initialKode (kode milik cell ini sendiri) agar tidak flag diri sendiri
-    // saat user re-input kode yang sama.
     if (trimmed && trimmed !== (initialKode ?? '').trim() && usedKodes.has(trimmed)) {
       setDupError(true);
       return;
     }
     setDupError(false);
-
     const currentMutasi = mutasiRef.current;
-    const nextMutasi = trimmed
-      ? (isAktiva ? true : false)
-      : false;
+    const nextMutasi = trimmed ? (isAktiva ? true : false) : false;
     if (nextMutasi !== currentMutasi) {
       mutasiRef.current = nextMutasi;
       setMutasi(nextMutasi);
@@ -333,16 +317,15 @@ const AllocationCell = memo(({
   }, [kode, isAktiva, usedKodes, persist]);
 
   const handleCheckbox = useCallback(() => {
-    if (!isAktiva) return; // disabled untuk non-AT
+    if (!isAktiva) return;
     const next = !mutasiRef.current;
     mutasiRef.current = next;
     setMutasi(next);
     persist({ kode_asset: kode.trim(), mutasi_oracle: next });
   }, [kode, isAktiva, persist]);
 
-  // ── Mode LOCKED: render teks statis ───────────────────────────────────────
   if (isMutated) {
-    const lockedByDAT = !!kode.trim(); // ada kode → lock by DAT; kode kosong → lock manual
+    const lockedByDAT = !!kode.trim();
     return (
       <div className="flex items-center gap-1.5">
         {kode.trim() ? (
@@ -352,14 +335,10 @@ const AllocationCell = memo(({
         )}
         <span
           className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-md border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 whitespace-nowrap"
-          title={lockedByDAT
-            ? "Sudah dimutasi — kode aset hilang dari DAT terbaru"
-            : "Dikonfirmasi mutasi secara manual"}
+          title={lockedByDAT ? "Sudah dimutasi — kode aset hilang dari DAT terbaru" : "Dikonfirmasi mutasi secara manual"}
         >
           ✓ Dimutasi
         </span>
-        {/* Escape hatch hanya untuk lock manual (false positive bisa dikoreksi).
-            Lock by DAT tidak bisa dibatalkan — DAT sumber kebenaran. */}
         {!lockedByDAT && (
           <button
             type="button"
@@ -375,7 +354,6 @@ const AllocationCell = memo(({
     );
   }
 
-  // ── Mode NORMAL: input + checkbox ─────────────────────────────────────────
   return (
     <div className="flex items-center gap-2">
       <div className="relative">
@@ -384,17 +362,17 @@ const AllocationCell = memo(({
           value={kode}
           onChange={(e) => { setKode(e.target.value); setDupError(false); }}
           onBlur={handleKodeBlur}
-        placeholder={isAktiva ? "—" : "non-AT"}
-        disabled={!isAktiva}
-        suppressHydrationWarning
-        className={`w-[110px] bg-white/[0.04] border text-[10px] font-mono placeholder:text-white/20 rounded-md px-2 py-1 focus:outline-none transition-opacity ${
-          !isAktiva
-            ? "border-white/[0.08] text-white/20 cursor-not-allowed opacity-40"
-            : dupError
-            ? "border-rose-500/60 text-rose-300 focus:border-rose-500"
-            : "border-white/[0.08] text-cyan-300 cursor-text focus:border-cyan-500/50"
-        }`}
-      />
+          placeholder={isAktiva ? "—" : "non-AT"}
+          disabled={!isAktiva}
+          suppressHydrationWarning
+          className={`w-[110px] bg-white/[0.04] border text-[10px] font-mono placeholder:text-white/20 rounded-md px-2 py-1 focus:outline-none transition-opacity ${
+            !isAktiva
+              ? "border-white/[0.08] text-white/20 cursor-not-allowed opacity-40"
+              : dupError
+              ? "border-rose-500/60 text-rose-300 focus:border-rose-500"
+              : "border-white/[0.08] text-cyan-300 cursor-text focus:border-cyan-500/50"
+          }`}
+        />
         {dupError && (
           <span className="absolute left-0 top-full mt-0.5 text-[9px] text-rose-400 whitespace-nowrap">
             kode sudah dipakai
@@ -430,8 +408,6 @@ export default function SJReportPage() {
     setAllocOverride((prev) => ({ ...prev, [itemId]: next }));
   }, []);
 
-  // Set semua kode_asset yang sudah dipakai (untuk validasi duplikat per cell).
-  // Merge data server (items) dengan override lokal — selalu up-to-date tanpa refetch.
   const usedKodes = useMemo(() => {
     const s = new Set<string>();
     for (const it of items) {
@@ -685,8 +661,8 @@ export default function SJReportPage() {
           {/* Table */}
           <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] shadow-xl shadow-black/30">
             <div className="overflow-x-auto">
-              <div className="min-w-[1560px]">
-                <div className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_70px_180px_90px_170px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+              <div className="min-w-[1660px]">
+                <div className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_50px_70px_180px_90px_170px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
                   <span>Tanggal</span>
                   <span>No. SJ</span>
                   <span>Tujuan</span>
@@ -694,6 +670,7 @@ export default function SJReportPage() {
                   <span>Jenis</span>
                   <span>Merk</span>
                   <span>SN</span>
+                  <span>Baru</span>
                   <span className="text-right">Qty</span>
                   <span>Satuan</span>
                   <span>Keterangan</span>
@@ -731,8 +708,11 @@ export default function SJReportPage() {
                           : it.is_mutated;
                         return (
                         <div key={it.item_id}
-                          className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_70px_180px_90px_170px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
-                          <span className="text-white/60">{formatTanggal(it.tanggal)}</span>
+                          className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_50px_70px_180px_90px_170px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
+                          <div className="min-w-0">
+                            <p className="text-white/60">{formatTanggal(it.tanggal)}</p>
+                            <p className="text-[9px] text-white/30">{formatHari(it.tanggal)}</p>
+                          </div>
                           <span className="font-mono text-cyan-400 truncate" title={it.no_sj}>{it.no_sj}</span>
                           <div className="min-w-0">
                             <p className="text-white/80 truncate" title={it.tujuan_kode}>{it.tujuan_kode}</p>
@@ -742,6 +722,9 @@ export default function SJReportPage() {
                           <span className="text-white/70 truncate" title={it.jenis}>{it.jenis || "—"}</span>
                           <span className="text-white/60 truncate" title={it.merk}>{it.merk || "—"}</span>
                           <span className="font-mono text-white/50 truncate" title={it.serial_number}>{it.serial_number || "—"}</span>
+                          <span className={`text-[10px] font-medium ${it.is_baru ? "text-emerald-400" : "text-white/30"}`}>
+                            {it.is_baru ? "Baru" : "—"}
+                          </span>
                           <span className="text-right font-mono text-white/70">{it.qty}</span>
                           <span className="text-white/50">{it.satuan}</span>
                           <span className="text-white/50 truncate" title={it.keterangan}>{it.keterangan || "—"}</span>
