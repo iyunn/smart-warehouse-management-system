@@ -26,6 +26,8 @@ export interface SJItem {
   mutasi_oracle_status?: boolean;
   mutasi_oracle_at?: string;
   kode_asset?: string;
+  mutasi_wt_status?: boolean;
+  mutasi_wt_at?: string;
 }
 
 export interface SuratJalan {

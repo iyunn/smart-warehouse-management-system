@@ -300,6 +300,7 @@ const AllocationCell = memo(({
     }
   }, [itemId, onSaved]);
 
+
   const handleKodeBlur = useCallback(() => {
     const trimmed = kode.trim();
     if (trimmed && trimmed !== (initialKode ?? '').trim() && usedKodes.has(trimmed)) {
@@ -327,7 +328,7 @@ const AllocationCell = memo(({
   if (isMutated) {
     const lockedByDAT = !!kode.trim();
     return (
-      <div className="flex items-center gap-1.5">
+      <div className="group flex items-center gap-1.5">
         {kode.trim() ? (
           <span className="font-mono text-[10px] text-emerald-400/80 truncate" title={kode}>{kode}</span>
         ) : (
@@ -343,7 +344,7 @@ const AllocationCell = memo(({
           <button
             type="button"
             onClick={() => { setMutasi(false); persist({ kode_asset: "", mutasi_oracle: false }); }}
-            className="text-[9px] text-white/30 hover:text-rose-300 underline decoration-dotted"
+            className="text-[9px] text-white/30 hover:text-rose-300 underline decoration-dotted opacity-0 group-hover:opacity-100 transition-opacity"
             title="Batalkan konfirmasi mutasi manual"
           >
             batalkan
@@ -397,6 +398,75 @@ const AllocationCell = memo(({
   );
 });
 AllocationCell.displayName = "AllocationCell";
+
+// ─── Mutasi WT Cell ────────────────────────────────────────────────────────
+const MutasiWTCell = memo(({ itemId, initialMutasiWT }: {
+  itemId: string;
+  initialMutasiWT: boolean;
+}) => {
+  const [mutasiWT, setMutasiWT] = useState(initialMutasiWT);
+  const [saving, setSaving]     = useState(false);
+  const wtRef = useRef(initialMutasiWT);
+
+  useEffect(() => {
+    setMutasiWT(initialMutasiWT);
+    wtRef.current = initialMutasiWT;
+  }, [initialMutasiWT]);
+
+  const persist = useCallback(async (next: boolean) => {
+    wtRef.current = next;
+    setMutasiWT(next);
+    setSaving(true);
+    try {
+      await fetch("/api/sj/report", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item_id: itemId, mutasi_wt_status: next }),
+      });
+    } catch {
+      // diam — nilai lokal tetap
+    } finally {
+      setSaving(false);
+    }
+  }, [itemId]);
+
+  // Sudah dicentang → teks statis + tombol batalkan
+  if (mutasiWT) {
+    return (
+      <div className="group flex items-center justify-center gap-1.5">
+        <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-md border bg-violet-500/10 text-violet-400 border-violet-500/20 whitespace-nowrap">
+          ✓ WT
+        </span>
+        <button
+          type="button"
+          onClick={() => persist(false)}
+          className="text-[9px] text-white/30 hover:text-rose-300 underline decoration-dotted opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Batalkan konfirmasi mutasi WT"
+        >
+          batalkan
+        </button>
+        {saving && <span className="text-[9px] text-white/30">…</span>}
+      </div>
+    );
+  }
+
+  // Belum dicentang → checkbox normal
+  return (
+    <div className="flex items-center justify-center gap-1.5">
+      <label className="inline-flex items-center cursor-pointer" title="Tandai sudah mutasi Web Tracking">
+        <input
+          type="checkbox"
+          checked={false}
+          onChange={() => persist(true)}
+          suppressHydrationWarning
+          className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-violet-500"
+        />
+      </label>
+      {saving && <span className="text-[9px] text-white/30">…</span>}
+    </div>
+  );
+});
+MutasiWTCell.displayName = "MutasiWTCell";
 
 // ─── Main Page ────────────────────────────────────────────────────────────
 export default function SJReportPage() {
@@ -661,8 +731,8 @@ export default function SJReportPage() {
           {/* Table */}
           <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] shadow-xl shadow-black/30">
             <div className="overflow-x-auto">
-              <div className="min-w-[1660px]">
-                <div className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_50px_70px_180px_90px_170px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+              <div className="min-w-[1760px]">
+                <div className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_50px_70px_180px_90px_150px_80px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
                   <span>Tanggal</span>
                   <span>No. SJ</span>
                   <span>Tujuan</span>
@@ -676,6 +746,7 @@ export default function SJReportPage() {
                   <span>Keterangan</span>
                   <span>Status</span>
                   <span>Kode Aset / Mutasi</span>
+                  <span className="text-center">Mutasi WT</span>
                 </div>
 
                 {loading ? (
@@ -708,7 +779,7 @@ export default function SJReportPage() {
                           : it.is_mutated;
                         return (
                         <div key={it.item_id}
-                          className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_50px_70px_180px_90px_170px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
+                          className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_50px_70px_180px_90px_150px_80px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
                           <div className="min-w-0">
                             <p className="text-white/60">{formatTanggal(it.tanggal)}</p>
                             <p className="text-[9px] text-white/30">{formatHari(it.tanggal)}</p>
@@ -737,6 +808,10 @@ export default function SJReportPage() {
                             initialMutasi={mutasiVal}
                             usedKodes={usedKodes}
                             onSaved={handleAllocSaved}
+                          />
+                          <MutasiWTCell
+                            itemId={it.item_id}
+                            initialMutasiWT={alloc ? (alloc as any).mutasi_wt ?? it.mutasi_wt : it.mutasi_wt}
                           />
                         </div>
                         );

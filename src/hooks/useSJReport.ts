@@ -16,6 +16,7 @@ export interface SJReportItem {
   mutasi_oracle: boolean;
   kode_asset: string;
   is_mutated: boolean;
+  mutasi_wt: boolean;
   // SJ info
   sj_id: string;
   no_sj: string;

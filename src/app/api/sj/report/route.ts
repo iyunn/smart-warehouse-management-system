@@ -20,7 +20,7 @@ export async function GET() {
         .from('surat_jalan_items')
         .select(`
           id, urutan, jenis, merk, serial_number, qty, satuan,
-          is_baru, is_aktiva, keterangan, mutasi_oracle_status, kode_asset,
+          is_baru, is_aktiva, keterangan, mutasi_oracle_status, kode_asset, mutasi_wt_status,
           sj:surat_jalan!inner (
             id, no_sj, tanggal, pembawa, penerima, status, approved_by,
             tujuan:sj_tujuan (id, kode, nama)
@@ -100,6 +100,7 @@ export async function GET() {
         mutasi_oracle:   !!it.mutasi_oracle_status,
         kode_asset:      it.kode_asset ?? '',
         is_mutated:      computeIsMutated(it.kode_asset, !!it.mutasi_oracle_status),
+        mutasi_wt:       !!it.mutasi_wt_status,
         // SJ info
         sj_id:           sj?.id,
         no_sj:           sj?.no_sj ?? '',
@@ -147,10 +148,11 @@ export async function GET() {
 export async function PATCH(req: Request) {
   try {
     const body = await req.json()
-    const { item_id, kode_asset, mutasi_oracle_status } = body as {
+    const { item_id, kode_asset, mutasi_oracle_status, mutasi_wt_status } = body as {
       item_id?: string
       kode_asset?: string
       mutasi_oracle_status?: boolean
+      mutasi_wt_status?: boolean
     }
 
     if (!item_id) {
@@ -204,14 +206,28 @@ export async function PATCH(req: Request) {
       }
     }
 
-    // ── 2. Update item ──────────────────────────────────────────────────────
+    // ── 2. Update item — hanya field yang dikirim ───────────────────────────
+    // MutasiWTCell hanya kirim mutasi_wt_status tanpa kode_asset/mutasi_oracle.
+    // AllocationCell kirim kode_asset + mutasi_oracle_status tanpa mutasi_wt.
+    // Gunakan conditional update agar tidak overwrite field yang tidak dikirim.
+    const updatePayload: Record<string, any> = {}
+
+    // kode_asset + mutasi_oracle: update hanya kalau ada di request body
+    if (kode_asset !== undefined || mutasi_oracle_status !== undefined) {
+      updatePayload.kode_asset           = newKode || null
+      updatePayload.mutasi_oracle_status = !!mutasi_oracle_status
+      updatePayload.mutasi_oracle_at     = mutasi_oracle_status ? new Date().toISOString() : null
+    }
+
+    // mutasi_wt: update hanya kalau dikirim
+    if (mutasi_wt_status !== undefined) {
+      updatePayload.mutasi_wt_status = !!mutasi_wt_status
+      updatePayload.mutasi_wt_at     = mutasi_wt_status ? new Date().toISOString() : null
+    }
+
     const { error: updErr } = await supabase
       .from('surat_jalan_items')
-      .update({
-        kode_asset:           newKode || null,
-        mutasi_oracle_status: !!mutasi_oracle_status,
-        mutasi_oracle_at:     mutasi_oracle_status ? new Date().toISOString() : null,
-      })
+      .update(updatePayload)
       .eq('id', item_id)
 
     if (updErr) throw new Error(updErr.message)
