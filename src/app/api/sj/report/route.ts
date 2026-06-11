@@ -174,19 +174,21 @@ export async function PATCH(req: Request) {
     // bypass via request langsung. Evaluasi pakai state LAMA (sebelum update).
     //
     // Lock by DAT (K1): oldKode ada DAN tidak ada di assets_raw → mutasi
-    //   confirmed by system → TOLAK semua perubahan (permanen).
+    //   confirmed by system → TOLAK perubahan.
     //
-    // Lock by manual (K2): oldMutasi true DAN oldKode kosong → konfirmasi
-    //   manual → IZINKAN unlock (escape hatch). User boleh membatalkan kalau
-    //   request-nya memang untuk reset (kode kosong + mutasi false).
-    if (oldKode) {
+    //   PENGECUALIAN: kalau user mau RESET (newKode kosong + mutasi false),
+    //   selalu izinkan. Ini recovery path — user typo kode lalu hapus.
+    //   Tanpa pengecualian ini, typo jadi lock permanen yang tidak bisa dibuka.
+    //
+    // Lock by manual (K2): izinkan lewat — escape hatch "batalkan" di UI.
+    const isReset = !newKode && !mutasi_oracle_status
+    if (oldKode && !isReset) {
       const { data: rawExists } = await supabase
         .from('assets_raw')
         .select('id')
         .eq('kode_asset', oldKode)
         .maybeSingle()
 
-      // Cek hasDAT — hindari false positive saat assets_raw benar-benar kosong
       const { count: datCount } = await supabase
         .from('assets_raw')
         .select('*', { count: 'exact', head: true })
@@ -201,8 +203,6 @@ export async function PATCH(req: Request) {
         )
       }
     }
-    // Lock manual (K2) sengaja TIDAK ditolak — biarkan request lewat agar
-    // tombol "batalkan" di UI berfungsi me-reset kode_asset + mutasi_oracle.
 
     // ── 2. Update item ──────────────────────────────────────────────────────
     const { error: updErr } = await supabase
