@@ -54,7 +54,7 @@ export interface DashboardStats {
   warnings?: {
     belumInputKodeAset: number;
     belumMutasiOracle: number;
-    belumMutasiWT: number | null;
+    belumMutasiWT: number;
   };
   rekapPengiriman?: RekapPengiriman;
 }

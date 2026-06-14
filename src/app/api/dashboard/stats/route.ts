@@ -26,6 +26,8 @@ export async function GET() {
       belumInputResult,
       // Barang AT yang sudah input kode aset tapi belum dicentang mutasi Oracle
       belumMutasiResult,
+      // Barang AT yang belum dicentang mutasi WT
+      belumMutasiWTResult,
       // ── Rekap Pengiriman ──────────────────────────────────────────────────
       // Card 1 + 3 source: items AT dari SJ submitted+completed
       // Join ke surat_jalan untuk filter status & ambil tanggal
@@ -61,6 +63,12 @@ export async function GET() {
         .select('*', { count: 'exact', head: true })
         .eq('is_aktiva', true)
         .eq('mutasi_oracle_status', false),
+
+      // Belum mutasi WT: item AT, mutasi_wt_status false
+      supabase.from('surat_jalan_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_aktiva', true)
+        .eq('mutasi_wt_status', false),
 
       // AT items dari SJ status submitted+completed (exclude draft).
       // Single query untuk Card 1 (mutasi progress) + Card 3 (daily shipment).
@@ -227,7 +235,7 @@ export async function GET() {
       warnings: {
         belumInputKodeAset: belumInputResult.count ?? 0,
         belumMutasiOracle:  belumMutasiResult.count ?? 0,
-        belumMutasiWT:      null, // placeholder — aktif setelah integrasi LPP/WT
+        belumMutasiWT:      belumMutasiWTResult.count ?? 0,
       },
       // ── Rekap Pengiriman (3 cards) ────────────────────────────────────────
       rekapPengiriman: {

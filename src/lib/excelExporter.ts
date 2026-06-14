@@ -31,6 +31,8 @@ export function exportSJReportToExcel({
     "Pembawa":       it.pembawa,
     "Penerima":      it.penerima,
     "Kode Aset":     it.kode_asset || "—",
+    "Mutasi Oracle": it.mutasi_oracle ? "Ya" : "Tidak",
+    "Mutasi WT":     it.mutasi_wt ? "Ya" : "Tidak",
     "Jenis":         it.jenis,
     "Merk":          it.merk,
     "Serial Number": it.serial_number,
@@ -56,6 +58,8 @@ export function exportSJReportToExcel({
     { wch: 18 },  // Pembawa
     { wch: 28 },  // Penerima
     { wch: 20 },  // Kode Aset
+    { wch: 12 },  // Mutasi Oracle
+    { wch: 10 },  // Mutasi WT
     { wch: 20 },  // Jenis
     { wch: 15 },  // Merk
     { wch: 18 },  // Serial Number

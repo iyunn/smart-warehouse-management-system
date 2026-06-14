@@ -10,7 +10,7 @@ import { memo } from "react";
 export interface DashboardWarnings {
   belumInputKodeAset: number;
   belumMutasiOracle: number;
-  belumMutasiWT: number | null;
+  belumMutasiWT: number;
 }
 
 interface WarningCardProps {
@@ -18,13 +18,14 @@ interface WarningCardProps {
   count: number | null;
   hint: string;
   href?: string;
-  variant: "rose" | "amber" | "slate";
+  variant: "rose" | "amber" | "violet" | "slate";
   loading: boolean;
 }
 
 const VARIANT_MAP: Record<string, { border: string; bg: string; text: string; dot: string }> = {
   rose:  { border: "border-rose-500/25",  bg: "bg-rose-500/[0.05]",  text: "text-rose-300",  dot: "bg-rose-400"  },
   amber: { border: "border-amber-500/25", bg: "bg-amber-500/[0.05]", text: "text-amber-300", dot: "bg-amber-400" },
+  violet: { border: "border-violet-500/25", bg: "bg-violet-500/[0.05]", text: "text-violet-300", dot: "bg-violet-400" },
   slate: { border: "border-white/[0.08]", bg: "bg-white/[0.02]",     text: "text-white/40",  dot: "bg-white/20"  },
 };
 
@@ -64,7 +65,7 @@ function DashboardWarningCards({
   warnings: DashboardWarnings | null;
   loading: boolean;
 }) {
-  const w = warnings ?? { belumInputKodeAset: 0, belumMutasiOracle: 0, belumMutasiWT: null };
+  const w = warnings ?? { belumInputKodeAset: 0, belumMutasiOracle: 0, belumMutasiWT: 0 };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -87,8 +88,9 @@ function DashboardWarningCards({
       <WarningCard
         label="Belum Mutasi Web Tracking"
         count={w.belumMutasiWT}
-        hint=""
-        variant="slate"
+        hint="item AT belum dimutasi WT"
+        href="/sj/report"
+        variant="violet"
         loading={loading}
       />
     </div>
