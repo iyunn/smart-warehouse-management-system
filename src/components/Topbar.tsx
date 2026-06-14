@@ -1,9 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function Topbar({ title }: { title: string }) {
   const [search, setSearch] = useState("");
+  const [dateStr, setDateStr] = useState("");
+
+  // Render tanggal hanya di client untuk hindari hydration mismatch —
+  // new Date() di server vs client bisa beda hari kalau dirender pas tengah malam.
+  useEffect(() => {
+    setDateStr(
+      new Date().toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
+    );
+  }, []);
 
   return (
     <header className="h-16 flex items-center justify-between px-6 border-b border-white/[0.06] bg-[#0d1117]/80 backdrop-blur-md sticky top-0 z-20">
@@ -11,7 +20,7 @@ export default function Topbar({ title }: { title: string }) {
       <div>
         <h1 className="text-white text-[16px] font-semibold tracking-tight leading-none">{title}</h1>
         <p className="text-slate-500 text-[10px] mt-0.5">
-          {new Date().toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          {dateStr || "\u00A0"}
         </p>
       </div>
 
