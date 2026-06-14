@@ -241,16 +241,18 @@ PageBtn.displayName = "PageBtn";
 interface AllocationState {
   kode_asset: string;
   mutasi_oracle: boolean;
+  mutasi_wt: boolean;
 }
 
 const AllocationCell = memo(({
-  itemId, isAktiva, isMutated, initialKode, initialMutasi, usedKodes, onSaved,
+  itemId, isAktiva, isMutated, initialKode, initialMutasi, initialMutasiWT, usedKodes, onSaved,
 }: {
   itemId: string;
   isAktiva: boolean;
   isMutated: boolean;
   initialKode: string;
   initialMutasi: boolean;
+  initialMutasiWT: boolean;
   usedKodes: Set<string>;
   onSaved: (itemId: string, next: AllocationState) => void;
 }) => {
@@ -258,17 +260,19 @@ const AllocationCell = memo(({
   const [mutasi, setMutasi]     = useState(initialMutasi);
   const [saving, setSaving]     = useState(false);
   const [dupError, setDupError] = useState(false);
-  const lastSaved  = useRef<AllocationState>({ kode_asset: initialKode, mutasi_oracle: initialMutasi });
+  const lastSaved  = useRef<AllocationState>({ kode_asset: initialKode, mutasi_oracle: initialMutasi, mutasi_wt: initialMutasiWT });
   const mutasiRef  = useRef(initialMutasi);
+  const mutasiWTRef = useRef(initialMutasiWT);
 
   useEffect(() => {
     setKode(initialKode);
     setMutasi(initialMutasi);
     mutasiRef.current = initialMutasi;
-    lastSaved.current = { kode_asset: initialKode, mutasi_oracle: initialMutasi };
-  }, [initialKode, initialMutasi]);
+    mutasiWTRef.current = initialMutasiWT;
+    lastSaved.current = { kode_asset: initialKode, mutasi_oracle: initialMutasi, mutasi_wt: initialMutasiWT };
+  }, [initialKode, initialMutasi, initialMutasiWT]);
 
-  const persist = useCallback(async (next: AllocationState) => {
+  const persist = useCallback(async (next: Omit<AllocationState, 'mutasi_wt'>) => {
     if (
       next.kode_asset === lastSaved.current.kode_asset &&
       next.mutasi_oracle === lastSaved.current.mutasi_oracle
@@ -287,8 +291,9 @@ const AllocationCell = memo(({
       });
       const json = await res.json();
       if (json.success) {
-        lastSaved.current = next;
-        onSaved(itemId, next);
+        const merged: AllocationState = { ...next, mutasi_wt: mutasiWTRef.current };
+        lastSaved.current = merged;
+        onSaved(itemId, merged);
       } else if (res.status === 409) {
         setKode(lastSaved.current.kode_asset);
         setMutasi(lastSaved.current.mutasi_oracle);
@@ -400,9 +405,11 @@ const AllocationCell = memo(({
 AllocationCell.displayName = "AllocationCell";
 
 // ─── Mutasi WT Cell ────────────────────────────────────────────────────────
-const MutasiWTCell = memo(({ itemId, initialMutasiWT }: {
+const MutasiWTCell = memo(({ itemId, isAktiva, initialMutasiWT, onSaved }: {
   itemId: string;
+  isAktiva: boolean;
   initialMutasiWT: boolean;
+  onSaved: (itemId: string, mutasiWT: boolean) => void;
 }) => {
   const [mutasiWT, setMutasiWT] = useState(initialMutasiWT);
   const [saving, setSaving]     = useState(false);
@@ -418,19 +425,38 @@ const MutasiWTCell = memo(({ itemId, initialMutasiWT }: {
     setMutasiWT(next);
     setSaving(true);
     try {
-      await fetch("/api/sj/report", {
+      const res = await fetch("/api/sj/report", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ item_id: itemId, mutasi_wt_status: next }),
       });
+      const json = await res.json();
+      if (json.success) {
+        onSaved(itemId, next);
+      }
     } catch {
       // diam — nilai lokal tetap
     } finally {
       setSaving(false);
     }
-  }, [itemId]);
+  }, [itemId, onSaved]);
 
-  // Sudah dicentang → teks statis + tombol batalkan
+  // Non-AT → disabled, tidak perlu mutasi WT
+  if (!isAktiva) {
+    return (
+      <div className="flex items-center justify-center gap-1.5">
+        <input
+          type="checkbox"
+          checked={false}
+          disabled
+          suppressHydrationWarning
+          className="h-3.5 w-3.5 rounded border-white/10 bg-white/[0.02] opacity-30 cursor-not-allowed"
+        />
+      </div>
+    );
+  }
+
+  // Sudah dicentang → teks statis + tombol batalkan (hover-reveal)
   if (mutasiWT) {
     return (
       <div className="group flex items-center justify-center gap-1.5">
@@ -476,6 +502,17 @@ export default function SJReportPage() {
   const [allocOverride, setAllocOverride] = useState<Record<string, AllocationState>>({});
   const handleAllocSaved = useCallback((itemId: string, next: AllocationState) => {
     setAllocOverride((prev) => ({ ...prev, [itemId]: next }));
+  }, []);
+
+  // Override khusus mutasi_wt — di-merge ke AllocationState yang sama agar
+  // konsisten dengan source of truth allocOverride dan tidak hilang saat
+  // pindah halaman pagination (root cause bug: MutasiWTCell sebelumnya
+  // hanya punya state lokal, hilang saat row di-unmount/remount).
+  const handleWtSaved = useCallback((itemId: string, mutasiWT: boolean, fallback: AllocationState) => {
+    setAllocOverride((prev) => {
+      const current = prev[itemId] ?? fallback;
+      return { ...prev, [itemId]: { ...current, mutasi_wt: mutasiWT } };
+    });
   }, []);
 
   const usedKodes = useMemo(() => {
@@ -771,6 +808,7 @@ export default function SJReportPage() {
                         const alloc = allocOverride[it.item_id];
                         const kodeVal   = alloc ? alloc.kode_asset    : it.kode_asset;
                         const mutasiVal = alloc ? alloc.mutasi_oracle : it.mutasi_oracle;
+                        const mutasiWtVal = alloc ? alloc.mutasi_wt : it.mutasi_wt;
                         // is_mutated dari server (lock by DAT). Kalau user baru
                         // konfirmasi manual lewat override (kode kosong + mutasi on),
                         // lock langsung tanpa nunggu refetch.
@@ -806,12 +844,19 @@ export default function SJReportPage() {
                             isMutated={isMutatedVal}
                             initialKode={kodeVal}
                             initialMutasi={mutasiVal}
+                            initialMutasiWT={mutasiWtVal}
                             usedKodes={usedKodes}
                             onSaved={handleAllocSaved}
                           />
                           <MutasiWTCell
                             itemId={it.item_id}
-                            initialMutasiWT={alloc ? (alloc as any).mutasi_wt ?? it.mutasi_wt : it.mutasi_wt}
+                            isAktiva={it.is_aktiva}
+                            initialMutasiWT={mutasiWtVal}
+                            onSaved={(itemId, mutasiWT) => handleWtSaved(itemId, mutasiWT, {
+                              kode_asset: kodeVal,
+                              mutasi_oracle: mutasiVal,
+                              mutasi_wt: mutasiWtVal,
+                            })}
                           />
                         </div>
                         );
