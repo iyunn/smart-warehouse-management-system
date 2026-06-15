@@ -7,7 +7,7 @@ import { useMonitoring } from "@/hooks/useMonitoring";
 import { exportMonitoringToExcel, buildMonitoringFilename } from "@/lib/monitoringExporter";
 
 type CostCenter  = "ALL" | "CGA1" | "CGA2" | "CGA3";
-type SearchField = "jenis" | "merk" | "kode_asset" | "kategori_oracle" | "deskripsi";
+type SearchField = "jenis" | "merk" | "kode_asset" | "kategori_oracle" | "deskripsi" | "invoice_number" | "catatan";
 
 // Tag punya field + value masing-masing
 interface FilterTag {
@@ -25,6 +25,8 @@ const FIELD_OPTIONS: { value: SearchField; label: string }[] = [
   { value: "kode_asset",      label: "Kode Aset"       },
   { value: "kategori_oracle", label: "Kategori Oracle" },
   { value: "deskripsi",       label: "Deskripsi"       },
+  { value: "invoice_number",  label: "Invoice Number"  },
+  { value: "catatan",         label: "Catatan"         },
 ];
 
 const FIELD_LABEL: Record<SearchField, string> = {
@@ -33,6 +35,8 @@ const FIELD_LABEL: Record<SearchField, string> = {
   kode_asset:      "Kode Aset",
   kategori_oracle: "Kategori",
   deskripsi:       "Deskripsi",
+  invoice_number:  "Invoice Number",
+  catatan:         "Catatan",
 };
 
 // ─── CGA config ───────────────────────────────────────────────────────────
@@ -167,6 +171,8 @@ const MultiFieldTagInput = memo(({ tags, onChange }: MultiFieldTagInputProps) =>
     kode_asset:      "bg-blue-500/15 border-blue-500/25 text-blue-300",
     kategori_oracle: "bg-amber-500/15 border-amber-500/25 text-amber-300",
     deskripsi:       "bg-slate-500/15 border-slate-500/25 text-slate-300",
+    invoice_number:  "bg-emerald-500/15 border-emerald-500/25 text-emerald-300",
+    catatan:         "bg-rose-500/15 border-rose-500/25 text-rose-300",
   };
 
   return (
@@ -414,6 +420,8 @@ export default function MonitoringPage() {
             case "kode_asset":      return a.kode_asset.toLowerCase().includes(q);
             case "kategori_oracle": return a.kategori_oracle.toLowerCase().includes(q);
             case "deskripsi":       return a.deskripsi.toLowerCase().includes(q);
+            case "invoice_number":  return a.invoice_number.toLowerCase().includes(q);
+            case "catatan":         return (catatanOverride[a.kode_asset] ?? a.catatan).toLowerCase().includes(q);
             default:                return true;
           }
         })
@@ -421,7 +429,7 @@ export default function MonitoringPage() {
     }
 
     return result;
-  }, [assets, costCenter, filterTags]);
+  }, [assets, costCenter, filterTags, catatanOverride]);
 
   // Sort: kalau sort.key null → default multi-sort (Kategori→Jenis→Merk→CGA→Kode).
   // Kalau ada sort.key → sort by kolom itu (asc/desc).
