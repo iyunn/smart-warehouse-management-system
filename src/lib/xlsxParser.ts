@@ -147,6 +147,8 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
       kuantitas: 1,
       biaya_perolehan: 0,
       jumlah_tercatat: 0,
+      invoice_number: "",
+      tanggal_dokumen: "",
     };
 
     for (const [excelCol, apiField] of Object.entries(COLUMN_MAP)) {
