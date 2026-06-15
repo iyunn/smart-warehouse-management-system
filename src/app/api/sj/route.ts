@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
     const { data, error } = await supabase
       .from('surat_jalan')
       .select(`
-        id, no_sj, tanggal, pembawa, penerima, status, approved_by,
+        id, no_sj, tanggal, pembawa, penerima, status, approved_by, is_archived,
         created_at, updated_at,
         tujuan:sj_tujuan(id, kode, nama),
         items:surat_jalan_items(jenis, serial_number)
@@ -157,10 +157,23 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { id, tanggal, tujuan_id, pembawa, penerima, approved_by, items, status, reschedule_only } = body
+    const { id, tanggal, tujuan_id, pembawa, penerima, approved_by, items, status, reschedule_only, archive_only, is_archived } = body
 
     if (!id) {
       return NextResponse.json({ error: 'ID wajib' }, { status: 400 })
+    }
+
+    // ── Mode 0: Archive toggle only (cuma update is_archived) ───────────────
+    if (archive_only) {
+      const { data, error } = await supabase
+        .from('surat_jalan')
+        .update({ is_archived: !!is_archived, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single()
+
+      if (error) throw new Error(error.message)
+      return NextResponse.json({ sj: data })
     }
 
     // ── Mode 1: Reschedule only (cuma update tanggal) ──────────────────────

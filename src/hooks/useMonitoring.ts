@@ -15,6 +15,9 @@ export interface MonitoringAsset {
   biaya_perolehan: number;
   jumlah_tercatat: number;
   tag:             string | null;
+  invoice_number:  string;
+  tanggal_dokumen: string;
+  catatan:         string;
 }
 
 export function useMonitoring() {

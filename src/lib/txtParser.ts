@@ -64,6 +64,76 @@ function normalizeHeader(h: string): string {
   return h.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+// ─── Tanggal Dokumen parser ────────────────────────────────────────────────
+// Oracle export tidak konsisten: separator bisa "/" atau "-", urutan bisa
+// DD/MM atau MM/DD tergantung setting komputer user saat input.
+//
+// Heuristic:
+//   - Pisahkan dengan / atau -
+//   - Cari bagian 4-digit = tahun (posisi awal ISO atau akhir)
+//   - Dari 2 bagian sisanya: kalau salah satu > 12 → itu pasti HARI (DD)
+//   - Kalau dua-duanya <= 12 → ambigu → default DD/MM (standar Indonesia)
+//   - Output: "DD-Mmm-YYYY" (e.g. "25-Mar-2026")
+//   - Kalau gagal total → kembalikan raw value apa adanya (jangan buang data)
+const MONTH_ABBR = [
+  "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+  "Jul", "Agu", "Sep", "Okt", "Nov", "Des",
+];
+
+function parseTanggalDokumen(raw: string): string {
+  const str = (raw ?? "").trim();
+  if (!str || str === "-" || str === " - ") return "";
+
+  // Split dengan / atau -
+  const parts = str.split(/[/\-]/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length !== 3) return str; // format tak dikenal → raw
+
+  const nums = parts.map((p) => parseInt(p, 10));
+  if (nums.some((n) => isNaN(n))) return str; // ada non-angka → raw
+
+  let year: number, a: number, b: number;
+
+  // Deteksi posisi tahun (4 digit)
+  if (parts[0].length === 4) {
+    // ISO: YYYY-MM-DD
+    year = nums[0];
+    a = nums[1]; // bulan
+    b = nums[2]; // hari
+    // ISO selalu MM-DD, jadi langsung
+    return formatTanggal(b, a, year, str);
+  } else if (parts[2].length === 4) {
+    // DD/MM/YYYY atau MM/DD/YYYY
+    year = nums[2];
+    a = nums[0];
+    b = nums[1];
+  } else {
+    // Tahun 2 digit atau format aneh → coba asumsi posisi terakhir = tahun
+    year = nums[2] < 100 ? 2000 + nums[2] : nums[2];
+    a = nums[0];
+    b = nums[1];
+  }
+
+  // Heuristic DD vs MM untuk bagian a & b
+  let day: number, month: number;
+  if (a > 12 && b <= 12) {
+    day = a; month = b;          // a pasti hari
+  } else if (b > 12 && a <= 12) {
+    day = b; month = a;          // b pasti hari
+  } else {
+    // Ambigu (dua-duanya <=12) → default DD/MM (standar Indonesia)
+    day = a; month = b;
+  }
+
+  return formatTanggal(day, month, year, str);
+}
+
+function formatTanggal(day: number, month: number, year: number, raw: string): string {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return raw; // invalid → raw
+  const dd = String(day).padStart(2, "0");
+  const mmm = MONTH_ABBR[month - 1];
+  return `${dd}-${mmm}-${year}`;
+}
+
 /** Auto-detect delimiter: pipe atau tab */
 function detectDelimiter(firstLine: string): string {
   const pipeCount = (firstLine.match(/\|/g) ?? []).length;
@@ -82,6 +152,8 @@ const TXT_COLUMN_MAP: Record<string, keyof AssetRecord> = {
   "kuantitas":        "kuantitas",
   "biaya perolehan":  "biaya_perolehan",
   "jumlah tercatat":  "jumlah_tercatat",
+  "invoice number":   "invoice_number",
+  "tanggal dokumen":  "tanggal_dokumen",
 }
 
 const FINANCIAL_FIELDS = new Set<keyof AssetRecord>(["kuantitas", "biaya_perolehan", "jumlah_tercatat"])
@@ -146,6 +218,8 @@ export async function parseTxtFile(file: File): Promise<ParseResult> {
       kuantitas:       1,
       biaya_perolehan: 0,
       jumlah_tercatat: 0,
+      invoice_number:  "",
+      tanggal_dokumen: "",
     };
 
     for (const [headerName, fieldName] of Object.entries(TXT_COLUMN_MAP)) {
@@ -156,6 +230,8 @@ export async function parseTxtFile(file: File): Promise<ParseResult> {
 
       if (FINANCIAL_FIELDS.has(fieldName)) {
         (record as any)[fieldName] = cellToNumber(rawValue);
+      } else if (fieldName === "tanggal_dokumen") {
+        (record as any)[fieldName] = parseTanggalDokumen(rawValue);
       } else {
         (record as any)[fieldName] = cellToString(rawValue);
       }

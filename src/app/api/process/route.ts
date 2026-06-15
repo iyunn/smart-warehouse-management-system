@@ -31,6 +31,8 @@ export async function POST(req: Request) {
         kuantitas:       item.kuantitas       ?? 1,
         biaya_perolehan: item.biaya_perolehan ?? 0,
         jumlah_tercatat: item.jumlah_tercatat ?? 0,
+        invoice_number:  item.invoice_number  ?? null,
+        tanggal_dokumen: item.tanggal_dokumen ?? null,
       },
       result: classifyAsset(item.deskripsi, keywordRules ?? []),
     }))
@@ -122,6 +124,35 @@ export async function POST(req: Request) {
             .from('assets_clean')
             .update({ tag: 'Allocated' })
             .in('raw_id', batch)
+        }
+      }
+    }
+
+    // ── 7. Auto-clear asset_notes untuk aset yang sudah keluar CGA ───────────
+    // Prinsip: catatan valid SELAMA aset tidak pernah meninggalkan CGA.
+    // Kalau kode_asset di asset_notes TIDAK ada di DAT baru (rawIdMap), berarti
+    // aset sudah keluar/mutasi → catatan dianggap selesai siklusnya → hapus.
+    // Kalau aset balik lagi 6 bulan kemudian, itu siklus baru tanpa catatan basi.
+    {
+      const { data: allNotes } = await supabase
+        .from('asset_notes')
+        .select('kode_asset')
+
+      if (allNotes && allNotes.length > 0) {
+        // kode_asset yang sudah tidak ada di DAT baru
+        const staleKodes = allNotes
+          .map((n: any) => n.kode_asset)
+          .filter((k: string) => !rawIdMap.has(k))
+
+        if (staleKodes.length > 0) {
+          // Batch delete (500 per batch)
+          for (let i = 0; i < staleKodes.length; i += BATCH_SIZE) {
+            const batch = staleKodes.slice(i, i + BATCH_SIZE)
+            await supabase
+              .from('asset_notes')
+              .delete()
+              .in('kode_asset', batch)
+          }
         }
       }
     }

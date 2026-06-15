@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, useMemo, useCallback } from "react";
+import { memo, useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
@@ -20,6 +20,11 @@ function formatTanggal(iso: string): string {
   return new Date(iso).toLocaleDateString("id-ID", {
     day: "2-digit", month: "short", year: "numeric",
   });
+}
+
+function formatHari(iso: string): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("id-ID", { weekday: "long" });
 }
 
 function isInPeriod(tanggal: string, period: PeriodFilter): boolean {
@@ -62,6 +67,61 @@ const StatusBadge = memo(({ status }: { status: string }) => (
   </span>
 ));
 StatusBadge.displayName = "StatusBadge";
+
+// ─── Archive Cell ──────────────────────────────────────────────────────────
+// Checkbox untuk menandai apakah fisik kertas SJ sudah diarsipkan.
+// Independen, save onChange langsung ke /api/sj (mode archive_only).
+const ArchiveCell = memo(({ sjId, initialArchived, onSaved }: {
+  sjId: string;
+  initialArchived: boolean;
+  onSaved: (sjId: string, archived: boolean) => void;
+}) => {
+  const [archived, setArchived] = useState(initialArchived);
+  const [saving, setSaving]     = useState(false);
+
+  useEffect(() => {
+    setArchived(initialArchived);
+  }, [initialArchived]);
+
+  const handleToggle = useCallback(async () => {
+    const next = !archived;
+    setArchived(next);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/sj", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: sjId, archive_only: true, is_archived: next }),
+      });
+      const json = await res.json();
+      if (json.sj) {
+        onSaved(sjId, next);
+      } else {
+        setArchived(!next);
+      }
+    } catch {
+      setArchived(!next);
+    } finally {
+      setSaving(false);
+    }
+  }, [archived, sjId, onSaved]);
+
+  return (
+    <div className="flex items-center justify-center gap-1.5">
+      <label className="inline-flex items-center cursor-pointer" title="Tandai sudah diarsipkan">
+        <input
+          type="checkbox"
+          checked={archived}
+          onChange={handleToggle}
+          suppressHydrationWarning
+          className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-cyan-500"
+        />
+      </label>
+      {saving && <span className="text-[9px] text-white/30">…</span>}
+    </div>
+  );
+});
+ArchiveCell.displayName = "ArchiveCell";
 
 // ─── Reschedule Modal ─────────────────────────────────────────────────────
 interface RescheduleModalProps {
@@ -286,6 +346,13 @@ export default function SJListPage() {
   const [rescheduleTarget, setRescheduleTarget] = useState<SJListItem | null>(null);
   const [deleteTarget, setDeleteTarget]         = useState<SJListItem | null>(null);
 
+  // Local override is_archived — source of truth setelah toggle, agar tidak
+  // hilang saat pindah pagination (row unmount/remount sebelum refetch).
+  const [archiveOverride, setArchiveOverride] = useState<Record<string, boolean>>({});
+  const handleArchiveSaved = useCallback((sjId: string, archived: boolean) => {
+    setArchiveOverride((prev) => ({ ...prev, [sjId]: archived }));
+  }, []);
+
   // Preview state: { sjId, title }
   const [previewState, setPreviewState] = useState<{ sjId: string; title: string } | null>(null);
 
@@ -442,13 +509,14 @@ export default function SJListPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-[200px_100px_180px_80px_60px_100px_165px] gap-3 border-b border-white/[0.06] px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+            <div className="grid grid-cols-[200px_100px_180px_80px_60px_100px_70px_165px] gap-3 border-b border-white/[0.06] px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
               <span>No. SJ</span>
               <span>Tanggal</span>
               <span>Tujuan</span>
               <span>Pembawa</span>
               <span className="text-right">Items</span>
               <span>Status</span>
+              <span className="text-center">Arsip</span>
               <span className="text-center">Aksi</span>
             </div>
 
@@ -472,10 +540,15 @@ export default function SJListPage() {
             ) : (
               <>
                 <div className="divide-y divide-white/[0.04]">
-                  {paginated.map(sj => (
-                    <div key={sj.id} className="grid grid-cols-[200px_100px_180px_80px_60px_100px_165px] gap-3 items-center px-5 py-3 hover:bg-white/[0.02] transition-colors">
+                  {paginated.map(sj => {
+                    const archivedVal = archiveOverride[sj.id] ?? sj.is_archived;
+                    return (
+                    <div key={sj.id} className="grid grid-cols-[200px_100px_180px_80px_60px_100px_70px_165px] gap-3 items-center px-5 py-3 hover:bg-white/[0.02] transition-colors">
                       <span className="text-[11px] font-mono font-semibold text-cyan-400 truncate" title={sj.no_sj}>{sj.no_sj}</span>
-                      <span className="text-[11px] text-white/70">{formatTanggal(sj.tanggal)}</span>
+                      <div className="min-w-0">
+                        <p className="text-[11px] text-white/70">{formatTanggal(sj.tanggal)}</p>
+                        <p className="text-[9px] text-white/30">{formatHari(sj.tanggal)}</p>
+                      </div>
                       <div className="min-w-0">
                         <p className="text-[11px] font-medium text-white/80 truncate">{sj.tujuan?.kode ?? "-"}</p>
                         <p className="text-[10px] text-white/40 truncate">{sj.tujuan?.nama ?? "-"}</p>
@@ -483,6 +556,7 @@ export default function SJListPage() {
                       <span className="text-[11px] text-white/60 truncate" title={sj.pembawa}>{sj.pembawa || "—"}</span>
                       <span className="text-[11px] font-mono text-white/70 text-right">{sj.items_count}</span>
                       <div><StatusBadge status={sj.status} /></div>
+                      <ArchiveCell sjId={sj.id} initialArchived={archivedVal} onSaved={handleArchiveSaved} />
 
                       <div className="flex items-center justify-center gap-0.5">
                         {/* Print/Preview button (icon printer hijau) */}
@@ -511,7 +585,8 @@ export default function SJListPage() {
                         </button>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <Pagination page={page} totalPages={totalPages} onPage={setPage} totalItems={filtered.length} pageSize={PAGE_SIZE} />

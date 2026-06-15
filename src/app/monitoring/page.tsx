@@ -49,6 +49,13 @@ function extractCGACode(toko: string): string {
   return match ? match[0].toUpperCase() : toko;
 }
 
+// Extract kode kategori dari format "C - PERALATAN KOMPUTER" → "C"
+// Format selalu: "kode + spasi + - + spasi + nama". Ambil sebelum " - " pertama.
+function extractKategoriCode(kategori: string): string {
+  const idx = kategori.indexOf(" - ");
+  return idx > 0 ? kategori.slice(0, idx).trim() : kategori;
+}
+
 const CGABadge = memo(({ toko }: { toko: string }) => {
   const code = extractCGACode(toko);
   return (
@@ -267,6 +274,110 @@ const PBtn = memo(({ active, children, ...props }: React.ButtonHTMLAttributes<HT
 ));
 PBtn.displayName = "PBtn";
 
+// ─── Sorting ────────────────────────────────────────────────────────────────
+type SortKey =
+  | "kategori_oracle" | "jenis" | "merk" | "toko" | "kode_asset"
+  | "deskripsi" | "kuantitas" | "biaya_perolehan" | "jumlah_tercatat"
+  | "invoice_number" | "tanggal_dokumen" | "catatan";
+
+type SortDir = "asc" | "desc";
+
+interface SortState {
+  key: SortKey | null;   // null = default multi-sort
+  dir: SortDir;
+}
+
+// Header kolom yang bisa diklik untuk sort
+const SortableHeader = memo(({
+  label, sortKey, currentSort, onSort, align = "left",
+}: {
+  label: string;
+  sortKey: SortKey;
+  currentSort: SortState;
+  onSort: (key: SortKey) => void;
+  align?: "left" | "right";
+}) => {
+  const active = currentSort.key === sortKey;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={`flex items-center gap-1 group transition-colors hover:text-white/60 ${
+        align === "right" ? "justify-end" : ""
+      } ${active ? "text-cyan-300" : ""}`}
+    >
+      <span>{label}</span>
+      <span className="flex flex-col -space-y-1.5 shrink-0">
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+          className={active && currentSort.dir === "asc" ? "text-cyan-400" : "text-white/20"}>
+          <polyline points="18 15 12 9 6 15" />
+        </svg>
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+          className={active && currentSort.dir === "desc" ? "text-cyan-400" : "text-white/20"}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </span>
+    </button>
+  );
+});
+SortableHeader.displayName = "SortableHeader";
+
+// ─── Catatan Cell ───────────────────────────────────────────────────────────
+// Input bebas per kode_asset. Save onBlur ke PATCH /api/monitoring.
+const CatatanCell = memo(({ kodeAsset, initialCatatan, onSaved }: {
+  kodeAsset: string;
+  initialCatatan: string;
+  onSaved: (kodeAsset: string, catatan: string) => void;
+}) => {
+  const [val, setVal]       = useState(initialCatatan);
+  const [saving, setSaving] = useState(false);
+  const lastSaved = useRef(initialCatatan);
+
+  useEffect(() => {
+    setVal(initialCatatan);
+    lastSaved.current = initialCatatan;
+  }, [initialCatatan]);
+
+  const handleBlur = useCallback(async () => {
+    const trimmed = val.trim();
+    if (trimmed === lastSaved.current.trim()) return; // no change
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/monitoring", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kode_asset: kodeAsset, catatan: trimmed }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        lastSaved.current = trimmed;
+        onSaved(kodeAsset, trimmed);
+      }
+    } catch {
+      // diam — biarkan user retry
+    } finally {
+      setSaving(false);
+    }
+  }, [val, kodeAsset, onSaved]);
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={handleBlur}
+        placeholder="—"
+        suppressHydrationWarning
+        className="w-full bg-white/[0.03] border border-white/[0.06] text-[10px] text-amber-200/80 placeholder:text-white/15 rounded-md px-2 py-1 focus:outline-none focus:border-amber-500/40 focus:bg-white/[0.05]"
+      />
+      {saving && <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-white/30">…</span>}
+    </div>
+  );
+});
+CatatanCell.displayName = "CatatanCell";
+
 // ─── Main Page ────────────────────────────────────────────────────────────
 export default function MonitoringPage() {
   const { assets, loading } = useMonitoring();
@@ -275,6 +386,13 @@ export default function MonitoringPage() {
   const [costCenter, setCostCenter] = useState<CostCenter>("ALL");
   const [filterTags, setFilterTags] = useState<FilterTag[]>([]);
   const [page, setPage]             = useState(1);
+  const [sort, setSort]             = useState<SortState>({ key: null, dir: "asc" });
+
+  // Local override catatan — biar tidak refetch semua setelah save
+  const [catatanOverride, setCatatanOverride] = useState<Record<string, string>>({});
+  const handleCatatanSaved = useCallback((kodeAsset: string, catatan: string) => {
+    setCatatanOverride((prev) => ({ ...prev, [kodeAsset]: catatan }));
+  }, []);
 
   // ── Filter logic ────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -305,18 +423,53 @@ export default function MonitoringPage() {
     return result;
   }, [assets, costCenter, filterTags]);
 
-  // Sort by 5 kolom: Kategori → Jenis → Merk → Cost Center (kode) → Kode Aset
-  const sorted = useMemo(() => [...filtered].sort((a, b) => {
-    const ca = extractCGACode(a.toko);
-    const cb = extractCGACode(b.toko);
-    return (
-      a.kategori_oracle.localeCompare(b.kategori_oracle) ||
-      a.jenis.localeCompare(b.jenis) ||
-      a.merk.localeCompare(b.merk) ||
-      ca.localeCompare(cb) ||
-      a.kode_asset.localeCompare(b.kode_asset)
-    );
-  }), [filtered]);
+  // Sort: kalau sort.key null → default multi-sort (Kategori→Jenis→Merk→CGA→Kode).
+  // Kalau ada sort.key → sort by kolom itu (asc/desc).
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+
+    if (sort.key === null) {
+      // Default multi-sort
+      return arr.sort((a, b) => {
+        const ca = extractCGACode(a.toko);
+        const cb = extractCGACode(b.toko);
+        return (
+          a.kategori_oracle.localeCompare(b.kategori_oracle) ||
+          a.jenis.localeCompare(b.jenis) ||
+          a.merk.localeCompare(b.merk) ||
+          ca.localeCompare(cb) ||
+          a.kode_asset.localeCompare(b.kode_asset)
+        );
+      });
+    }
+
+    // Sort per kolom
+    const key = sort.key;
+    const mult = sort.dir === "asc" ? 1 : -1;
+    const NUMERIC_KEYS = new Set<SortKey>(["kuantitas", "biaya_perolehan", "jumlah_tercatat"]);
+
+    return arr.sort((a, b) => {
+      let av: string | number;
+      let bv: string | number;
+
+      if (key === "toko") {
+        av = extractCGACode(a.toko); bv = extractCGACode(b.toko);
+      } else if (key === "kategori_oracle") {
+        av = extractKategoriCode(a.kategori_oracle); bv = extractKategoriCode(b.kategori_oracle);
+      } else if (key === "catatan") {
+        av = catatanOverride[a.kode_asset] ?? a.catatan;
+        bv = catatanOverride[b.kode_asset] ?? b.catatan;
+      } else {
+        av = (a as any)[key] ?? "";
+        bv = (b as any)[key] ?? "";
+      }
+
+      if (NUMERIC_KEYS.has(key)) {
+        return ((av as number) - (bv as number)) * mult;
+      }
+      return String(av).localeCompare(String(bv)) * mult;
+    });
+  }, [filtered, sort, catatanOverride]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const paginated  = useMemo(
@@ -327,6 +480,17 @@ export default function MonitoringPage() {
   const handleReset = useCallback(() => {
     setCostCenter("ALL");
     setFilterTags([]);
+    setSort({ key: null, dir: "asc" });  // reset sort ke default
+    setPage(1);
+  }, []);
+
+  // Toggle sort: klik kolom sama → asc → desc → balik ke default (null)
+  const handleSort = useCallback((key: SortKey) => {
+    setSort((prev) => {
+      if (prev.key !== key) return { key, dir: "asc" };
+      if (prev.dir === "asc") return { key, dir: "desc" };
+      return { key: null, dir: "asc" }; // klik ke-3 → reset ke default
+    });
     setPage(1);
   }, []);
 
@@ -495,17 +659,20 @@ export default function MonitoringPage() {
               {/* Table dengan horizontal scroll */}
               <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] shadow-xl shadow-black/30">
                 <div className="overflow-x-auto">
-                  <div className="min-w-[1380px]">
-                    <div className="grid grid-cols-[150px_150px_120px_80px_120px_1fr_50px_110px_110px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
-                      <span>Kategori Oracle</span>
-                      <span>Jenis</span>
-                      <span>Merk</span>
-                      <span>Cost Center</span>
-                      <span>Kode Aset</span>
-                      <span>Deskripsi</span>
-                      <span className="text-right">Qty</span>
-                      <span className="text-right">Perolehan</span>
-                      <span className="text-right">Tercatat</span>
+                  <div className="min-w-[1720px]">
+                    <div className="grid grid-cols-[60px_140px_110px_70px_110px_1fr_45px_100px_100px_120px_110px_160px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+                      <SortableHeader label="Kat." sortKey="kategori_oracle" currentSort={sort} onSort={handleSort} />
+                      <SortableHeader label="Jenis" sortKey="jenis" currentSort={sort} onSort={handleSort} />
+                      <SortableHeader label="Merk" sortKey="merk" currentSort={sort} onSort={handleSort} />
+                      <SortableHeader label="CGA" sortKey="toko" currentSort={sort} onSort={handleSort} />
+                      <SortableHeader label="Kode Aset" sortKey="kode_asset" currentSort={sort} onSort={handleSort} />
+                      <SortableHeader label="Deskripsi" sortKey="deskripsi" currentSort={sort} onSort={handleSort} />
+                      <SortableHeader label="Qty" sortKey="kuantitas" currentSort={sort} onSort={handleSort} align="right" />
+                      <SortableHeader label="Perolehan" sortKey="biaya_perolehan" currentSort={sort} onSort={handleSort} align="right" />
+                      <SortableHeader label="Tercatat" sortKey="jumlah_tercatat" currentSort={sort} onSort={handleSort} align="right" />
+                      <SortableHeader label="Invoice No." sortKey="invoice_number" currentSort={sort} onSort={handleSort} />
+                      <SortableHeader label="Tgl Dokumen" sortKey="tanggal_dokumen" currentSort={sort} onSort={handleSort} />
+                      <SortableHeader label="Catatan" sortKey="catatan" currentSort={sort} onSort={handleSort} />
                     </div>
 
                     {loading ? (
@@ -527,8 +694,8 @@ export default function MonitoringPage() {
                       <div className="divide-y divide-white/[0.04]">
                         {paginated.map((a) => (
                           <div key={a.clean_id}
-                            className="grid grid-cols-[150px_150px_120px_80px_120px_1fr_50px_110px_110px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
-                            <span className="text-white/50 truncate text-[10px]" title={a.kategori_oracle}>{a.kategori_oracle}</span>
+                            className="grid grid-cols-[60px_140px_110px_70px_110px_1fr_45px_100px_100px_120px_110px_160px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
+                            <span className="text-white/50 truncate text-[10px] font-mono" title={a.kategori_oracle}>{extractKategoriCode(a.kategori_oracle)}</span>
                             <span className="text-white/80 font-medium truncate" title={a.jenis}>{a.jenis}</span>
                             <span className="text-white/60 truncate" title={a.merk}>{a.merk}</span>
                             <div><CGABadge toko={a.toko} /></div>
@@ -544,6 +711,13 @@ export default function MonitoringPage() {
                             <span className="text-right font-mono text-white/70">{a.kuantitas}</span>
                             <span className="text-right text-[10px] text-white/50 font-mono">{formatRupiah(a.biaya_perolehan)}</span>
                             <span className="text-right text-[10px] text-white/40 font-mono">{formatRupiah(a.jumlah_tercatat)}</span>
+                            <span className="font-mono text-[10px] text-white/50 truncate" title={a.invoice_number}>{a.invoice_number || "—"}</span>
+                            <span className="text-[10px] text-white/50 truncate" title={a.tanggal_dokumen}>{a.tanggal_dokumen || "—"}</span>
+                            <CatatanCell
+                              kodeAsset={a.kode_asset}
+                              initialCatatan={catatanOverride[a.kode_asset] ?? a.catatan}
+                              onSaved={handleCatatanSaved}
+                            />
                           </div>
                         ))}
                       </div>

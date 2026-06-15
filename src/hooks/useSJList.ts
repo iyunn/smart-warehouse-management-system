@@ -10,6 +10,7 @@ export interface SJListItem {
   penerima: string;
   status: 'draft' | 'submitted' | 'completed';
   approved_by: string;
+  is_archived: boolean;
   created_at: string;
   updated_at: string;
   tujuan: { id: string; kode: string; nama: string } | null;

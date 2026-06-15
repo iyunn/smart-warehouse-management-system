@@ -33,7 +33,9 @@ export async function GET(_req: NextRequest) {
             kategori_oracle,
             kuantitas,
             biaya_perolehan,
-            jumlah_tercatat
+            jumlah_tercatat,
+            invoice_number,
+            tanggal_dokumen
           )
         `)
         .range(from, from + FETCH_SIZE - 1)
@@ -44,6 +46,18 @@ export async function GET(_req: NextRequest) {
       if (batch.length < FETCH_SIZE) break
       from += FETCH_SIZE
       if (from > 100000) break
+    }
+
+    // Fetch semua catatan, map by kode_asset untuk merge client-side (di server).
+    // asset_notes tabel kecil (hanya aset yang punya catatan), jadi ringan.
+    const notesMap = new Map<string, string>()
+    {
+      const { data: notes } = await supabase
+        .from('asset_notes')
+        .select('kode_asset, catatan')
+      for (const n of (notes ?? [])) {
+        if (n.kode_asset) notesMap.set(n.kode_asset, n.catatan ?? '')
+      }
     }
 
     // Flatten ke 1 row per aset
@@ -62,10 +76,57 @@ export async function GET(_req: NextRequest) {
         biaya_perolehan:   raw?.biaya_perolehan ?? 0,
         jumlah_tercatat:   raw?.jumlah_tercatat ?? 0,
         tag:               item.tag ?? null,
+        invoice_number:    raw?.invoice_number ?? '',
+        tanggal_dokumen:   raw?.tanggal_dokumen ?? '',
+        catatan:           notesMap.get(raw?.kode_asset ?? '') ?? '',
       }
     })
 
     return NextResponse.json({ assets, total: assets.length })
+
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Error' },
+      { status: 500 }
+    )
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// PATCH /api/monitoring — update catatan per kode_asset
+// ════════════════════════════════════════════════════════════════════════
+// Upsert ke asset_notes. Kalau catatan dikosongkan → hapus baris (hemat ruang).
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { kode_asset, catatan } = body as { kode_asset?: string; catatan?: string }
+
+    if (!kode_asset) {
+      return NextResponse.json({ error: 'kode_asset wajib' }, { status: 400 })
+    }
+
+    const trimmed = (catatan ?? '').trim()
+
+    if (!trimmed) {
+      // Catatan kosong → hapus baris (tidak simpan baris kosong)
+      const { error } = await supabase
+        .from('asset_notes')
+        .delete()
+        .eq('kode_asset', kode_asset)
+      if (error) throw new Error(error.message)
+      return NextResponse.json({ success: true, catatan: '' })
+    }
+
+    // Upsert: insert baru atau update existing
+    const { error } = await supabase
+      .from('asset_notes')
+      .upsert(
+        { kode_asset, catatan: trimmed, updated_at: new Date().toISOString() },
+        { onConflict: 'kode_asset' }
+      )
+    if (error) throw new Error(error.message)
+
+    return NextResponse.json({ success: true, catatan: trimmed })
 
   } catch (error) {
     return NextResponse.json(
