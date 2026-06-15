@@ -659,8 +659,8 @@ export default function MonitoringPage() {
               {/* Table dengan horizontal scroll */}
               <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] shadow-xl shadow-black/30">
                 <div className="overflow-x-auto">
-                  <div className="min-w-[1720px]">
-                    <div className="grid grid-cols-[60px_140px_110px_70px_110px_1fr_45px_100px_100px_120px_110px_160px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+                  <div className="min-w-[1880px]">
+                    <div className="grid grid-cols-[55px_140px_110px_70px_115px_1fr_50px_110px_110px_150px_120px_150px] gap-3 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
                       <SortableHeader label="Kat." sortKey="kategori_oracle" currentSort={sort} onSort={handleSort} />
                       <SortableHeader label="Jenis" sortKey="jenis" currentSort={sort} onSort={handleSort} />
                       <SortableHeader label="Merk" sortKey="merk" currentSort={sort} onSort={handleSort} />
@@ -694,7 +694,7 @@ export default function MonitoringPage() {
                       <div className="divide-y divide-white/[0.04]">
                         {paginated.map((a) => (
                           <div key={a.clean_id}
-                            className="grid grid-cols-[60px_140px_110px_70px_110px_1fr_45px_100px_100px_120px_110px_160px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
+                            className="grid grid-cols-[55px_140px_110px_70px_115px_1fr_50px_110px_110px_150px_120px_150px] gap-3 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
                             <span className="text-white/50 truncate text-[10px] font-mono" title={a.kategori_oracle}>{extractKategoriCode(a.kategori_oracle)}</span>
                             <span className="text-white/80 font-medium truncate" title={a.jenis}>{a.jenis}</span>
                             <span className="text-white/60 truncate" title={a.merk}>{a.merk}</span>
