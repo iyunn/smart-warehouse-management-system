@@ -3,7 +3,7 @@
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **7 Juni 2026** (setelah CGA-only refactor + Dashboard + Monitoring + SJ Manual Sesi 1)
+> Terakhir diupdate: **15 Juni 2026** (setelah SJ Sesi 4 complete + Rekap Pengiriman live + Monitoring v2 + Daftar SJ Arsip + LPP reconciliation design)
 
 ## Project Identity
 
@@ -92,27 +92,26 @@ Sistem ini bukan pengganti Oracle ERP maupun Web Tracking. Sistem ini berfungsi 
 
 ---
 
-# 2. Current Development State ( per 11 Juni 2026 )
+# 2. Current Development State ( per 15 Juni 2026 )
 
 ## Features Completed
 
 ### Dashboard UI (6 Baris Layout)
-Status: ✅ Completed (sebagian live, sebagian placeholder)
+Status: ✅ Completed (3 dari 6 baris live, sisanya placeholder menunggu LPP/Closing)
 
 Layout final dashboard:
 
 | Baris | Konten | Status |
 |---|---|---|
 | 1 | Status Data: DAT Update, DAT Closing, LPP Update, LPP Closing | DAT Update LIVE, lainnya placeholder |
-| 2 | DAT vs LPP Comparison (per CGA1/2/3) | Placeholder |
-| 3 | Trend Closing Bulanan (chart 12 bulan) | Placeholder |
+| 2 | DAT vs LPP Comparison (per CGA1/2/3) | Placeholder — menunggu LPP reconciliation |
+| 3 | Trend Closing Bulanan (chart 12 bulan) | Placeholder — menunggu Closing Snapshot |
 | 4 | CGA Summary 3 cards: hijau/kuning/merah | LIVE |
-| 5 | Closing vs Update (naik/turun per CGA) | Placeholder |
-| 6 | Rekap Pengiriman per Kategori | Placeholder |
+| 5 | Closing vs Update (naik/turun per CGA) | Placeholder — menunggu Closing Snapshot |
+| 6 | Rekap Pengiriman (3 card: Progres Mutasi Oracle, Top 5 Jenis Keluar bulan berjalan, Trend harian) | **LIVE** |
 
 Plus:
-- Welcome banner dynamic (count unknown aset)
-- CTA "Klasifikasikan Sekarang" link ke /review
+- Dashboard warning cards (3 card: Belum Input Kode Aset, Belum Mutasi Oracle, Belum Mutasi Web Tracking) — semua LIVE, menggantikan welcome banner
 - DAT Update terakhir dari `MAX(uploaded_at)` di `assets_raw`
 
 ### Halaman /upload — Upload Data
@@ -124,32 +123,44 @@ Status: ✅ Completed (DAT Update fungsional, lainnya placeholder)
 - LPP Update (placeholder)
 - LPP Closing (placeholder)
 
-### Halaman /monitoring — Monitoring 2 Tab
-Status: ✅ Completed (DAT live, LPP empty state)
+### Halaman /monitoring — Monitoring v2
+Status: ✅ Completed (DAT live dengan fitur lengkap, LPP empty state)
 
 **Tab DAT Monitoring:**
-- List semua aset DAT yang belum punya SJ di Web Tracking
-- Tag dummy "Pending" untuk semua (LPP belum ada)
+- List semua aset DAT CGA
+- Badge "Allocated" untuk aset yang sudah dialokasikan via SJ
+- Kategori Oracle disingkat ke kode saja (e.g. "C - PERALATAN KOMPUTER" → "C")
+- 3 kolom tambahan: Invoice Number, Tanggal Dokumen (format DD-Mmm-YYYY,
+  parsed dari DAT dengan heuristic DD/MM), Catatan (editable inline)
+- Catatan disimpan di tabel independen `asset_notes`, auto-clear saat
+  kode_asset keluar CGA (re-evaluasi tiap upload DAT)
+- Sortable header per kolom (klik: asc → desc → default), reset filter
+  mengembalikan sort ke default (Kategori→Jenis→Merk→CGA→Kode)
+- Filter multi-kolom AND: Jenis, Merk, Kode Aset, Kategori Oracle, Deskripsi,
+  Invoice Number, Catatan
 
 **Tab LPP Monitoring:**
 - Empty state karena data LPP belum tersedia
 
-Kolom: Kategori | Jenis | Merk | Cost Center (badge warna) | Kode Aset | Deskripsi | Status
+Kolom: Kat. | Jenis | Merk | CGA | Kode Aset | Deskripsi | Qty | Perolehan | Tercatat | Invoice No. | Tgl Dokumen | Catatan
 
-Filter: ALL/CGA1/CGA2/CGA3, search by kode/deskripsi, pagination client-side.
+Filter: ALL/CGA1/CGA2/CGA3, multi-field tag filter (AND), pagination client-side.
 
 ### Upload Pipeline (TXT Parser + Full Replace Strategy)
-Status: ✅ Completed — ⚠ Bug Aktif (lihat Known Issues)
+Status: ✅ Completed
 
 - TXT parser support delimiter PIPE `|` dan TAB `\t` (auto-detect)
 - Smart number parsing: handle format titik-ribuan, koma-desimal, maupun titik-desimal Oracle
 - Kolom finansial: `kuantitas`, `biaya_perolehan`, `jumlah_tercatat`
+- Kolom tambahan (Monitoring v2): `invoice_number`, `tanggal_dokumen`
+  (heuristic DD/MM, output "DD-Mmm-YYYY")
 - **Strategi upload: Full Replace (Delete-then-Insert)**
-  - DELETE semua `assets_raw` sebelum insert (`assets_clean` ikut terhapus via CASCADE)
+  - `POST /api/process/clear` — DELETE semua `assets_raw` sekali sebelum batch pertama
+    (`assets_clean` ikut terhapus via CASCADE)
   - INSERT fresh dari file (batch 500 rows)
   - DAT adalah full snapshot — aset tidak ada di file = sudah dimutasi keluar CGA
-  - Menggantikan strategi upsert lama yang tidak bisa deteksi aset yang hilang
-- ⚠ Bug aktif: hanya 27/4527 rows masuk DB setelah insert (lihat Known Issues)
+- Re-apply tag "Allocated" otomatis setelah upload (cross-check `surat_jalan_items.kode_asset`)
+- Auto-clear `asset_notes` untuk kode_asset yang sudah keluar CGA
 
 ### Asset Classification Engine
 Status: ✅ Completed
@@ -202,8 +213,8 @@ Fitur:
 - Kolom: Item, Qty, Biaya Perolehan, Jumlah Tercatat
 - Validasi: item count & qty match 100% dengan Excel Oracle
 
-### Surat Jalan Manual — Sesi 1 + 2 + 3 + Print/PDF
-Status: ✅ Completed (3 dari 4 sesi + Print feature)
+### Surat Jalan Manual — Sesi 1-4 + Print/PDF + Arsip
+Status: ✅ Completed (semua sesi + fitur pelengkap)
 
 **Sesi 1:** Schema (3 tabel) + Buat SJ + Master Tujuan + Sidebar dropdown
 **Sesi 2:** List SJ + Edit + Reschedule + Delete
@@ -242,12 +253,38 @@ Status: ✅ Completed (3 dari 4 sesi + Print feature)
 - Fix stale closure mutasiRef di AllocationCell
 
 ### ✅ SJ Sesi 4 Complete (11 Juni 2026)
-- Kolom Mutasi WT (independen, MutasiWTCell terpisah, hover-reveal batalkan)
-- Fix PATCH overwrite bug (conditional update per field)
-- Hover-reveal batalkan untuk Oracle & WT
-- Rekap Pengiriman dashboard live (3 card)
+- Kolom Mutasi WT (independen, MutasiWTCell terpisah, hover-reveal "batalkan")
+  — disabled untuk non-AT, persisted via allocOverride agar tidak hilang
+  saat pindah pagination
+- Fix PATCH overwrite bug (conditional update per field — kode_asset,
+  mutasi_oracle_status, mutasi_wt_status tidak saling overwrite)
+- Hover-reveal "batalkan" untuk lock manual Oracle & WT
+- Rekap Pengiriman dashboard live (3 card — lihat Baris 6 di atas)
+- Warning card "Belum Mutasi Web Tracking" live (violet, item AT dengan
+  mutasi_wt_status=false)
 - Re-apply tag Allocated otomatis saat upload DAT
-- Validasi duplikat kode aset + berbagai bugfix AllocationCell
+- Validasi duplikat kode aset (border merah + pesan inline) + berbagai
+  bugfix AllocationCell (stale closure, lock bypass reset, Rules of Hooks)
+- Excel export Rekap Alokasi: tambah kolom Kode Aset, Mutasi Oracle, Mutasi WT
+- Kolom "Baru" (is_baru) di Rekap Alokasi, tanggal 2 baris (tanggal + hari)
+
+### ✅ Daftar SJ — Kolom Arsip (15 Juni 2026)
+- Checkbox `is_archived` per dokumen SJ (bukan per-item) — menandai fisik
+  kertas SJ sudah diarsipkan
+- Save via PATCH mode `archive_only`, local override (archiveOverride)
+  agar persist saat pindah pagination
+- Tanggal SJ ditambah baris hari (sama pattern Rekap Alokasi)
+
+### ✅ Monitoring v2 (15 Juni 2026)
+- 3 kolom baru: Invoice Number, Tanggal Dokumen (parsed dari DAT, format
+  DD-Mmm-YYYY dengan heuristic DD/MM untuk separator ambigu), Catatan
+  (input bebas per kode_asset)
+- Catatan disimpan di tabel independen `asset_notes` — bertahan selama
+  kode_asset tidak pernah keluar CGA, auto-clear saat keluar
+- Kategori Oracle disingkat (extract kode sebelum " - ")
+- Sortable header per kolom (asc/desc/default), reset filter reset sort
+- Filter tambahan: Invoice Number, Catatan
+- Bulk import 560 catatan historis dari Excel ke `asset_notes`
 
 ---
 
@@ -259,14 +296,58 @@ tidak ada fitur yang sedang dikerjakan saat ini
 
 ## Features Planned
 
-### 🎯 Next (Updated 11 Juni 2026)
-- Warning card "Belum Mutasi WT" di dashboard — aktifkan dari placeholder
-  (kolom mutasi_wt_status sudah ada di DB)
-- Export Excel Rekap Alokasi — tambah kolom mutasi_wt
-- Closing snapshot architecture (upload closing DAT/LPP + dashboard baris 3 & 5)
-- LPP Web Tracking integration (upload LPP, reconciliation DAT vs LPP)
+### 🎯 Next (Updated 15 Juni 2026)
+- **LPP Web Tracking Reconciliation (THESIS CORE)** — lihat desain lengkap di bawah
+- "Changed" filter di Classification (prev_jenis/prev_merk, ACC/Revert) — prioritas rendah, ditunda sampai core selesai
+- Closing Snapshot Architecture — ditunda, fokus reconciliation dulu
 - Authentication (Supabase Auth, role Admin/Viewer, protected routes)
-- Bab 3 & 4 laporan TA — semua fitur core sudah cukup untuk ditulis
+- Bab 3 & 4 laporan TA — semua fitur core sudah cukup matang untuk ditulis
+
+### LPP Web Tracking Reconciliation (THESIS CORE TOPIC)
+Status: 📌 Design Complete — Implementasi belum dimulai
+
+**Konteks LPP:**
+- LPP = output dari program Web Tracking (.xls per cost center, file
+  terpisah untuk CGA1/CGA2/CGA3). Kolom: Nomor, No Aktiva (= kode_asset),
+  Deskripsi, Saldo Awal, Masuk, Keluar, Saldo_Akhir
+- LPP CGA = daftar kode_asset yang menurut Web Tracking masih berlokasi di CGA
+- Perpindahan lokasi terjadi via Surat Jalan Web Tracking (per kode_asset),
+  harus di-BTB (Bukti Terima Barang) oleh cost center tujuan. Sebelum BTB,
+  status "intransit" di lokasi asal
+- Ada output terpisah "Report Intransit" — daftar kode_asset yang sudah
+  dibuatkan SJ WT tapi belum di-BTB tujuan (file belum diperoleh)
+
+**5 Kondisi Reconciliation (DAT vs LPP — 2x2 matrix + Intransit):**
+
+| # | DAT (CGA?) | LPP (CGA?) | Status | Aksi |
+|---|---|---|---|---|
+| 1 | Ya | Ya | Fisik masih di CGA | Normal, tidak ada aksi |
+| 2 | Ya | Tidak | Belum Mutasi Oracle | Admin gudang harus mutasi Oracle segera |
+| 3 | — | — | Aset Intransit (cross-cut) | Sudah SJ WT, belum BTB tujuan — butuh file Intransit |
+| 4 | Tidak | Ya | Belum Mutasi WT | Admin gudang harus buat SJ WT segera |
+| 5 | Tidak | Tidak | Fisik Allocated | Normal, konsisten sudah keluar CGA |
+
+Kondisi 2 dan 4 adalah **warning aktif** yang harus ditangani admin gudang —
+keduanya sama pentingnya (administrasi sehat = tidak ada selisih = kondisi 1/5).
+
+**Integrasi dengan Mutasi WT (sudah ada):**
+Checkbox "Mutasi WT" manual yang sudah dibangun (Sesi 4) akan punya mekanisme
+sama dengan Mutasi Oracle — bisa manual (user centang) ATAU otomatis (cross-check
+kode_asset SJ Manual terhadap LPP: kalau tidak ada di LPP CGA = sudah keluar
+secara WT = auto-true/lock).
+
+**Yang perlu didesain:**
+- Schema `lpp_raw` (per CGA, kemungkinan delete-then-insert seperti DAT) +
+  `intransit_raw`
+- Upload pipeline LPP (.xls parser, 3 file per upload — CGA1/2/3 terpisah)
+- Reconciliation engine — cross join DAT vs LPP by kode_asset, kategorikan
+  ke 5 kondisi
+- UI Monitoring Tab LPP / halaman reconciliation tersendiri — summary
+  (jumlah per kondisi) + detail table (mirip Monitoring DAT)
+- Aktivasi Dashboard Baris 2 (DAT vs LPP per CGA)
+- Konfirmasi format file Report Intransit (belum diperoleh)
+- Konfirmasi: kondisi 2 (sudah SJ WT tapi belum BTB) — apakah actionable
+  warning untuk admin gudang atau informational (BTB kewenangan toko tujuan)
 
 ### DAT/LPP Closing Architecture
 Status: 📌 Planned (architecture sudah diputuskan, implementasi TBA)
@@ -284,25 +365,9 @@ closing_snapshots (
 
 Mekanisme upload: user pilih period manual (12 bulan), parser hitung aggregate, simpan ke `closing_snapshots`, data mentah di-discard.
 
-### DAT vs Web Tracking Reconciliation
-Status: 📌 Planned
-
-Fitur:
-- Mismatch detection antara Oracle DAT dan Web Tracking
-- Activate Dashboard Baris 2 (DAT vs LPP)
-- Activate Monitoring Tab LPP
-- Discrepancy dashboard
-
-### LPP Web Tracking Integration
-Status: 📌 Planned
-
-Fitur:
-- Upload LPP Update + Closing
-- Reconciliation engine (DAT vs LPP)
-- Mutasi Oracle auto-detect via cross-reference SJ Manual vs LPP
-
 ### Reporting Module — Excel Export
-Status: 📌 Planned
+Status: ✅ Sebagian besar selesai (SJ Rekap Alokasi, Monitoring, DAT Summary)
+- Pending: export untuk hasil reconciliation LPP setelah diimplementasi
 
 ### Authentication & Role Management
 Status: 📌 Planned
@@ -378,7 +443,8 @@ Allow-all untuk semua tabel (consistent pattern, tidak ada user auth).
 - `@react-pdf/renderer` — PDF generation
 - `@supabase/supabase-js` — Supabase client
 - `lucide-react` — icons
-- ~~`xlsx`~~ — **deprecated** sejak 6 Juni 2026 (migrasi ke TXT parser native)
+- `xlsx` (SheetJS) — Excel export (SJ Rekap Alokasi, Monitoring)
+- `recharts` — chart (Rekap Pengiriman trend harian)
 
 ---
 
@@ -488,6 +554,8 @@ Field utama:
 - `kuantitas` (int4)
 - `biaya_perolehan` (int8) — dalam satuan Rupiah
 - `jumlah_tercatat` (int8) — dalam satuan Rupiah
+- `invoice_number` (text) — dari kolom "Invoice Number" DAT
+- `tanggal_dokumen` (text) — normalisasi "DD-Mmm-YYYY" dari kolom "Tanggal Dokumen" DAT
 - `uploaded_at` (timestamp)
 - `source` (text)
 
@@ -505,6 +573,7 @@ Field utama:
 - `kategori` (text)
 - `confidence` (text) — low/medium/high
 - `status` (text)
+- `tag` (text, nullable) — 'Allocated' kalau sudah dialokasikan via SJ Manual
 - `created_at` (timestamp)
 
 ## keyword_rules
@@ -540,6 +609,7 @@ Field utama:
 - `pembawa` (text)
 - `penerima` (text) — auto = label tujuan
 - `status` (text) — 'draft' | 'submitted' | 'completed'
+- `is_archived` (bool) — fisik kertas SJ sudah diarsipkan
 - `created_by` (text) — default 'Admin User'
 - `approved_by` (text) — default 'SPV/Manager'
 - `created_at`, `updated_at` (timestamptz)
@@ -562,7 +632,27 @@ Field utama:
 - `keterangan` (text)
 - `mutasi_oracle_status` (bool) — checkbox di Sesi 4
 - `mutasi_oracle_at` (timestamptz)
+- `mutasi_wt_status` (bool) — checkbox Mutasi WT (Sesi 4 lanjutan)
+- `mutasi_wt_at` (timestamptz)
 - `kode_asset` (text) — optional, untuk linking ke assets_raw
+
+---
+
+## asset_notes
+
+Catatan bebas per kode_asset (Monitoring v2). Independen dari lifecycle DAT —
+hanya berisi baris untuk aset yang punya catatan.
+
+Field utama:
+- `kode_asset` (text, PK)
+- `catatan` (text)
+- `updated_at` (timestamptz)
+
+Auto-clear: saat upload DAT, baris dihapus kalau `kode_asset` tidak ada di
+DAT baru (aset sudah keluar CGA → siklus catatan dianggap selesai).
+
+RLS: policy "Allow all on asset_notes" (PERMISSIVE, public, ALL, true/true) —
+replikasi pola tabel lain.
 
 ---
 
@@ -628,16 +718,21 @@ src/
 │   │
 │   ├── sj/
 │   │   ├── buat/page.tsx             Buat Surat Jalan
+│   │   ├── list/page.tsx             Daftar SJ (+ kolom Arsip)
+│   │   ├── report/page.tsx           Rekap Alokasi (Sesi 3+4)
 │   │   └── tujuan/page.tsx           Master Tujuan CRUD
 │   │
 │   └── api/
-│       ├── process/route.ts          Upload DAT pipeline
+│       ├── process/
+│       │   ├── route.ts              Upload DAT pipeline (+ re-apply tag, auto-clear notes)
+│       │   └── clear/route.ts        DELETE assets_raw (dipanggil sekali sebelum batch)
 │       ├── reclassify/route.ts       Reclassify engine
 │       ├── reports/dat-summary/route.ts
-│       ├── dashboard/stats/route.ts  Dashboard live data
-│       ├── monitoring/route.ts       Monitoring data
+│       ├── dashboard/stats/route.ts  Dashboard live data (+ Rekap Pengiriman)
+│       ├── monitoring/route.ts       Monitoring data (GET + PATCH catatan)
 │       └── sj/
-│           ├── route.ts              POST create SJ
+│           ├── route.ts              GET/POST/PATCH/DELETE SJ (+ archive_only)
+│           ├── report/route.ts       PATCH alokasi (kode_asset, mutasi_oracle, mutasi_wt)
 │           ├── tujuan/route.ts       CRUD tujuan
 │           └── master/
 │               ├── jenis/route.ts    DISTINCT 5-min cache
@@ -661,7 +756,9 @@ src/
 │   ├── dashboard/
 │   │   ├── DataStatusCards.tsx       Baris 1 (live)
 │   │   ├── CGASummaryCards.tsx       Baris 4 (live)
-│   │   └── PlaceholderCards.tsx      Baris 2, 3, 5, 6
+│   │   ├── DashboardWarningCards.tsx Warning cards (3, semua live)
+│   │   ├── RekapPengirimanCards.tsx  Baris 6 (live, 3 card)
+│   │   └── PlaceholderCards.tsx      Baris 2, 3, 5
 │   │
 │   ├── sj/
 │   │   ├── SearchableDropdown.tsx    Portal-based
@@ -674,25 +771,33 @@ src/
 │   ├── useReviewAssets.ts            Client-side pagination
 │   ├── useKeywordRule.ts
 │   ├── useReclassify.ts
-│   ├── useDashboardStats.ts
-│   ├── useMonitoring.ts
+│   ├── useDashboardStats.ts          + RekapPengiriman, MutasiProgress, TopJenis
+│   ├── useMonitoring.ts              + invoice_number, tanggal_dokumen, catatan
+│   ├── useSJList.ts                  + is_archived
+│   ├── useSJReport.ts                + mutasi_wt, is_mutated
 │   └── useSJMaster.ts                3 hooks: jenis/merk/tujuan
 │
 └── lib/
     ├── classifier.ts                 Word boundary matching
     ├── supabaseClient.ts
-    ├── txtParser.ts                  Auto-detect PIPE/TAB
+    ├── txtParser.ts                  Auto-detect PIPE/TAB + parseTanggalDokumen
     ├── batchProcessor.ts
-    ├── types.ts                      Tanpa buildWarehouseFilter
+    ├── types.ts                      AssetRecord + invoice_number, tanggal_dokumen
+    ├── excelExporter.ts              SJ Rekap Alokasi export + kolom mutasi
+    ├── monitoringExporter.ts         Monitoring export (2 sheet)
     ├── reviewTypes.ts
-    └── sjTypes.ts                    + createEmptyItem helper
+    └── sjTypes.ts                    + mutasi_wt_status, mutasi_wt_at
 ```
 
 ### File yang Sudah Dihapus
-- `src/lib/xlsxParser.ts` (deprecated sejak migrasi TXT)
 - `src/app/api/classification/route.ts` (digantikan client-side pagination)
 - `src/components/dashboard/DistribusiCostCenter.tsx` (replaced dengan PlaceholderCards)
 - `src/components/dashboard/TopJenisChart.tsx` (replaced dengan PlaceholderCards)
+
+### Catatan
+- `src/lib/xlsxParser.ts` masih ada di repo (legacy, tidak dipakai aktif)
+  tapi tetap harus sinkron dengan `AssetRecord` type (lihat 15 Juni 2026)
+  karena ikut di type-check saat build
 
 ---
 
@@ -724,10 +829,11 @@ src/
 ## Demo Flow (Skripsi)
 1. Upload DAT TXT → otomatis classified
 2. Show Classification page → reclassify
-3. Show Dashboard → live CGA summary
-4. Show Monitoring → tag pending (placeholder reconciliation)
-5. Buat SJ Manual → autorecap (bandingkan dengan workflow manual existing tanpa rekap)
-6. (Future) Upload LPP → reconciliation engine kick in
+3. Show Dashboard → live CGA summary + Rekap Pengiriman
+4. Show Monitoring v2 → Invoice Number, Tanggal Dokumen, Catatan, sortable header
+5. Buat SJ Manual → autorecap, alokasi kode aset, mutasi Oracle & WT
+6. (Core/Future) Upload LPP → reconciliation engine: 5 kondisi DAT vs LPP,
+   warning admin gudang untuk Belum Mutasi Oracle & Belum Mutasi WT
 
 ---
 
@@ -735,15 +841,10 @@ src/
 
 ## Current Issues
 
-### ⚠ Upload DAT Delete-then-Insert Bug (AKTIF - PRIORITAS)
-- Setelah diubah ke full replace strategy, INSERT hanya masuk 27 dari 4527 rows
-- DELETE sudah benar (verified: `COUNT(*) = 0` setelah delete)
-- Suspect: data yang dikirim dari client ke `/api/process` hanya 27 rows
-- File yang perlu dicek: `UploadSection.tsx`, `batchProcessor.ts`
-
 ### Dashboard Placeholders
-- Baris 2, 3, 5, 6 masih placeholder (menunggu data LPP & Closing)
-- LPP belum ada data sama sekali
+- Baris 2, 3, 5 masih placeholder (menunggu LPP reconciliation & Closing Snapshot)
+- Baris 6 (Rekap Pengiriman) sudah LIVE
+- LPP belum ada data sama sekali — ini fokus pengembangan berikutnya (thesis core)
 
 ### Classification Accuracy
 - Keyword matching masih rule-based (exact/semi-exact)
@@ -759,8 +860,10 @@ src/
 - Belum ada activity logging system
 
 ### Hydration Warning
+- Tanggal di Topbar di-render client-side via useEffect (fix 15 Juni 2026)
+  untuk hindari mismatch SSR saat render lewat tengah malam
 - Input fields kadang trigger hydration warning dari browser extensions
-- Sudah di-suppress dengan `suppressHydrationWarning`
+  (`fdprocessedid`) — di luar kontrol aplikasi, sudah diketahui aman diabaikan
 
 ## Accepted Technical Debt
 
@@ -787,13 +890,39 @@ src/
 
 # 10. Recent Major Changes Log
 
+## 15 Juni 2026
+- **SJ Sesi 4 hotfixes** — lock guard izinkan reset bypass K1 (fix typo jadi
+  lock permanen), validasi duplikat kode aset client-side, fix Rules of Hooks
+- **Daftar SJ — kolom Arsip** — checkbox is_archived per dokumen, tanggal+hari
+- **Monitoring v2** — kolom Invoice Number, Tanggal Dokumen (parser heuristic
+  DD/MM), Catatan (tabel asset_notes independen + auto-clear), kategori
+  disingkat, sortable header per kolom, filter tambahan
+- **Fix RLS asset_notes** — policy "Allow all" direplikasi dari surat_jalan_items
+- **Fix hydration mismatch Topbar** — tanggal di-render client-side via useEffect
+- **Bulk import 560 catatan historis** dari Excel ke asset_notes
+- **LPP Web Tracking reconciliation — design complete** (THESIS CORE):
+  5 kondisi (Fisik di CGA, Belum Mutasi Oracle, Aset Intransit, Belum Mutasi WT,
+  Fisik Allocated), siap masuk implementasi
+- Dikerjakan di branch `fitur-percobaan`, merged ke `main`
+
+## 11 Juni 2026
+- **SJ Sesi 4 complete** — kolom Mutasi WT, hover-reveal batalkan, fix PATCH
+  overwrite bug (conditional update)
+- **Rekap Pengiriman dashboard live** — 3 card (Progres Mutasi Oracle, Top 5
+  Jenis Keluar bulan berjalan via 2-step query, Trend harian recharts)
+- **Warning card Belum Mutasi WT live**
+- **Excel export** — tambah kolom Mutasi Oracle & Mutasi WT
+
 ## 10 Juni 2026
 - **Bulk insert 928 master tujuan** via SQL dari Excel (list-tujuan.xlsx)
 - **Rekap Alokasi sort** by No. SJ desc (terbaru di atas), item urutan asc
 - **Upload DAT: Full Replace Strategy** — DELETE semua assets_raw dulu, INSERT fresh (batch 500). DAT adalah full snapshot, aset tidak ada di file = sudah dimutasi keluar CGA
 - **`/api/process/route.ts`** diubah dari upsert ke delete-then-insert
 - **cellToNumber fix** — smart dot detection untuk Oracle DAT mixed decimal format
-- **BUG AKTIF:** hanya 27/4527 rows masuk DB setelah insert — suspect di UploadSection.tsx / batchProcessor.ts
+- ~~BUG: hanya 27/4527 rows masuk DB setelah insert~~ — **RESOLVED**: root cause
+  adalah DELETE berjalan di dalam setiap batch (bukan sekali di awal). Fix:
+  `POST /api/process/clear` dipanggil sekali sebelum batch pertama,
+  DELETE dihapus dari `/api/process/route.ts`
 - **Planned:** fitur "Changed" di Classification (prev_jenis/prev_merk + ACC/Revert aksi)
 
 ## 9 Juni 2026 (Sore — Bug Fixes)

@@ -1719,3 +1719,59 @@ tombol hanya muncul saat user hover di cell. Clean, tidak berantakan.
 | `src/app/api/process/route.ts` | Re-apply tag Allocated setelah upload DAT |
 | `src/lib/excelExporter.ts` | Tambah kolom Kode Aset di export SJ |
 | `src/lib/monitoringExporter.ts` | Tambah kolom Status Alokasi di export Monitoring |
+
+# Senin, 15 Juni 2026 (Monitoring v2 + Daftar SJ Arsip)
+
+### Fitur
+
+**1. Daftar SJ — Kolom Arsip**
+Checkbox `is_archived` per dokumen SJ (bukan per-item) untuk menandai fisik
+kertas sudah diarsipkan. Independen, save via PATCH mode `archive_only`.
+Tanggal SJ ditambah baris hari (sama pattern Rekap Alokasi).
+Local override (`archiveOverride`) agar state tidak hilang saat pindah pagination.
+
+**2. Monitoring v2 — 3 kolom baru + sortable header**
+- **Invoice Number** & **Tanggal Dokumen** — parsed dari DAT TXT (kolom
+  "Invoice Number" dan "Tanggal Dokumen"). Tanggal dinormalisasi ke format
+  "DD-Mmm-YYYY" dengan heuristic DD vs MM (kalau salah satu bagian >12,
+  itu pasti hari; kalau ambigu, default DD/MM standar Indonesia).
+- **Catatan** — input bebas per kode_asset, disimpan di tabel baru
+  `asset_notes (kode_asset PK, catatan, updated_at)`. Independen dari
+  lifecycle DAT — auto-clear hanya saat kode_asset keluar dari CGA (re-evaluasi
+  setiap upload DAT, dibandingkan dengan rawIdMap).
+- **Kategori Oracle disingkat** — "C - PERALATAN KOMPUTER" → "C" (extract
+  sebelum " - " pertama), hemat ruang horizontal untuk 3 kolom baru.
+- **Sortable header** — klik kolom: asc → desc → kembali ke default
+  (multi-sort Kategori→Jenis→Merk→CGA→Kode). Reset filter juga reset sort.
+- **Filter tambahan** — Invoice Number dan Catatan ditambahkan ke filter
+  multi-kolom (AND logic), filter Catatan pakai `catatanOverride` sebagai
+  source of truth.
+
+### Fix
+- RLS policy `asset_notes` belum ada (tabel baru) — replikasi pola
+  "Allow all on <table>" (PERMISSIVE, public, ALL, true/true) dari
+  `surat_jalan_items`.
+- `AssetRecord` type (di `types.ts` dan `xlsxParser.ts`) belum punya
+  `invoice_number`/`tanggal_dokumen` — menyebabkan build Vercel gagal
+  type-check di 2 file berbeda (`txtParser.ts`, `xlsxParser.ts`).
+
+### Data
+- Bulk import 560 baris catatan historis dari Excel ke `asset_notes`
+  (filter otomatis: hanya kode_asset yang masih aktif di `assets_raw`).
+
+### File yang Diubah
+| File | Perubahan |
+|------|-----------|
+| `src/app/sj/list/page.tsx` | Kolom Arsip (ArchiveCell) + tanggal+hari |
+| `src/app/api/sj/route.ts` | GET tambah is_archived, PATCH mode archive_only |
+| `src/hooks/useSJList.ts` | Tambah is_archived di SJListItem |
+| `src/lib/txtParser.ts` | parseTanggalDokumen heuristic, mapping invoice_number/tanggal_dokumen |
+| `src/lib/types.ts` | AssetRecord +invoice_number +tanggal_dokumen |
+| `src/lib/xlsxParser.ts` | Default invoice_number/tanggal_dokumen (legacy parser) |
+| `src/app/api/process/route.ts` | Insert field baru + auto-clear asset_notes |
+| `src/app/api/monitoring/route.ts` | SELECT field baru, fetch+merge asset_notes, PATCH catatan |
+| `src/hooks/useMonitoring.ts` | MonitoringAsset +invoice_number +tanggal_dokumen +catatan |
+| `src/app/monitoring/page.tsx` | 3 kolom baru, kategori singkat, sortable header, filter baru |
+
+### Branch
+Dikerjakan di branch `fitur-percobaan`, sudah di-merge ke `main`.
