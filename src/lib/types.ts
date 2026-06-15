@@ -22,6 +22,8 @@ export interface AssetRecord {
   kuantitas:        number;
   biaya_perolehan:  number;
   jumlah_tercatat:  number;
+  invoice_number:   string;
+  tanggal_dokumen:  string;
 }
 
 // ─── Column mapping (legacy, untuk reference) ─────────────────────────────────
