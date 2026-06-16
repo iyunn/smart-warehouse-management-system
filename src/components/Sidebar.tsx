@@ -78,7 +78,6 @@ const navItems: NavItem[] = [
       { id: "sj-report", label: "Rekap Alokasi",    href: "/sj/report"  },
     ],
   },
-  { id: "reports",  label: "Reports",  icon: icons.reports,  href: "/reports" },
   { id: "settings", label: "Settings", icon: icons.settings, href: "#"        },
 ];
 
@@ -91,7 +90,6 @@ function getActiveId(pathname: string): string {
   if (pathname.startsWith("/upload"))      return "upload";
   if (pathname.startsWith("/monitoring"))  return "monitoring";
   if (pathname.startsWith("/review"))      return "classification";
-  if (pathname.startsWith("/reports"))     return "reports";
   if (pathname.startsWith("/settings"))    return "settings";
   if (pathname === "/" || pathname.startsWith("/dashboard")) return "dashboard";
   return "dashboard";

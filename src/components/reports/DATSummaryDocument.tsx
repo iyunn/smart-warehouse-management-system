@@ -23,6 +23,51 @@ function formatDate(iso: string): string {
   })
 }
 
+// ─── Warna per CGA ────────────────────────────────────────────────────────────
+// Disesuaikan dengan badge warna di UI Monitoring: CGA1=emerald, CGA2=amber, CGA3=rose.
+// Body table pakai versi opacity diturunkan (masih kelihatan warnanya tapi pudar),
+// header tetap solid/pekat sesuai warna signature masing-masing CGA.
+type CGAColorSet = {
+  header: string        // background header section (solid)
+  headerText: string     // text putih di atas header solid
+  kategoriBg: string     // background kategori header (pudar)
+  kategoriText: string   // text kategori (pekat, kontras dgn bg pudar)
+  rowAltBg: string       // background row alternate (sangat pudar)
+  subtotalBg: string     // background subtotal row (pudar, sedikit lebih pekat dari row biasa)
+  subtotalText: string   // text subtotal (pekat)
+  subtotalBorder: string // border atas subtotal
+  totalBg: string        // background total toko (solid, sama dengan header)
+  totalText: string      // text di atas total solid
+}
+
+const CGA_COLORS: Record<string, CGAColorSet> = {
+  CGA1: { // emerald
+    header: '#059669', headerText: '#ffffff',
+    kategoriBg: '#d1fae5', kategoriText: '#065f46',
+    rowAltBg: '#ecfdf5',
+    subtotalBg: '#a7f3d0', subtotalText: '#065f46', subtotalBorder: '#34d399',
+    totalBg: '#059669', totalText: '#ffffff',
+  },
+  CGA2: { // amber
+    header: '#d97706', headerText: '#ffffff',
+    kategoriBg: '#fef3c7', kategoriText: '#92400e',
+    rowAltBg: '#fffbeb',
+    subtotalBg: '#fde68a', subtotalText: '#92400e', subtotalBorder: '#fbbf24',
+    totalBg: '#d97706', totalText: '#ffffff',
+  },
+  CGA3: { // rose
+    header: '#e11d48', headerText: '#ffffff',
+    kategoriBg: '#fee2e2', kategoriText: '#9f1239',
+    rowAltBg: '#fff1f2',
+    subtotalBg: '#fecdd3', subtotalText: '#9f1239', subtotalBorder: '#fb7185',
+    totalBg: '#e11d48', totalText: '#ffffff',
+  },
+}
+
+function getCGAColors(tokoCode: string): CGAColorSet {
+  return CGA_COLORS[tokoCode] ?? CGA_COLORS.CGA1
+}
+
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
@@ -239,20 +284,20 @@ const TableHeader = () => (
   </View>
 )
 
-const KategoriSection = ({ kategori, idx }: { kategori: KategoriData; idx: number }) => (
+const KategoriSection = ({ kategori, colors }: { kategori: KategoriData; colors: CGAColorSet }) => (
   <View>
-    {/* Kategori header */}
-    <View style={styles.kategoriHeader}>
-      <Text style={styles.kategoriTitle}>{kategori.kategori}</Text>
+    {/* Kategori header — bg pudar sesuai warna CGA */}
+    <View style={[styles.kategoriHeader, { backgroundColor: colors.kategoriBg }]}>
+      <Text style={[styles.kategoriTitle, { color: colors.kategoriText }]}>{kategori.kategori}</Text>
     </View>
 
     <TableHeader />
 
-    {/* Rows */}
+    {/* Rows — alternate row pakai bg sangat pudar sesuai warna CGA */}
     {kategori.items.map((item, i) => (
       <View
         key={item.jenis}
-        style={[styles.tableRow, i % 2 === 1 ? styles.tableRowAlt : {}]}
+        style={[styles.tableRow, i % 2 === 1 ? { backgroundColor: colors.rowAltBg } : {}]}
       >
         <Text style={[styles.cellText, styles.colJenis]}>{item.jenis}</Text>
         <Text style={[styles.cellTextMono, styles.colItem]}>{item.item}</Text>
@@ -266,17 +311,20 @@ const KategoriSection = ({ kategori, idx }: { kategori: KategoriData; idx: numbe
       </View>
     ))}
 
-    {/* Subtotal kategori */}
-    <View style={styles.subtotalRow}>
-      <Text style={[styles.subtotalText, styles.colJenis]}>
+    {/* Subtotal kategori — bg pudar lebih pekat dari row biasa, sesuai warna CGA */}
+    <View style={[
+      styles.subtotalRow,
+      { backgroundColor: colors.subtotalBg, borderTopColor: colors.subtotalBorder },
+    ]}>
+      <Text style={[styles.subtotalText, styles.colJenis, { color: colors.subtotalText }]}>
         Subtotal {kategori.kategori}
       </Text>
-      <Text style={[styles.subtotalText, styles.colItem]}>{kategori.totalItem}</Text>
-      <Text style={[styles.subtotalText, styles.colQty]}>{kategori.totalQty}</Text>
-      <Text style={[styles.subtotalText, styles.colPerolehan]}>
+      <Text style={[styles.subtotalText, styles.colItem, { color: colors.subtotalText }]}>{kategori.totalItem}</Text>
+      <Text style={[styles.subtotalText, styles.colQty, { color: colors.subtotalText }]}>{kategori.totalQty}</Text>
+      <Text style={[styles.subtotalText, styles.colPerolehan, { color: colors.subtotalText }]}>
         {formatRupiah(kategori.totalPerolehan)}
       </Text>
-      <Text style={[styles.subtotalText, styles.colTercatat]}>
+      <Text style={[styles.subtotalText, styles.colTercatat, { color: colors.subtotalText }]}>
         {formatRupiah(kategori.totalTercatat)}
       </Text>
     </View>
@@ -284,6 +332,9 @@ const KategoriSection = ({ kategori, idx }: { kategori: KategoriData; idx: numbe
 )
 
 // ─── Main Document ────────────────────────────────────────────────────────────
+// Setiap CGA di-render di <Page> tersendiri (bukan satu Page berisi semua),
+// sehingga konten yang tidak penuh 1 halaman akan menyisakan area kosong,
+// dan CGA berikutnya selalu mulai di halaman baru.
 
 export function DATSummaryDocument({ data, generatedAt }: DATSummaryProps) {
   return (
@@ -292,69 +343,69 @@ export function DATSummaryDocument({ data, generatedAt }: DATSummaryProps) {
       author="SmartWMS"
       subject="Daftar Aktiva Tetap Summary"
     >
-      <Page size="A4" style={styles.page}>
+      {data.map((toko) => {
+        const colors = getCGAColors(toko.tokoCode)
+        return (
+          <Page key={toko.toko} size="A4" style={styles.page}>
 
-        {/* Header */}
-        <View style={styles.header} fixed>
-          <View style={styles.headerLeft}>
-            <Text style={styles.headerTitle}>Laporan Rekap DAT</Text>
-            <Text style={styles.headerSubtitle}>
-              Smart Asset Monitoring & Reconciliation System
-            </Text>
-          </View>
-          <View style={styles.headerRight}>
-            <Text style={styles.headerDate}>
-              Digenerate: {formatDate(generatedAt)}
-            </Text>
-          </View>
-        </View>
+            {/* Header */}
+            <View style={styles.header} fixed>
+              <View style={styles.headerLeft}>
+                <Text style={styles.headerTitle}>Laporan Rekap DAT</Text>
+                <Text style={styles.headerSubtitle}>
+                  Smart Asset Monitoring & Reconciliation System
+                </Text>
+              </View>
+              <View style={styles.headerRight}>
+                <Text style={styles.headerDate}>
+                  Digenerate: {formatDate(generatedAt)}
+                </Text>
+              </View>
+            </View>
 
-        {/* Content per cost center */}
-        {data.map((toko) => (
-          <View key={toko.toko}>
-            {/* Cost center header */}
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{toko.toko}</Text>
-              <Text style={styles.sectionSubtitle}>
+            {/* Cost center header — solid sesuai warna CGA */}
+            <View style={[styles.sectionHeader, { backgroundColor: colors.header }]}>
+              <Text style={[styles.sectionTitle, { color: colors.headerText }]}>{toko.toko}</Text>
+              <Text style={[styles.sectionSubtitle, { color: colors.headerText, opacity: 0.85 }]}>
                 {toko.totalItem} item · Qty {toko.totalQty}
               </Text>
             </View>
 
             {/* Kategori sections */}
-            {toko.kategoris.map((kat, idx) => (
-              <KategoriSection key={kat.kategori} kategori={kat} idx={idx} />
+            {toko.kategoris.map((kat) => (
+              <KategoriSection key={kat.kategori} kategori={kat} colors={colors} />
             ))}
 
-            {/* Total toko */}
-            <View style={styles.totalRow}>
-              <Text style={[styles.totalText, styles.colJenis]}>
+            {/* Total toko — solid sesuai warna CGA */}
+            <View style={[styles.totalRow, { backgroundColor: colors.totalBg }]}>
+              <Text style={[styles.totalText, styles.colJenis, { color: colors.totalText }]}>
                 TOTAL {toko.tokoCode}
               </Text>
-              <Text style={[styles.totalText, styles.colItem]}>{toko.totalItem}</Text>
-              <Text style={[styles.totalText, styles.colQty]}>{toko.totalQty}</Text>
-              <Text style={[styles.totalText, styles.colPerolehan]}>
+              <Text style={[styles.totalText, styles.colItem, { color: colors.totalText }]}>{toko.totalItem}</Text>
+              <Text style={[styles.totalText, styles.colQty, { color: colors.totalText }]}>{toko.totalQty}</Text>
+              <Text style={[styles.totalText, styles.colPerolehan, { color: colors.totalText }]}>
                 {formatRupiah(toko.totalPerolehan)}
               </Text>
-              <Text style={[styles.totalText, styles.colTercatat]}>
+              <Text style={[styles.totalText, styles.colTercatat, { color: colors.totalText }]}>
                 {formatRupiah(toko.totalTercatat)}
               </Text>
             </View>
-          </View>
-        ))}
 
-        {/* Footer */}
-        <View style={styles.footer} fixed>
-          <Text style={styles.footerText}>
-            SmartWMS — Laporan Rekap DAT
-          </Text>
-          <Text
-            style={styles.pageNumber}
-            render={({ pageNumber, totalPages }) =>
-              `Halaman ${pageNumber} dari ${totalPages}`
-            }
-          />
-        </View>
-      </Page>
+            {/* Footer */}
+            <View style={styles.footer} fixed>
+              <Text style={styles.footerText}>
+                SmartWMS — Laporan Rekap DAT
+              </Text>
+              <Text
+                style={styles.pageNumber}
+                render={({ pageNumber, totalPages }) =>
+                  `Halaman ${pageNumber} dari ${totalPages}`
+                }
+              />
+            </View>
+          </Page>
+        )
+      })}
     </Document>
   )
 }
