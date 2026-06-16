@@ -257,7 +257,8 @@ const styles = StyleSheet.create({
   },
   signatureRole: {
     fontSize: 8,
-    color: COLORS.muted,
+    color: "#0a0a0a",
+    fontWeight: "bold",
     textTransform: "uppercase",
     letterSpacing: 1,
     marginBottom: 36,
@@ -419,13 +420,13 @@ export function SuratJalanPDF({ data, logoSrc }: SuratJalanPDFProps) {
             </View>
           </View>
           <View style={styles.signatureBox}>
-            <Text style={styles.signatureRole}>Pembawa</Text>
+            <Text style={styles.signatureRole}>Dibawa</Text>
             <View style={styles.signatureLine}>
               <Text style={styles.signatureName}>{data.pembawa || "—"}</Text>
             </View>
           </View>
           <View style={styles.signatureBox}>
-            <Text style={styles.signatureRole}>Penerima</Text>
+            <Text style={styles.signatureRole}>Diterima</Text>
             <View style={styles.signatureLine}>
               <Text style={styles.signatureName}>{data.penerima || "—"}</Text>
             </View>
