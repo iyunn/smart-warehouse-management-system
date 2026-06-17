@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabaseClient'
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { data } = body
+    const { data, isLastBatch } = body
 
     if (!data || data.length === 0) {
       return NextResponse.json({ success: false, error: 'No data provided' })
@@ -101,20 +101,26 @@ export async function POST(req: Request) {
     // "Allocated" ikut hilang. Step ini me-restore tag untuk kode_asset yang
     // sudah pernah diinput di Rekap Alokasi — tanpa ini user harus input ulang
     // setiap kali upload DAT baru.
-    // Pakai rawIdMap yang sudah dibangun di step 4 untuk lookup O(1).
-    {
+    // PENTING: hanya jalan di batch TERAKHIR, karena baru di titik itu semua
+    // batch sebelumnya sudah commit ke DB — re-apply tag di tengah upload
+    // tidak ada gunanya (sebagian besar assets_clean belum ada).
+    if (isLastBatch) {
       const { data: allocatedItems } = await supabase
         .from('surat_jalan_items')
         .select('kode_asset')
         .not('kode_asset', 'is', null)
 
       if (allocatedItems && allocatedItems.length > 0) {
-        // Kumpulkan raw_id yang perlu di-tag dari rawIdMap
-        const rawIdsToTag = allocatedItems
-          .map((it: any) => rawIdMap.get(it.kode_asset))
-          .filter(Boolean) as string[]
+        // Query ulang SEMUA raw_id dari DB (bukan rawIdMap lokal yang cuma
+        // berisi kode_asset dari batch ini) — karena di titik ini semua
+        // batch sudah commit, assets_raw berisi data lengkap.
+        const allocatedKodes = allocatedItems.map((it: any) => it.kode_asset)
+        const { data: matchedRaw } = await supabase
+          .from('assets_raw')
+          .select('id, kode_asset')
+          .in('kode_asset', allocatedKodes)
 
-        // Deduplicate — satu raw_id mungkin muncul di beberapa SJ item
+        const rawIdsToTag = (matchedRaw ?? []).map((r: any) => r.id)
         const uniqueRawIds = [...new Set(rawIdsToTag)]
 
         // Batch update assets_clean tag = 'Allocated' (500 per batch)
@@ -130,22 +136,34 @@ export async function POST(req: Request) {
 
     // ── 7. Auto-clear asset_notes untuk aset yang sudah keluar CGA ───────────
     // Prinsip: catatan valid SELAMA aset tidak pernah meninggalkan CGA.
-    // Kalau kode_asset di asset_notes TIDAK ada di DAT baru (rawIdMap), berarti
-    // aset sudah keluar/mutasi → catatan dianggap selesai siklusnya → hapus.
+    // Kalau kode_asset di asset_notes TIDAK ada di DAT baru, berarti aset
+    // sudah keluar/mutasi → catatan dianggap selesai siklusnya → hapus.
     // Kalau aset balik lagi 6 bulan kemudian, itu siklus baru tanpa catatan basi.
-    {
+    //
+    // PENTING: hanya jalan di batch TERAKHIR. rawIdMap lokal di request ini
+    // cuma berisi kode_asset dari batch ini saja (sebagian kecil dari total
+    // DAT) — kalau dipakai untuk auto-clear di setiap batch, hampir semua
+    // catatan akan salah dianggap "stale" dan terhapus meski asetnya masih
+    // aktif di CGA (cuma belum sampai batch ini). Karena itu, saat batch
+    // terakhir, query ulang SEMUA kode_asset dari assets_raw (bukan rawIdMap)
+    // — di titik ini semua batch sudah commit, jadi datanya lengkap.
+    if (isLastBatch) {
+      const { data: allRawKodes } = await supabase
+        .from('assets_raw')
+        .select('kode_asset')
+
+      const currentKodeSet = new Set((allRawKodes ?? []).map((r: any) => r.kode_asset))
+
       const { data: allNotes } = await supabase
         .from('asset_notes')
         .select('kode_asset')
 
       if (allNotes && allNotes.length > 0) {
-        // kode_asset yang sudah tidak ada di DAT baru
         const staleKodes = allNotes
           .map((n: any) => n.kode_asset)
-          .filter((k: string) => !rawIdMap.has(k))
+          .filter((k: string) => !currentKodeSet.has(k))
 
         if (staleKodes.length > 0) {
-          // Batch delete (500 per batch)
           for (let i = 0; i < staleKodes.length; i += BATCH_SIZE) {
             const batch = staleKodes.slice(i, i + BATCH_SIZE)
             await supabase

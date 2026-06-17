@@ -55,7 +55,12 @@ async function sendBatch(
     return fetch("/api/process", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: batch }),
+      body: JSON.stringify({
+        data: batch,
+        batchIndex,
+        totalBatches,
+        isLastBatch: batchIndex === totalBatches - 1,
+      }),
       signal,
     });
   };
