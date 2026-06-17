@@ -3,7 +3,7 @@
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **15 Juni 2026** (setelah SJ Sesi 4 complete + Rekap Pengiriman live + Monitoring v2 + Daftar SJ Arsip + LPP reconciliation design)
+> Terakhir diupdate: **17 Juni 2026** (setelah fix kritis auto-clear asset_notes, fix pagination PDF SJ, fitur Template Item SJ)
 
 ## Project Identity
 
@@ -92,7 +92,7 @@ Sistem ini bukan pengganti Oracle ERP maupun Web Tracking. Sistem ini berfungsi 
 
 ---
 
-# 2. Current Development State ( per 15 Juni 2026 )
+# 2. Current Development State ( per 17 Juni 2026 )
 
 ## Features Completed
 
@@ -157,10 +157,14 @@ Status: ✅ Completed
 - **Strategi upload: Full Replace (Delete-then-Insert)**
   - `POST /api/process/clear` — DELETE semua `assets_raw` sekali sebelum batch pertama
     (`assets_clean` ikut terhapus via CASCADE)
-  - INSERT fresh dari file (batch 500 rows)
+  - INSERT fresh dari file (batch 500 rows), client kirim `batchIndex`/`totalBatches`/
+    `isLastBatch` di setiap request batch
   - DAT adalah full snapshot — aset tidak ada di file = sudah dimutasi keluar CGA
-- Re-apply tag "Allocated" otomatis setelah upload (cross-check `surat_jalan_items.kode_asset`)
-- Auto-clear `asset_notes` untuk kode_asset yang sudah keluar CGA
+- Re-apply tag "Allocated" — hanya jalan di **batch terakhir** (`isLastBatch`), query
+  ulang `assets_raw` lengkap dari DB (bukan data parsial per-batch)
+- Auto-clear `asset_notes` untuk kode_asset yang sudah keluar CGA — hanya jalan di
+  **batch terakhir**, dibandingkan terhadap seluruh `assets_raw` dari DB (lihat fix
+  kritis 17 Juni di Recent Changes Log)
 
 ### Asset Classification Engine
 Status: ✅ Completed
@@ -213,7 +217,7 @@ Fitur:
 - Kolom: Item, Qty, Biaya Perolehan, Jumlah Tercatat
 - Validasi: item count & qty match 100% dengan Excel Oracle
 
-### Surat Jalan Manual — Sesi 1-4 + Print/PDF + Arsip
+### Surat Jalan Manual — Sesi 1-4 + Print/PDF + Arsip + Template Item
 Status: ✅ Completed (semua sesi + fitur pelengkap)
 
 **Sesi 1:** Schema (3 tabel) + Buat SJ + Master Tujuan + Sidebar dropdown
@@ -286,6 +290,77 @@ Status: ✅ Completed (semua sesi + fitur pelengkap)
 - Filter tambahan: Invoice Number, Catatan
 - Bulk import 560 catatan historis dari Excel ke `asset_notes`
 
+### ✅ Fix — PDF Surat Jalan, Label Signature (16 Juni 2026)
+- Label "Dibawa"/"Diterima" dikonfirmasi sudah benar di kode (sempat dikira
+  salah karena versi lama masih "Pembawa"/"Penerima" di beberapa env)
+- Warna font label signature (Dibuat/Disetujui/Dibawa/Diterima) diubah dari
+  abu-abu muted jadi hitam pekat (`#0a0a0a`) + bold — alasan: rawan tertimbun
+  tinta stempel/bolpen di kertas fisik
+- File: `SuratJalanPDF.tsx`
+
+### ✅ Redesign — Excel Export Monitoring (Sheet Summary) (16 Juni 2026)
+- Sheet "Summary" diubah total dari flat list (grouping jenis×toko) jadi
+  **3 tabel side-by-side per CGA** (CGA1 kolom B-G, gap, CGA2 kolom I-N, gap,
+  CGA3 kolom P-U), masing-masing di-group Kategori → Jenis dengan kolom
+  Kategori/Jenis/Item/Qty/Perolehan/Tercatat, subtotal per kategori, dan
+  Grand Total per CGA
+- Sheet "Detail DAT" tidak disentuh sama sekali
+- **Catatan teknis penting**: SheetJS community edition (`xlsx` npm package)
+  TIDAK mendukung cell styling (fill warna, border warna, bold) saat menulis
+  file — itu eksklusif SheetJS Pro. Keputusan: tetap pakai `xlsx` tanpa warna
+  (struktur/grouping/merge cell tetap jalan, cuma visualnya polos)
+- File: `monitoringExporter.ts`
+
+### ✅ Redesign — Export PDF Rekap DAT (16 Juni 2026)
+- Trigger dipindah dari halaman `/reports` (dihapus) ke tombol "Export PDF"
+  baru di halaman Monitoring (sebelah kiri tombol "Export Excel")
+- Menu "Reports" dihapus dari Sidebar
+- **Page-break per CGA** — setiap CGA render di `<Page>` `@react-pdf/renderer`
+  tersendiri (sebelumnya semua CGA digabung 1 halaman panjang); kalau konten
+  CGA tidak penuh 1 halaman, sisanya kosong, CGA berikutnya mulai halaman baru
+- **Styling warna per CGA** — header & total toko solid sesuai badge UI
+  (CGA1=emerald, CGA2=amber, CGA3=rose), kategori header & subtotal pakai
+  versi pudar (opacity diturunkan), row alternate sangat pudar
+- API `dat-summary/route.ts` tidak diubah (sudah summary-only by design)
+- File: `DATSummaryDocument.tsx`, `Sidebar.tsx`, `monitoring/page.tsx`
+
+### ✅ Fix Kritis — Auto-clear asset_notes & Multi-batch Upload (17 Juni 2026)
+- Root cause: `POST /api/process` dipanggil **per batch** (500 rows/batch) dari
+  client, tapi step auto-clear `asset_notes` & re-apply tag "Allocated" jalan
+  di **setiap batch** dengan `rawIdMap` yang cuma berisi kode_asset dari batch
+  itu sendiri — bukan keseluruhan upload. Akibatnya hampir semua `asset_notes`
+  salah dianggap "stale" dan terhapus total
+- Fix: client (`batchProcessor.ts`) kirim `batchIndex`/`totalBatches`/
+  `isLastBatch` per request; server (`route.ts`) skip kedua step kecuali
+  `isLastBatch`, dan saat itu query ulang **seluruh** `assets_raw` dari DB
+  (bukan `rawIdMap` parsial) — perbandingan "stale" jadi akurat
+- Bonus: re-apply tag Allocated juga lebih efisien (1x di akhir dengan data
+  lengkap, bukan 10x dengan data parsial yang sebagian besar sia-sia)
+
+### ✅ Fix — PDF Surat Jalan Pagination (17 Juni 2026)
+- Bug: react-pdf gagal page-break otomatis di tabel >15 item — seluruh
+  tabel "all-or-nothing" pindah ke halaman 2, header tersisa sendirian di
+  halaman 1
+- Fix: manual pagination — items di-chunk maksimal 15/halaman, header surat
+  lengkap (logo, No SJ, Tanggal, Kepada Yth, intro) dan header tabel diulang
+  di setiap halaman, Total Item/Qty + signature hanya di halaman terakhir
+- File: `SuratJalanPDF.tsx`
+
+### ✅ Fitur Baru — Template Item SJ (17 Juni 2026)
+- User bisa simpan kombinasi item yang sering berulang (mis. paket "SDN")
+  dan menerapkannya saat Buat/Edit SJ — item template ditambahkan ke bawah
+  item yang sudah diisi, urutan auto-renumber
+- Schema: tabel baru `sj_item_templates` (single table + JSONB, bukan
+  relasional — template selalu dipakai utuh, tanpa join)
+- `serial_number` TIDAK disimpan di template (unik per unit fisik),
+  dikosongkan saat diterapkan untuk diisi manual
+- Template bersifat shared (semua user lihat & pakai sama)
+- Halaman baru `/sj/templates` — buat (reuse `SJItemsTable`) + hapus
+  template, menu baru di dropdown Sidebar "Surat Jalan Manual"
+- Tombol "Pakai Template" (dropdown ungu) di form Buat/Edit SJ, posisi
+  saat ini di header "Detail Barang" — **rencana pindah** ke sebelahan
+  tombol "Tambah Baris" (belum dikerjakan, next session)
+
 ---
 
 ## Features In Progress
@@ -296,8 +371,10 @@ tidak ada fitur yang sedang dikerjakan saat ini
 
 ## Features Planned
 
-### 🎯 Next (Updated 15 Juni 2026)
+### 🎯 Next (Updated 17 Juni 2026)
 - **LPP Web Tracking Reconciliation (THESIS CORE)** — lihat desain lengkap di bawah
+- UI minor: tombol "Pakai Template" di Buat/Edit SJ dipindah posisinya ke
+  sebelahan tombol "Tambah Baris" (saat ini di header "Detail Barang")
 - "Changed" filter di Classification (prev_jenis/prev_merk, ACC/Revert) — prioritas rendah, ditunda sampai core selesai
 - Closing Snapshot Architecture — ditunda, fokus reconciliation dulu
 - Authentication (Supabase Auth, role Admin/Viewer, protected routes)
@@ -365,8 +442,11 @@ closing_snapshots (
 
 Mekanisme upload: user pilih period manual (12 bulan), parser hitung aggregate, simpan ke `closing_snapshots`, data mentah di-discard.
 
-### Reporting Module — Excel Export
-Status: ✅ Sebagian besar selesai (SJ Rekap Alokasi, Monitoring, DAT Summary)
+### Reporting Module — Excel Export & PDF
+Status: ✅ Sebagian besar selesai (SJ Rekap Alokasi, Monitoring 3-tabel per CGA, DAT Summary PDF)
+- Monitoring Excel: 3 tabel side-by-side per CGA dengan grouping Kategori→Jenis
+  (tanpa warna — limitasi SheetJS community edition)
+- DAT Summary PDF: page-break + warna per CGA, trigger dari tombol di Monitoring
 - Pending: export untuk hasil reconciliation LPP setelah diimplementasi
 
 ### Authentication & Role Management
@@ -648,11 +728,29 @@ Field utama:
 - `catatan` (text)
 - `updated_at` (timestamptz)
 
-Auto-clear: saat upload DAT, baris dihapus kalau `kode_asset` tidak ada di
-DAT baru (aset sudah keluar CGA → siklus catatan dianggap selesai).
+Auto-clear: saat upload DAT (batch terakhir saja, lihat fix 17 Juni), baris
+dihapus kalau `kode_asset` tidak ada di DAT baru (aset sudah keluar CGA →
+siklus catatan dianggap selesai).
 
 RLS: policy "Allow all on asset_notes" (PERMISSIVE, public, ALL, true/true) —
 replikasi pola tabel lain.
+
+---
+
+## sj_item_templates
+
+Template kombinasi item SJ yang sering berulang (mis. paket "SDN") — bisa
+diterapkan saat Buat/Edit SJ agar item bertambah otomatis. Single table +
+JSONB (bukan relasional) karena template selalu dipakai utuh, tanpa join.
+
+Field utama:
+- `id` (uuid, PK)
+- `nama` (text, UNIQUE)
+- `items` (jsonb) — array of `{ jenis, merk, qty, satuan, is_baru, is_aktiva, keterangan }`
+  (TANPA `serial_number` — unik per unit fisik, diisi manual saat diterapkan)
+- `created_at` (timestamptz)
+
+RLS: policy "Allow all on sj_item_templates" (PERMISSIVE, public, ALL, true/true).
 
 ---
 
@@ -714,32 +812,33 @@ src/
 │   ├── upload/page.tsx               Upload Data (4 panel)
 │   ├── monitoring/page.tsx           Monitoring (2 tab)
 │   ├── review/page.tsx               Classification
-│   ├── reports/page.tsx              DAT summary report
 │   │
 │   ├── sj/
-│   │   ├── buat/page.tsx             Buat Surat Jalan
+│   │   ├── buat/page.tsx             Buat Surat Jalan (+ TemplatePicker)
 │   │   ├── list/page.tsx             Daftar SJ (+ kolom Arsip)
 │   │   ├── report/page.tsx           Rekap Alokasi (Sesi 3+4)
-│   │   └── tujuan/page.tsx           Master Tujuan CRUD
+│   │   ├── tujuan/page.tsx           Master Tujuan CRUD
+│   │   └── templates/page.tsx        Kelola Template Item (buat + hapus)
 │   │
 │   └── api/
 │       ├── process/
-│       │   ├── route.ts              Upload DAT pipeline (+ re-apply tag, auto-clear notes)
+│       │   ├── route.ts              Upload DAT pipeline (re-apply tag & auto-clear notes HANYA di batch terakhir)
 │       │   └── clear/route.ts        DELETE assets_raw (dipanggil sekali sebelum batch)
 │       ├── reclassify/route.ts       Reclassify engine
-│       ├── reports/dat-summary/route.ts
+│       ├── reports/dat-summary/route.ts  Dipanggil dari tombol Export PDF di Monitoring
 │       ├── dashboard/stats/route.ts  Dashboard live data (+ Rekap Pengiriman)
 │       ├── monitoring/route.ts       Monitoring data (GET + PATCH catatan)
 │       └── sj/
 │           ├── route.ts              GET/POST/PATCH/DELETE SJ (+ archive_only)
 │           ├── report/route.ts       PATCH alokasi (kode_asset, mutasi_oracle, mutasi_wt)
 │           ├── tujuan/route.ts       CRUD tujuan
+│           ├── templates/route.ts    GET/POST/DELETE template item
 │           └── master/
 │               ├── jenis/route.ts    DISTINCT 5-min cache
 │               └── merk/route.ts     DISTINCT 5-min cache
 │
 ├── components/
-│   ├── Sidebar.tsx                   Dropdown support
+│   ├── Sidebar.tsx                   Dropdown support (menu Reports dihapus, +Template Item)
 │   ├── Topbar.tsx
 │   ├── SummaryCard.tsx
 │   ├── UploadSection.tsx             Dipakai di /upload
@@ -762,10 +861,11 @@ src/
 │   │
 │   ├── sj/
 │   │   ├── SearchableDropdown.tsx    Portal-based
-│   │   └── SJItemsTable.tsx          + SatuanSelect inline
+│   │   └── SJItemsTable.tsx          + SatuanSelect inline, dipakai juga di editor Template Item
 │   │
 │   └── reports/
-│       └── DATSummaryDocument.tsx
+│       ├── DATSummaryDocument.tsx    Page-break per CGA, styling warna per CGA
+│       └── SuratJalanPDF.tsx         Manual pagination max 15 item/halaman
 │
 ├── hooks/
 │   ├── useReviewAssets.ts            Client-side pagination
@@ -775,7 +875,7 @@ src/
 │   ├── useMonitoring.ts              + invoice_number, tanggal_dokumen, catatan
 │   ├── useSJList.ts                  + is_archived
 │   ├── useSJReport.ts                + mutasi_wt, is_mutated
-│   └── useSJMaster.ts                3 hooks: jenis/merk/tujuan
+│   └── useSJMaster.ts                4 hooks: jenis/merk/tujuan/templates
 │
 └── lib/
     ├── classifier.ts                 Word boundary matching
@@ -793,6 +893,8 @@ src/
 - `src/app/api/classification/route.ts` (digantikan client-side pagination)
 - `src/components/dashboard/DistribusiCostCenter.tsx` (replaced dengan PlaceholderCards)
 - `src/components/dashboard/TopJenisChart.tsx` (replaced dengan PlaceholderCards)
+- `src/app/reports/page.tsx` (16 Juni 2026 — trigger Export PDF dipindah ke
+  tombol di halaman Monitoring, menu "Reports" dihapus dari Sidebar)
 
 ### Catatan
 - `src/lib/xlsxParser.ts` masih ada di repo (legacy, tidak dipakai aktif)
@@ -889,6 +991,30 @@ src/
 ---
 
 # 10. Recent Major Changes Log
+
+## 17 Juni 2026
+- **Fix kritis: auto-clear `asset_notes` menghapus SEMUA catatan** — root
+  cause: step auto-clear & re-apply tag Allocated jalan di setiap batch
+  upload (bukan sekali di akhir), dibandingkan terhadap `rawIdMap` yang cuma
+  berisi data batch itu sendiri. Fix: kirim `isLastBatch` dari client,
+  server skip kedua step kecuali batch terakhir, query ulang data lengkap
+  dari DB saat itu
+- **Fix: PDF Surat Jalan rusak untuk item >15** — react-pdf gagal page-break
+  otomatis di tabel besar, fix dengan manual pagination (chunk 15/halaman,
+  header diulang, signature di halaman terakhir)
+- **Fitur baru: Template Item SJ** — tabel `sj_item_templates` (JSONB),
+  halaman `/sj/templates` (buat+hapus), tombol "Pakai Template" di
+  Buat/Edit SJ (apply ke bawah item existing, auto-renumber)
+
+## 16 Juni 2026
+- **Fix: warna font signature SJ** (Dibuat/Disetujui/Dibawa/Diterima) jadi
+  hitam pekat + bold (sebelumnya abu-abu, rawan tertimbun stempel/bolpen)
+- **Redesign Excel Monitoring (sheet Summary)** — 3 tabel side-by-side per
+  CGA, grouping Kategori→Jenis, subtotal+grand total (tanpa warna — limitasi
+  SheetJS community edition)
+- **Redesign Export PDF Rekap DAT** — trigger dipindah ke tombol di
+  Monitoring (halaman `/reports` & menu Sidebar dihapus), page-break per
+  CGA, styling warna per CGA (emerald/amber/rose sesuai badge UI)
 
 ## 15 Juni 2026
 - **SJ Sesi 4 hotfixes** — lock guard izinkan reset bypass K1 (fix typo jadi

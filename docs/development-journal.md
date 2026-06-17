@@ -1775,3 +1775,135 @@ Local override (`archiveOverride`) agar state tidak hilang saat pindah paginatio
 
 ### Branch
 Dikerjakan di branch `fitur-percobaan`, sudah di-merge ke `main`.
+
+# Selasa, 16 Juni 2026 — Fix PDF Signature, Redesign Excel Monitoring & PDF Rekap DAT
+
+### Fix
+- **Label & warna signature SJ** — label "Dibawa"/"Diterima" dikonfirmasi
+  sudah benar di kode (sempat dikira salah karena versi lama). Warna font
+  label signature (Dibuat/Disetujui/Dibawa/Diterima) diubah dari abu-abu
+  muted jadi hitam pekat (`#0a0a0a`) + bold — alasan: rawan tertimbun tinta
+  stempel/bolpen di kertas fisik. File: `SuratJalanPDF.tsx`.
+
+### Redesign — Excel Export Monitoring (Sheet "Summary")
+Diubah total dari flat list (grouping jenis × toko) jadi **3 tabel
+side-by-side per CGA** (CGA1 kolom B-G, gap, CGA2 kolom I-N, gap, CGA3
+kolom P-U). Masing-masing di-group Kategori Oracle → Jenis dengan kolom
+Kategori/Jenis/Item/Qty/Perolehan/Tercatat, ada subtotal per kategori dan
+Grand Total per CGA. Kategori tampil lengkap ("C - Peralatan Komputer")
+hanya di baris pertama grup. Sheet "Detail DAT" tidak disentuh sama sekali.
+
+Catatan teknis penting: SheetJS community edition (`xlsx` npm package)
+TIDAK mendukung cell styling (fill warna, border warna, bold) saat menulis
+file — itu eksklusif SheetJS Pro. Keputusan diambil: tetap pakai `xlsx`
+tanpa warna (struktur/grouping/merge cell tetap jalan, visual polos).
+Sempat ada bug subtotal/grand total label tampil sebagai cell kosong —
+root cause: kode baca `row.jenis` (kosong) padahal label disimpan di
+`row.kategori`, fixed.
+
+File: `monitoringExporter.ts`.
+
+### Redesign — Export PDF Rekap DAT
+- Trigger dipindah dari halaman `/reports` (dihapus) ke tombol baru
+  "Export PDF" di halaman Monitoring (sebelah kiri tombol "Export Excel")
+- Menu "Reports" dihapus dari Sidebar
+- **Page-break per CGA** — setiap CGA render di `<Page>` `@react-pdf/renderer`
+  tersendiri (sebelumnya semua CGA digabung jadi 1 halaman panjang)
+- **Styling warna per CGA** — header & total toko solid sesuai badge UI
+  (CGA1=emerald, CGA2=amber, CGA3=rose), kategori header & subtotal pakai
+  versi pudar, row alternate sangat pudar
+- API `dat-summary/route.ts` tidak diubah (sudah summary-only by design)
+
+File: `DATSummaryDocument.tsx`, `Sidebar.tsx`, `monitoring/page.tsx`.
+Branch: dikerjakan & di-commit mandiri oleh user.
+
+---
+
+# Rabu, 17 Juni 2026 — Fix Kritis asset_notes, Fix Pagination PDF SJ, Fitur Template Item
+
+### Fix Kritis — Auto-clear `asset_notes` menghapus SEMUA catatan
+**Laporan bug:** setelah reupload DAT terbaru, seluruh catatan di tabel
+Monitoring hilang dan `asset_notes` di DB jadi kosong total.
+
+**Root cause:** `UploadSection.tsx` mengirim `POST /api/process` **per
+batch** (500 rows/batch via `batchProcessor.ts`, konfirmasi: 10 batch untuk
+4563 row dari Network tab). Step auto-clear `asset_notes` & re-apply tag
+"Allocated" di `api/process/route.ts` berjalan **di setiap batch**,
+membandingkan terhadap `rawIdMap` yang cuma berisi kode_asset dari batch
+itu sendiri (~456 row), bukan keseluruhan upload. Batch pertama datang →
+hampir semua `asset_notes` salah dianggap "stale" (aset sudah keluar CGA)
+→ terhapus. Berulang tiap batch sampai semua catatan habis.
+
+**Fix:**
+- `batchProcessor.ts` — kirim `batchIndex`, `totalBatches`, `isLastBatch`
+  di payload setiap request batch
+- `api/process/route.ts` — step re-apply tag Allocated & auto-clear
+  `asset_notes` **hanya jalan saat `isLastBatch === true`**, dan di titik
+  itu query ulang **seluruh** `assets_raw.kode_asset` dari DB (bukan
+  `rawIdMap` parsial) — perbandingan "stale" jadi akurat karena semua
+  batch sebelumnya sudah commit ke DB
+- Bonus: re-apply tag Allocated jadi lebih efisien (1x di akhir dengan
+  data lengkap, bukan 10x dengan data parsial yang sebagian besar sia-sia)
+
+**Verifikasi:** user re-import 560 catatan historis (SQL `import-catatan.sql`
+lama), lalu reupload DAT — catatan tetap ada, fix dikonfirmasi berhasil.
+
+**Data loss:** semua `asset_notes` (560 bulk import + catatan manual)
+terhapus akibat bug ini sebelum fix diterapkan. Bulk import sudah direstore
+manual oleh user; catatan manual yang ditambah setelah bulk import dan
+sebelum bug terjadi tidak bisa direstore.
+
+### Fix — PDF Surat Jalan Pagination
+**Laporan bug:** SJ dengan 23 item, hasil PDF rusak — header & info
+pengiriman muncul sendirian di halaman 1, seluruh tabel (23 baris) pindah
+ke halaman 2.
+
+**Root cause:** react-pdf gagal melakukan page-break otomatis di tengah
+tabel besar — alih-alih memecah tabel di titik yang tepat, seluruh block
+tabel "all-or-nothing" dipindah ke halaman berikutnya kalau tidak cukup
+ruang di halaman saat ini.
+
+**Fix:** manual pagination — items di-chunk maksimal **15 item per
+halaman** (`ITEMS_PER_PAGE = 15`). Tiap chunk di-render sebagai `<Page>`
+tersendiri dengan header surat lengkap (logo, No SJ, Tanggal, Kepada Yth,
+intro text) dan header tabel diulang di setiap halaman. Total Item/Qty dan
+signature (Dibuat/Disetujui/Dibawa/Diterima) hanya dirender di **halaman
+terakhir**. Kalau total item ≤15, tetap 1 halaman seperti sebelumnya.
+
+File: `SuratJalanPDF.tsx`.
+
+### Fitur Baru — Template Item Surat Jalan
+User bisa menyimpan kombinasi item yang sering berulang (contoh: template
+"SDN" isi CPU Zyrex + Printer Thermal Epson + Gun Scanner Honeywell) dan
+menerapkannya saat membuat/edit SJ. Item template ditambahkan ke bawah
+item yang sudah diisi user (baris kosong di-skip), urutan auto-renumber.
+
+**Skema DB:** single table + JSONB (bukan relasional) — `sj_item_templates
+(id, nama UNIQUE, items jsonb, created_at)`. Alasan: template selalu
+dipakai utuh, tidak pernah query item individual, jadi 1 baris = 1 query
+tanpa join, sesuai prinsip arsitektur (DB ringan, minimize join).
+`serial_number` TIDAK disimpan di template (unik per unit fisik),
+dikosongkan saat template diterapkan untuk diisi manual. Template bersifat
+**shared** — semua user lihat & pakai sama, sesuai konfirmasi user.
+
+**Implementasi:**
+- `sjTypes.ts` — tipe `SJTemplateItem`, `SJItemTemplate`, helper
+  `toTemplateItem`/`fromTemplateItem`
+- `api/sj/templates/route.ts` — GET (list)/POST (create)/DELETE (by id)
+- `useSJMaster.ts` — hook baru `useSJTemplates` (pola sama `useMasterTujuan`)
+- `sj/templates/page.tsx` — halaman baru kelola template: buat (reuse
+  `SJItemsTable` untuk editor item, SN diabaikan saat simpan) + hapus,
+  daftar template tampil sebagai cards dengan preview item
+- `Sidebar.tsx` — menu baru "Template Item" di dropdown "Surat Jalan Manual"
+- `sj/buat/page.tsx` — komponen `TemplatePicker` (dropdown ungu) di header
+  "Detail Barang", handler `handleApplyTemplate` (filter baris kosong →
+  append item template → renumber urutan)
+
+**Pending (next session):** posisi tombol "Pakai Template" dipindah ke
+sebelahan tombol "Tambah Baris" (saat ini di header section, bukan di
+footer tabel bersama "Tambah Baris").
+
+### Lain-lain
+- Fix environment: error `Cannot find native binding` (`@tailwindcss/oxide`)
+  di Codespace baru — resolved via `rm -rf node_modules package-lock.json
+  && npm install`. Bug npm dependency, tidak terkait kode SmartWMS.
