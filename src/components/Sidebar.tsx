@@ -76,6 +76,7 @@ const navItems: NavItem[] = [
       { id: "sj-list",   label: "Daftar Surat Jalan", href: "/sj/list"    },
       { id: "sj-tujuan", label: "Master Tujuan",    href: "/sj/tujuan"  },
       { id: "sj-report", label: "Rekap Alokasi",    href: "/sj/report"  },
+      { id: "sj-template", label: "Template Item",  href: "/sj/templates" },
     ],
   },
   { id: "settings", label: "Settings", icon: icons.settings, href: "#"        },
@@ -86,6 +87,7 @@ function getActiveId(pathname: string): string {
   if (pathname.startsWith("/sj/list"))     return "sj-list";
   if (pathname.startsWith("/sj/tujuan"))   return "sj-tujuan";
   if (pathname.startsWith("/sj/report"))   return "sj-report";
+  if (pathname.startsWith("/sj/templates")) return "sj-template";
   if (pathname.startsWith("/sj"))          return "sj";
   if (pathname.startsWith("/upload"))      return "upload";
   if (pathname.startsWith("/monitoring"))  return "monitoring";

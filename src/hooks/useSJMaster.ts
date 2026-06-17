@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { SJTujuan } from "@/lib/sjTypes";
+import type { SJTujuan, SJItemTemplate } from "@/lib/sjTypes";
 
 // Hook untuk fetch master jenis
 export function useMasterJenis() {
@@ -62,4 +62,27 @@ export function useMasterTujuan() {
   const refresh = () => setRefreshTick(t => t + 1);
 
   return { tujuan, loading, refresh };
+}
+
+// Hook untuk fetch template item SJ (dengan refresh untuk create/delete)
+export function useSJTemplates() {
+  const [templates, setTemplates] = useState<SJItemTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch("/api/sj/templates")
+      .then(r => r.json())
+      .then(json => {
+        if (!cancelled) setTemplates(json.templates ?? []);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [refreshTick]);
+
+  const refresh = () => setRefreshTick(t => t + 1);
+
+  return { templates, loading, refresh };
 }

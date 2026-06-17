@@ -1,16 +1,81 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, Suspense } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import SearchableDropdown from "@/components/sj/SearchableDropdown";
 import SJItemsTable from "@/components/sj/SJItemsTable";
 import SJPreviewModal from "@/components/sj/SJPreviewModal";
-import { useMasterJenis, useMasterMerk, useMasterTujuan } from "@/hooks/useSJMaster";
+import { useMasterJenis, useMasterMerk, useMasterTujuan, useSJTemplates } from "@/hooks/useSJMaster";
 import { useSJDetail } from "@/hooks/useSJList";
-import { createEmptyItem, type SJItem } from "@/lib/sjTypes";
+import { createEmptyItem, fromTemplateItem, type SJItem, type SJItemTemplate } from "@/lib/sjTypes";
 import type { SJDataForPDF } from "@/components/sj/SuratJalanPDF";
+
+function TemplatePicker({
+  templates,
+  onApply,
+}: {
+  templates: SJItemTemplate[];
+  onApply: (tpl: SJItemTemplate) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-[11px] font-medium text-violet-300 hover:bg-violet-500/20 transition-all"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+          <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+        </svg>
+        Pakai Template
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform ${open ? "rotate-180" : ""}`}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 z-[60] mt-1 w-64 bg-[#0d1117] border border-white/[0.1] rounded-xl shadow-2xl shadow-black/50 overflow-hidden">
+          {templates.length === 0 ? (
+            <div className="px-3 py-4 text-center">
+              <p className="text-[11px] text-white/40">Belum ada template</p>
+              <a href="/sj/templates" className="text-[10px] text-cyan-400 hover:text-cyan-300 mt-1 inline-block">
+                Buat template →
+              </a>
+            </div>
+          ) : (
+            <div className="max-h-64 overflow-y-auto py-1">
+              {templates.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  onClick={() => { onApply(tpl); setOpen(false); }}
+                  className="w-full text-left px-3 py-2 hover:bg-white/[0.04] transition-all"
+                >
+                  <p className="text-[12px] text-white/80">{tpl.nama}</p>
+                  <p className="text-[10px] text-white/30 mt-0.5">{tpl.items.length} item</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function BuatSJPageContent() {
   const router = useRouter();
@@ -21,6 +86,7 @@ function BuatSJPageContent() {
   const { jenis: jenisOptions } = useMasterJenis();
   const { merk: merkOptions }   = useMasterMerk();
   const { tujuan: tujuanList }  = useMasterTujuan();
+  const { templates }           = useSJTemplates();
 
   const { sj: existingSJ, loading: loadingExisting, error: loadError } = useSJDetail(editId);
 
@@ -154,6 +220,19 @@ function BuatSJPageContent() {
     }
   }, [isEditMode, router]);
 
+  // Handler terapkan template: buang baris kosong existing (jenis kosong),
+  // lalu append semua item template di bawahnya, dan renumber urutan.
+  // Contoh: form sudah ada "AC" → pilih template "SDN" (3 item) → jadi 4 item.
+  const handleApplyTemplate = useCallback((tpl: SJItemTemplate) => {
+    setItems((prev) => {
+      const existing = prev.filter((it) => it.jenis.trim() !== "");
+      const appended = tpl.items.map((ti, i) => fromTemplateItem(ti, existing.length + i + 1));
+      const combined = [...existing, ...appended];
+      const renumbered = combined.map((it, i) => ({ ...it, urutan: i + 1 }));
+      return renumbered.length > 0 ? renumbered : [createEmptyItem(1)];
+    });
+  }, []);
+
   if (isEditMode && loadingExisting) {
     return (
       <div className="flex h-screen overflow-hidden bg-[#080e18] text-white">
@@ -273,9 +352,12 @@ function BuatSJPageContent() {
           </div>
 
           <div>
-            <h2 className="text-[12px] font-semibold uppercase tracking-widest text-cyan-400/70 mb-3">
-              Detail Barang
-            </h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-[12px] font-semibold uppercase tracking-widest text-cyan-400/70">
+                Detail Barang
+              </h2>
+              <TemplatePicker templates={templates} onApply={handleApplyTemplate} />
+            </div>
             <SJItemsTable
               items={items}
               jenisOptions={jenisOptions}
