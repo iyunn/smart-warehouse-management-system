@@ -3,7 +3,7 @@
 import { memo, useState, useMemo, useCallback, useRef, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
-import { useMonitoring } from "@/hooks/useMonitoring";
+import { useMonitoring, useLPPMonitoring, type LPPRawItem } from "@/hooks/useMonitoring";
 import { exportMonitoringToExcel, buildMonitoringFilename } from "@/lib/monitoringExporter";
 
 type CostCenter  = "ALL" | "CGA1" | "CGA2" | "CGA3";
@@ -387,12 +387,18 @@ CatatanCell.displayName = "CatatanCell";
 // ─── Main Page ────────────────────────────────────────────────────────────
 export default function MonitoringPage() {
   const { assets, loading } = useMonitoring();
+  const { items: lppItems, loading: lppLoading } = useLPPMonitoring();
 
   const [activeTab, setActiveTab]   = useState<"dat" | "lpp">("dat");
   const [costCenter, setCostCenter] = useState<CostCenter>("ALL");
   const [filterTags, setFilterTags] = useState<FilterTag[]>([]);
   const [page, setPage]             = useState(1);
   const [sort, setSort]             = useState<SortState>({ key: null, dir: "asc" });
+
+  // State khusus tab LPP Monitoring (terpisah dari DAT agar tidak saling reset)
+  const [lppCostCenter, setLppCostCenter] = useState<CostCenter>("ALL");
+  const [lppSearch, setLppSearch]         = useState("");
+  const [lppPage, setLppPage]             = useState(1);
 
   // Local override catatan — biar tidak refetch semua setelah save
   const [catatanOverride, setCatatanOverride] = useState<Record<string, string>>({});
@@ -484,6 +490,32 @@ export default function MonitoringPage() {
     () => sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
     [sorted, page]
   );
+
+  // ── LPP Monitoring: filter by cost center + search kode_asset/deskripsi ──
+  const lppFiltered = useMemo(() => {
+    return lppItems.filter((item) => {
+      if (lppCostCenter !== "ALL" && item.toko !== lppCostCenter) return false;
+      if (lppSearch.trim() !== "") {
+        const q = lppSearch.trim().toLowerCase();
+        return (
+          item.kode_asset.toLowerCase().includes(q) ||
+          item.deskripsi.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [lppItems, lppCostCenter, lppSearch]);
+
+  const lppTotalPages = Math.max(1, Math.ceil(lppFiltered.length / PAGE_SIZE));
+  const lppPaginated  = useMemo(
+    () => lppFiltered.slice((lppPage - 1) * PAGE_SIZE, lppPage * PAGE_SIZE),
+    [lppFiltered, lppPage]
+  );
+
+  const lppTotalItem      = lppFiltered.length;
+  const lppTotalSaldoAwal = lppFiltered.reduce((s, i) => s + i.saldo_awal, 0);
+  const lppTotalMasuk     = lppFiltered.reduce((s, i) => s + i.masuk, 0);
+  const lppTotalSaldoAkhir = lppFiltered.reduce((s, i) => s + i.saldo_akhir, 0);
 
   const handleReset = useCallback(() => {
     setCostCenter("ALL");
@@ -628,10 +660,104 @@ export default function MonitoringPage() {
           </div>
 
           {activeTab === "lpp" ? (
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] py-20 text-center">
-              <p className="text-sm text-white/40">Data LPP Web Tracking belum tersedia</p>
-              <p className="text-xs text-white/25 mt-1">Fitur ini akan aktif setelah integrasi LPP selesai</p>
-            </div>
+            <>
+              {/* Filter Panel LPP */}
+              <div className="mb-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40">Cost Center</span>
+                  <div className="flex items-center gap-1.5">
+                    {(["ALL", "CGA1", "CGA2", "CGA3"] as CostCenter[]).map(cc => (
+                      <button key={cc} onClick={() => { setLppCostCenter(cc); setLppPage(1); }}
+                        className={`text-[11px] px-3 py-1.5 rounded-lg font-medium transition-all border ${
+                          lppCostCenter === cc
+                            ? "bg-white/10 text-white border-white/20"
+                            : "text-slate-500 border-transparent hover:text-slate-300 hover:border-white/10"
+                        }`}
+                      >
+                        {cc}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-white/[0.04]">
+                  <input
+                    type="text"
+                    value={lppSearch}
+                    onChange={(e) => { setLppSearch(e.target.value); setLppPage(1); }}
+                    placeholder="Cari kode aset atau deskripsi..."
+                    suppressHydrationWarning
+                    className="w-full max-w-md bg-white/[0.04] border border-white/[0.08] text-white/80 text-[12px] placeholder:text-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:border-cyan-500/50"
+                  />
+                </div>
+              </div>
+
+              {/* Summary cards */}
+              <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: "Total Kode Aset", value: lppLoading ? "—" : lppTotalItem.toLocaleString(),       color: "text-cyan-300"    },
+                  { label: "Total Saldo Awal", value: lppLoading ? "—" : lppTotalSaldoAwal.toLocaleString(), color: "text-violet-300"  },
+                  { label: "Total Masuk",      value: lppLoading ? "—" : lppTotalMasuk.toLocaleString(),     color: "text-amber-300"   },
+                  { label: "Total Saldo Akhir", value: lppLoading ? "—" : lppTotalSaldoAkhir.toLocaleString(), color: "text-emerald-300" },
+                ].map(c => (
+                  <div key={c.label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+                    <p className="text-[10px] text-white/40 uppercase tracking-widest">{c.label}</p>
+                    <p className={`text-lg font-bold mt-1 ${c.color}`}>{c.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Summary */}
+              <div className="mb-3 flex items-center gap-4 text-[11px] text-white/40">
+                <span>{lppFiltered.length.toLocaleString()} dari {lppItems.length.toLocaleString()} total baris LPP</span>
+              </div>
+
+              {/* Table LPP */}
+              {lppLoading ? (
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] py-20 text-center">
+                  <p className="text-sm text-white/40">Memuat data LPP...</p>
+                </div>
+              ) : lppItems.length === 0 ? (
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] py-20 text-center">
+                  <p className="text-sm text-white/40">Belum ada data LPP</p>
+                  <p className="text-xs text-white/25 mt-1">Upload file LPP di halaman Upload Data</p>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[820px]">
+                      <div className="grid grid-cols-[60px_140px_1fr_110px_90px_90px_100px] gap-3 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+                        <span>No</span>
+                        <span>Kode Aset</span>
+                        <span>Deskripsi</span>
+                        <span>CGA</span>
+                        <span className="text-right">Saldo Awal</span>
+                        <span className="text-right">Masuk</span>
+                        <span className="text-right">Saldo Akhir</span>
+                      </div>
+                      {lppPaginated.map((item: LPPRawItem, idx: number) => (
+                        <div key={item.id}
+                          className="grid grid-cols-[60px_140px_1fr_110px_90px_90px_100px] gap-3 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px] border-b border-white/[0.03] last:border-0">
+                          <span className="text-white/30 font-mono">{(lppPage - 1) * PAGE_SIZE + idx + 1}</span>
+                          <span className="text-white/70 font-mono">{item.kode_asset}</span>
+                          <span className="text-white/60 truncate">{item.deskripsi}</span>
+                          <span className={`inline-flex w-fit items-center text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md border ${CGA_BADGE[item.toko] ?? ""}`}>
+                            {item.toko}
+                          </span>
+                          <span className="text-white/50 text-right font-mono">{item.saldo_awal}</span>
+                          <span className="text-white/50 text-right font-mono">{item.masuk}</span>
+                          <span className="text-white/80 text-right font-mono font-semibold">{item.saldo_akhir}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Pagination
+                    page={lppPage} totalPages={lppTotalPages} onPage={setLppPage}
+                    totalItems={lppFiltered.length} pageSize={PAGE_SIZE}
+                  />
+                </div>
+              )}
+            </>
           ) : (
             <>
               {/* Filter Panel */}

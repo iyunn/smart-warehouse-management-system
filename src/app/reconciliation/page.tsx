@@ -1,0 +1,203 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import Sidebar from "@/components/Sidebar";
+import Topbar from "@/components/Topbar";
+import { useReconciliation, type ReconciliationItem } from "@/hooks/useReconciliation";
+
+const PAGE_SIZE = 30;
+
+const KONDISI_CONFIG: Record<number, { label: string; desc: string; badge: string; severity: "normal" | "warning" }> = {
+  1: { label: "Fisik di CGA",        desc: "Ada di DAT & LPP — konsisten, aset masih di gudang",     badge: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20", severity: "normal" },
+  2: { label: "Belum Mutasi Oracle", desc: "Ada di DAT, tidak ada di LPP — segera mutasi Oracle",     badge: "bg-amber-500/10 text-amber-300 border-amber-500/20",       severity: "warning" },
+  4: { label: "Belum Mutasi WT",     desc: "Ada di LPP, tidak ada di DAT — segera buat SJ WT",        badge: "bg-rose-500/10 text-rose-300 border-rose-500/20",          severity: "warning" },
+  5: { label: "Fisik Allocated",     desc: "Tidak ada di DAT & LPP — konsisten, sudah keluar CGA",    badge: "bg-slate-500/10 text-slate-300 border-slate-500/20",       severity: "normal" },
+};
+
+const CGA_BADGE: Record<string, string> = {
+  CGA1: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20",
+  CGA2: "bg-amber-500/10 text-amber-300 border-amber-500/20",
+  CGA3: "bg-rose-500/10 text-rose-300 border-rose-500/20",
+};
+
+function Pagination({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (p: number) => void }) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-center gap-1 px-4 py-3 border-t border-white/[0.06]">
+      <button onClick={() => onPage(page - 1)} disabled={page === 1}
+        className="w-7 h-7 rounded-lg text-[12px] text-white/50 hover:bg-white/[0.06] disabled:opacity-30 disabled:pointer-events-none">‹</button>
+      <span className="text-[11px] text-white/40 px-3">{page} / {totalPages}</span>
+      <button onClick={() => onPage(page + 1)} disabled={page === totalPages}
+        className="w-7 h-7 rounded-lg text-[12px] text-white/50 hover:bg-white/[0.06] disabled:opacity-30 disabled:pointer-events-none">›</button>
+    </div>
+  );
+}
+
+export default function ReconciliationPage() {
+  const { items, summary, loading } = useReconciliation();
+
+  const [activeKondisi, setActiveKondisi] = useState<number | "ALL">("ALL");
+  const [cga, setCga] = useState<"ALL" | "CGA1" | "CGA2" | "CGA3">("ALL");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+
+  const filtered = useMemo(() => {
+    return items.filter((it) => {
+      if (activeKondisi !== "ALL" && it.kondisi !== activeKondisi) return false;
+      if (cga !== "ALL" && it.toko !== cga) return false;
+      if (search.trim() !== "") {
+        const q = search.trim().toLowerCase();
+        return it.kode_asset.toLowerCase().includes(q) || it.deskripsi.toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [items, activeKondisi, cga, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page]
+  );
+
+  const cards = [
+    { kondisi: 1, count: summary?.kondisi1 ?? 0 },
+    { kondisi: 2, count: summary?.kondisi2 ?? 0 },
+    { kondisi: 4, count: summary?.kondisi4 ?? 0 },
+    { kondisi: 5, count: summary?.kondisi5 ?? 0 },
+  ];
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-[#080e18] text-white">
+      <Sidebar />
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <Topbar title="Reconciliation" />
+
+        <main className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight text-white">Reconciliation DAT vs LPP</h1>
+            <p className="mt-0.5 text-xs text-white/40">
+              Bandingkan posisi aset antara DAT Oracle dan LPP Web Tracking untuk mendeteksi selisih administrasi.
+              Kondisi 3 (Aset Intransit) belum aktif — butuh data Report Intransit.
+            </p>
+          </div>
+
+          {/* Summary cards — clickable filter */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {cards.map((c) => {
+              const cfg = KONDISI_CONFIG[c.kondisi];
+              const isActive = activeKondisi === c.kondisi;
+              return (
+                <button
+                  key={c.kondisi}
+                  onClick={() => { setActiveKondisi(isActive ? "ALL" : c.kondisi); setPage(1); }}
+                  className={`text-left rounded-2xl border p-4 transition-all ${
+                    isActive
+                      ? "border-cyan-500/40 bg-cyan-500/[0.06]"
+                      : "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-[9px] font-semibold uppercase px-2 py-0.5 rounded-md border ${cfg.badge}`}>
+                      Kondisi {c.kondisi}
+                    </span>
+                    {cfg.severity === "warning" && (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-amber-400">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                        <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                      </svg>
+                    )}
+                  </div>
+                  <p className="text-2xl font-bold text-white">{loading ? "—" : c.count.toLocaleString()}</p>
+                  <p className="text-[11px] font-medium text-white/70 mt-1">{cfg.label}</p>
+                  <p className="text-[10px] text-white/30 mt-0.5 leading-relaxed">{cfg.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Filter Panel */}
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40">Cost Center</span>
+              <div className="flex items-center gap-1.5">
+                {(["ALL", "CGA1", "CGA2", "CGA3"] as const).map((c) => (
+                  <button key={c} onClick={() => { setCga(c); setPage(1); }}
+                    className={`text-[11px] px-3 py-1.5 rounded-lg font-medium transition-all border ${
+                      cga === c ? "bg-white/10 text-white border-white/20" : "text-slate-500 border-transparent hover:text-slate-300 hover:border-white/10"
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="pt-2 border-t border-white/[0.04]">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                placeholder="Cari kode aset atau deskripsi..."
+                suppressHydrationWarning
+                className="w-full max-w-md bg-white/[0.04] border border-white/[0.08] text-white/80 text-[12px] placeholder:text-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:border-cyan-500/50"
+              />
+            </div>
+          </div>
+
+          <p className="text-[11px] text-white/40">
+            Menampilkan <span className="text-white/80 font-semibold">{filtered.length.toLocaleString()}</span> dari {items.length.toLocaleString()} total kode aset
+          </p>
+
+          {/* Table */}
+          {loading ? (
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] py-20 text-center">
+              <p className="text-sm text-white/40">Menghitung reconciliation...</p>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+              <div className="overflow-x-auto">
+                <div className="min-w-[760px]">
+                  <div className="grid grid-cols-[50px_150px_1fr_90px_160px] gap-3 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+                    <span>No</span>
+                    <span>Kode Aset</span>
+                    <span>Deskripsi</span>
+                    <span>CGA</span>
+                    <span>Kondisi</span>
+                  </div>
+                  {paginated.map((it: ReconciliationItem, idx: number) => {
+                    const cfg = KONDISI_CONFIG[it.kondisi];
+                    return (
+                      <div key={it.kode_asset}
+                        className="grid grid-cols-[50px_150px_1fr_90px_160px] gap-3 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px] border-b border-white/[0.03] last:border-0">
+                        <span className="text-white/30 font-mono">{(page - 1) * PAGE_SIZE + idx + 1}</span>
+                        <span className="text-white/70 font-mono">{it.kode_asset}</span>
+                        <span className="text-white/60 truncate">{it.deskripsi || "—"}</span>
+                        {it.toko !== "-" ? (
+                          <span className={`inline-flex w-fit items-center text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md border ${CGA_BADGE[it.toko] ?? ""}`}>
+                            {it.toko}
+                          </span>
+                        ) : (
+                          <span className="text-white/20">—</span>
+                        )}
+                        <span className={`inline-flex w-fit items-center text-[10px] font-semibold px-2 py-0.5 rounded-md border ${cfg.badge}`}>
+                          {cfg.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {paginated.length === 0 && (
+                    <div className="py-12 text-center">
+                      <p className="text-sm text-white/30">Tidak ada data yang cocok dengan filter</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+            </div>
+          )}
+
+        </main>
+      </div>
+    </div>
+  );
+}

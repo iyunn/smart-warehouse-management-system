@@ -3,6 +3,7 @@
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import UploadSection from "@/components/UploadSection";
+import UploadLPPSection from "@/components/UploadLPPSection";
 
 function PlaceholderUploadCard({ title, description }: { title: string; description: string }) {
   return (
@@ -60,10 +61,7 @@ export default function UploadDataPage() {
               LPP Web Tracking
             </h2>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <PlaceholderUploadCard
-                title="Upload LPP Update"
-                description="Data pergerakan aset terbaru dari Web Tracking"
-              />
+              <UploadLPPSection />
               <PlaceholderUploadCard
                 title="Upload LPP Closing"
                 description="Snapshot cut-off bulanan LPP Web Tracking"

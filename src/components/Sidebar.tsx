@@ -35,6 +35,12 @@ const icons = {
       <path d="M4 6h16M4 10h16M4 14h10M4 18h6" />
     </svg>
   ),
+  reconciliation: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 3L4 9l7 6" /><path d="M4 9h13a4 4 0 0 1 4 4v1" />
+      <path d="M13 21l7-6-7-6" /><path d="M20 15H7a4 4 0 0 1-4-4v-1" />
+    </svg>
+  ),
   sj: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -66,6 +72,7 @@ const navItems: NavItem[] = [
   { id: "dashboard",      label: "Dashboard",      icon: icons.dashboard,      href: "/"           },
   { id: "upload",         label: "Upload Data",    icon: icons.upload,         href: "/upload"     },
   { id: "monitoring",     label: "Monitoring",     icon: icons.monitor,        href: "/monitoring" },
+  { id: "reconciliation", label: "Reconciliation", icon: icons.reconciliation, href: "/reconciliation" },
   { id: "classification", label: "Classification", icon: icons.classification, href: "/review"     },
   {
     id: "sj",
@@ -91,6 +98,7 @@ function getActiveId(pathname: string): string {
   if (pathname.startsWith("/sj"))          return "sj";
   if (pathname.startsWith("/upload"))      return "upload";
   if (pathname.startsWith("/monitoring"))  return "monitoring";
+  if (pathname.startsWith("/reconciliation")) return "reconciliation";
   if (pathname.startsWith("/review"))      return "classification";
   if (pathname.startsWith("/settings"))    return "settings";
   if (pathname === "/" || pathname.startsWith("/dashboard")) return "dashboard";
@@ -144,7 +152,7 @@ export default function Sidebar() {
 
       <nav className="flex-1 px-2.5 py-4 space-y-0.5 overflow-y-auto">
         {!collapsed && <p className="text-[10px] text-slate-600 uppercase tracking-widest font-medium px-3 pb-2">Main Menu</p>}
-        {navItems.slice(0, 5).map(item => (
+        {navItems.slice(0, 6).map(item => (
           <NavLinkOrGroup
             key={item.id}
             item={item}
@@ -156,7 +164,7 @@ export default function Sidebar() {
         ))}
         {!collapsed && <p className="text-[10px] text-slate-600 uppercase tracking-widest font-medium px-3 pt-4 pb-2">System</p>}
         {collapsed && <div className="h-2" />}
-        {navItems.slice(5).map(item => (
+        {navItems.slice(6).map(item => (
           <NavLinkOrGroup
             key={item.id}
             item={item}
