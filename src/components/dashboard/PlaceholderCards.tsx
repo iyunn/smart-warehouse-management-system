@@ -32,29 +32,8 @@ const PlaceholderCard = memo(({ title, description, icon, height = "h-32" }: Pla
 ));
 PlaceholderCard.displayName = "PlaceholderCard";
 
-/* ─── Baris 2: DAT vs LPP Comparison (3 cards) ────────────────────────────── */
-export const DATvsLPPPlaceholder = memo(() => (
-  <div>
-    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-2">
-      Rekonsiliasi DAT vs LPP Web Tracking
-    </p>
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-      {["CGA1", "CGA2", "CGA3"].map(code => (
-        <PlaceholderCard
-          key={code}
-          title={`DAT ${code} vs LPP ${code}`}
-          description="Perbandingan jumlah aset antara DAT dan LPP Web Tracking. Menunggu data LPP."
-          icon={
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
-            </svg>
-          }
-        />
-      ))}
-    </div>
-  </div>
-));
-DATvsLPPPlaceholder.displayName = "DATvsLPPPlaceholder";
+/* ─── Baris 2: DAT vs LPP Comparison — DIPINDAH ke DATvsLPPCards.tsx ──────
+   (live sejak 18 Juni 2026, reuse useReconciliation) ───────────────────── */
 
 /* ─── Baris 3: Trend Closing (1 card panjang) ─────────────────────────────── */
 export const TrendClosingPlaceholder = memo(() => (

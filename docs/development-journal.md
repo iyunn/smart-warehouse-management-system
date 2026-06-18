@@ -2100,3 +2100,100 @@ manual kalau masih ingat isinya.
 User konfirmasi fix bekerja — test dengan catatan tersebar di halaman
 awal/tengah/akhir Monitoring (PAGE_SIZE=30, ±156 halaman untuk 4666 aset),
 reupload DAT, semua catatan utuh.
+
+## 18 Juni 2026 (lanjutan) — Aktivasi Dashboard Baris 2 + Deep-link Reconciliation
+
+### Konteks
+User menunjukkan screenshot Dashboard, Baris 2 (Rekonsiliasi DAT vs LPP)
+masih placeholder "Coming Soon". Karena reconciliation engine sudah ada
+(Tahap 3, lihat entry sebelumnya), tinggal diaktivasi pakai data yang sama.
+
+### Penemuan tooling penting: akses repo langsung via git clone
+Sebelum mulai, user tanya cara biar Claude bisa baca struktur repo
+terupdate tanpa upload manual tiap kali. Dicoba `git clone` ke repo user
+(`github.com/iyunn/smart-warehouse-management-system`) — **berhasil**,
+karena repo ternyata **public** (dikonfirmasi via GitHub API:
+`private: false`). User skeptis ("gimana aku tau kamu clone repo ku?"),
+dibuktikan dengan menampilkan `git remote -v` + `git log` — commit
+message-nya match persis dengan kerjaan yang sudah didiskusikan
+sepanjang sesi (fix pagination, LPP reconciliation, dst), jadi praktis
+mustahil itu repo yang salah.
+
+**Implikasi workflow ke depan**: Claude bisa `git clone` repo langsung
+(read-only) untuk baca file terbaru tanpa minta upload manual. User tetap
+yang jalankan `git add/commit/push` manual (rule lama tidak berubah).
+Disimpan ke memory permanen biar sesi berikutnya tidak perlu re-discover.
+
+**Catatan keamanan**: user diberi tahu repo-nya public — kalau ada secret/
+API key yang ke-commit, perlu dicek & di-rotate.
+
+### Implementasi Dashboard Baris 2
+- Baca `src/app/page.tsx`, `src/hooks/useReconciliation.ts`,
+  `src/components/dashboard/CGASummaryCards.tsx` langsung dari clone
+  (tidak ada upload manual sama sekali untuk tahap ini)
+- Komponen baru `DATvsLPPCards.tsx` — self-contained, panggil
+  `useReconciliation()` sendiri (reuse, tidak ada API baru). Breakdown per
+  CGA dihitung client-side dari `items`: filter `toko === code`, lalu
+  hitung Total DAT (kondisi 1+2), Total LPP (kondisi 1+4)
+- `page.tsx` — ganti `<DATvsLPPPlaceholder />` jadi `<DATvsLPPCards />`
+- `PlaceholderCards.tsx` — hapus export `DATvsLPPPlaceholder` (dead code)
+
+### Bug konseptual ditemukan oleh user — desain ulang "Selisih"
+Versi pertama nampilin 1 angka "Selisih" = `Total DAT - Total LPP`.
+User tanya: "2.675 - 2.690 = 15, kok beda sama yang ditampilkan (371)?"
+
+**Root cause bukan bug kode, tapi salah desain konseptual.** Breakdown
+sebenarnya:
+- Total DAT = Kondisi 1 + Kondisi 2
+- Total LPP = Kondisi 1 + Kondisi 4
+- "Selisih" yang ditampilkan = Kondisi 2 + Kondisi 4 (gabungan dua
+  masalah berbeda), BUKAN `Total DAT - Total LPP` (yang secara matematis
+  = Kondisi 2 - Kondisi 4, bisa saling meniadakan kalau kedua angka besar
+  dan berdekatan)
+
+Contoh kasus asli (CGA1): Kondisi 2 ≈ 178 (Belum Mutasi Oracle), Kondisi 4
+≈ 193 (Belum Mutasi WT). Subtraksi: 178-193 = -15 (kelihatan kecil/tidak
+masalah). Penjumlahan (yang benar): 178+193 = 371 aset yang SEBENARNYA
+butuh tindakan. Subtraksi naive menyembunyikan ~356 aset bermasalah karena
+dua masalah berbeda itu kebetulan saling mendekati secara jumlah.
+
+**Fix**: card di-redesign — tampilkan **4 angka terpisah** (Total DAT,
+Total LPP, Belum Mutasi Oracle, Belum Mutasi WT), tidak pernah digabung
+jadi 1 angka "selisih" lagi. Ini prinsip desain yang harus diingat untuk
+fitur reconciliation manapun ke depan: kondisi yang berlawanan arah JANGAN
+dikurangi, harus ditampilkan terpisah atau dijumlah (kalau memang representasi
+"total butuh tindakan" yang diinginkan).
+
+### Fitur tambahan — Deep-link Dashboard → Reconciliation
+User minta: angka selisih (sekarang 2 angka: Belum Mutasi Oracle/WT) bisa
+diklik, langsung ke data detailnya.
+
+**Implementasi:**
+- `DATvsLPPCards.tsx` — angka jadi `<Link href="/reconciliation?kondisi=2&cga=CGA1">` (atau `kondisi=4` untuk WT)
+- `reconciliation/page.tsx` — tambah `useSearchParams`, baca `kondisi` &
+  `cga` dari URL di `useEffect` (sekali saat mount), pre-apply ke state
+  filter (`activeKondisi`, `cga`) yang sudah ada
+- Karena `useSearchParams` butuh `Suspense` boundary di Next.js App
+  Router, komponen utama di-rename `ReconciliationPageContent`, dibungkus
+  `<Suspense>` di default export `ReconciliationPage` — pattern yang sama
+  dipakai di `sj/buat/page.tsx` (sudah established sebelumnya)
+
+User tanya apakah ini konflik dengan mekanisme existing — dikonfirmasi
+tidak, karena pattern Suspense+useSearchParams sudah established
+sebelumnya, dan filter state tetap `useState` biasa (cuma diinisialisasi
+dari URL sekali di awal, behavior manual filter tidak berubah).
+
+### Update dokumentasi & memory
+- `project_context.md`: Dashboard Baris 2 dipindah dari "Known Issues
+  placeholder" ke "Completed", lesson learned soal Selisih didokumentasikan
+  lengkap (penting supaya tidak terulang di fitur reconciliation lain),
+  drill-down limitation diupdate (partial resolved — Dashboard→Reconciliation
+  ada, Reconciliation→aksi belum)
+- Memory permanen: tambah catatan repo public + cara akses via git clone
+
+### Pending untuk sesi berikutnya (prioritas dikonfirmasi user)
+1. **3 gap teknis Reconciliation** (freshness indicator, cross-CGA
+   mismatch, aging/durasi tracking) — explicit confirmed sebagai next
+2. Integrasi Mutasi WT otomatis (ditunda sejak awal)
+3. Kondisi 3 Aset Intransit (butuh file)
+4. Drill-down dari tabel Reconciliation ke aksi langsung (Buat SJ WT)

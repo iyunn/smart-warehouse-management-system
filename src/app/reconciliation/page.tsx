@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { useReconciliation, type ReconciliationItem } from "@/hooks/useReconciliation";
@@ -33,13 +34,30 @@ function Pagination({ page, totalPages, onPage }: { page: number; totalPages: nu
   );
 }
 
-export default function ReconciliationPage() {
+function ReconciliationPageContent() {
+  const searchParams = useSearchParams();
   const { items, summary, loading } = useReconciliation();
 
   const [activeKondisi, setActiveKondisi] = useState<number | "ALL">("ALL");
   const [cga, setCga] = useState<"ALL" | "CGA1" | "CGA2" | "CGA3">("ALL");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+
+  // Deep-link dari Dashboard Baris 2 (DATvsLPPCards) — baca ?kondisi=2&cga=CGA1
+  // dan pre-apply filter sekali saat halaman dibuka.
+  useEffect(() => {
+    const kondisiParam = searchParams.get("kondisi");
+    const cgaParam = searchParams.get("cga");
+
+    if (kondisiParam) {
+      const parsed = parseInt(kondisiParam, 10);
+      if ([1, 2, 4, 5].includes(parsed)) setActiveKondisi(parsed);
+    }
+    if (cgaParam && ["CGA1", "CGA2", "CGA3"].includes(cgaParam)) {
+      setCga(cgaParam as "CGA1" | "CGA2" | "CGA3");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filtered = useMemo(() => {
     return items.filter((it) => {
@@ -199,5 +217,17 @@ export default function ReconciliationPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function ReconciliationPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen bg-[#080e18] items-center justify-center">
+        <span className="text-white/40 text-sm">Memuat...</span>
+      </div>
+    }>
+      <ReconciliationPageContent />
+    </Suspense>
   );
 }

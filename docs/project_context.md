@@ -3,7 +3,7 @@
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **18 Juni 2026** (LPP Reconciliation Tahap 1-3 implemented + fix kritis pagination row-limit di auto-clear asset_notes)
+> Terakhir diupdate: **18 Juni 2026** (LPP Reconciliation Tahap 1-3 + fix pagination row-limit + Dashboard Baris 2 live + deep-link Dashboard↔Reconciliation)
 
 ## Project Identity
 
@@ -374,16 +374,16 @@ tidak ada fitur yang sedang dikerjakan saat ini
 ## Features Planned
 
 ### 🎯 Next (Updated 18 Juni 2026)
+- **Gap teknis Reconciliation (prioritas sesi berikutnya)** — lihat detail
+  lengkap di "Known Limitations" pada section LPP Reconciliation:
+  freshness indicator (timestamp upload DAT vs LPP), deteksi cross-CGA
+  mismatch, aging/durasi tracking untuk item Kondisi 2/4. Drill-down
+  Dashboard→Reconciliation SUDAH ada (18 Juni); yang masih kurang adalah
+  drill-down dari tabel Reconciliation langsung ke aksi (mis. "Buat SJ WT")
 - **Integrasi Mutasi WT otomatis** dari LPP (cross-check kode_asset SJ vs
   LPP, auto-lock kalau sudah tidak ada di LPP CGA) — sengaja ditunda sampai
   reconciliation core stabil
 - Kondisi 3 "Aset Intransit" — butuh format file Report Intransit (belum diperoleh)
-- Aktivasi Dashboard Baris 2 (DAT vs LPP per CGA) — bisa pakai summary count yang sama
-- **Gap teknis Reconciliation (ditemukan saat audit 18 Juni, belum dikerjakan)**
-  — lihat detail lengkap di "Known Limitations" pada section LPP Reconciliation:
-  freshness indicator (timestamp upload DAT vs LPP), deteksi cross-CGA
-  mismatch, aging/durasi tracking untuk item Kondisi 2/4, drill-down action
-  dari tabel hasil
 - UI minor: tombol "Pakai Template" di Buat/Edit SJ dipindah posisinya ke
   sebelahan tombol "Tambah Baris" (saat ini di header "Detail Barang")
 - "Changed" filter di Classification (prev_jenis/prev_merk, ACC/Revert) — prioritas rendah, ditunda sampai core selesai
@@ -476,9 +476,39 @@ ke `main` dengan `--ff-only`, branch lokal & remote sudah dihapus.
   lebih bermakna daripada snapshot sesaat — butuh skema tambahan (mis.
   tabel histori kondisi per kode_asset, dicatat per upload) kalau mau
   diimplementasi
-- **Tidak ada drill-down/aksi langsung** dari tabel hasil — klik item
-  Kondisi 4 ("Belum Mutasi WT") cuma menampilkan badge, belum ada tombol
-  langsung ke "Buat SJ WT" atau link ke baris terkait di Rekap Alokasi
+- **Drill-down dari tabel hasil — SEBAGIAN sudah ada (18 Juni)**: angka
+  "Belum Mutasi Oracle"/"Belum Mutasi WT" di Dashboard Baris 2 sekarang
+  clickable → navigasi ke `/reconciliation?kondisi=X&cga=Y` dengan filter
+  otomatis ter-apply (lihat "Aktivasi Dashboard Baris 2" di bawah). **Yang
+  masih kurang**: dari tabel `/reconciliation` itu sendiri, klik baris
+  Kondisi 4 belum ada tombol langsung "Buat SJ WT" atau link ke baris
+  terkait di Rekap Alokasi — drill-down baru sampai level filter, belum
+  sampai level aksi
+
+### ✅ Aktivasi Dashboard Baris 2 — DAT vs LPP per CGA (18 Juni 2026)
+Baris 2 di Dashboard (sebelumnya placeholder "Coming Soon" 3 card per CGA)
+sekarang live, reuse `useReconciliation` hook (tidak ada API/query baru):
+
+- Komponen baru `DATvsLPPCards.tsx` — self-contained, fetch data sendiri
+- Tiap card CGA tampilkan 4 angka: **Total DAT**, **Total LPP**, **Belum
+  Mutasi Oracle** (Kondisi 2, amber), **Belum Mutasi WT** (Kondisi 4, rose)
+- **Lesson learned penting**: awalnya didesain sebagai 1 angka "Selisih"
+  (`Total DAT - Total LPP`), tapi ini SALAH SECARA KONSEPTUAL — user
+  menyadari subtraksi sederhana bisa menyembunyikan masalah nyata. Contoh
+  kasus asli: CGA1 Total DAT 2.675, Total LPP 2.690 → subtraksi = 15
+  (kelihatan kecil), tapi breakdown asli: 178 aset "Belum Mutasi Oracle" +
+  193 aset "Belum Mutasi WT" (dua masalah BEDA, bukan saling meniadakan)
+  = **371 aset** yang sebenarnya butuh tindakan. Subtraksi naive bikin
+  ~356 aset bermasalah jadi tidak kelihatan. **Keputusan final**: tampilkan
+  Kondisi 2 dan Kondisi 4 sebagai 2 angka terpisah, JANGAN pernah
+  digabung/dikurangi jadi 1 angka "selisih"
+- **Deep-link Dashboard → Reconciliation**: angka "Belum Mutasi Oracle"/
+  "Belum Mutasi WT" adalah `<Link>` ke `/reconciliation?kondisi=2&cga=CGA1`
+  (atau `kondisi=4`). Halaman `/reconciliation` baca query param via
+  `useSearchParams` (di `useEffect`, sekali saat mount) dan pre-apply
+  filter kondisi+CGA. Karena `useSearchParams` butuh `Suspense` boundary,
+  komponen di-rename jadi `ReconciliationPageContent` dibungkus
+  `<Suspense>` di default export — pattern yang sama dengan `sj/buat/page.tsx`
 
 **Yang belum dikerjakan (next session):**
 - **Integrasi Mutasi WT otomatis** — checkbox "Mutasi WT" manual yang sudah
@@ -487,10 +517,11 @@ ke `main` dengan `--ff-only`, branch lokal & remote sudah dihapus.
   LPP — kalau tidak ada di LPP CGA = sudah keluar secara WT = auto-true/lock).
   **Sengaja ditunda** sampai reconciliation core stabil (konfirmasi user)
 - Kondisi 3 "Aset Intransit" — butuh format file Report Intransit (belum diperoleh)
-- Aktivasi Dashboard Baris 2 (DAT vs LPP per CGA) — bisa pakai summary count yang sama
+- Drill-down dari tabel `/reconciliation` ke aksi langsung (Buat SJ WT, dst)
 - Konfirmasi: kondisi 2 (sudah SJ WT tapi belum BTB) — apakah actionable
   warning untuk admin gudang atau informational (BTB kewenangan toko tujuan)
-- 4 known limitations di atas — belum diprioritaskan, tunggu arahan user
+- 3 known limitations sisanya (freshness, cross-CGA mismatch, aging) —
+  **prioritas sesi berikutnya** (konfirmasi user, 18 Juni)
 
 ### DAT/LPP Closing Architecture
 Status: 📌 Planned (architecture sudah diputuskan, implementasi TBA)
@@ -966,7 +997,8 @@ src/
 │   │   ├── CGASummaryCards.tsx       Baris 4 (live)
 │   │   ├── DashboardWarningCards.tsx Warning cards (3, semua live)
 │   │   ├── RekapPengirimanCards.tsx  Baris 6 (live, 3 card)
-│   │   └── PlaceholderCards.tsx      Baris 2, 3, 5
+│   │   ├── DATvsLPPCards.tsx         Baris 2 (live sejak 18 Juni, reuse useReconciliation, deep-link ke /reconciliation)
+│   │   └── PlaceholderCards.tsx      Baris 3, 5 (Baris 2 sudah pindah ke DATvsLPPCards.tsx)
 │   │
 │   ├── sj/
 │   │   ├── SearchableDropdown.tsx    Portal-based
@@ -1057,19 +1089,17 @@ src/
 ## Current Issues
 
 ### Dashboard Placeholders
-- Baris 2, 3, 5 masih placeholder (Baris 2 "DAT vs LPP" bisa diaktivasi
-  sekarang karena reconciliation engine sudah ada datanya, tinggal
-  diintegrasikan — Baris 3 & 5 masih menunggu Closing Snapshot)
+- Baris 3 & 5 masih placeholder (menunggu Closing Snapshot Architecture)
+- Baris 2 (DAT vs LPP per CGA) sudah LIVE sejak 18 Juni — `DATvsLPPCards.tsx`
 - Baris 6 (Rekap Pengiriman) sudah LIVE
-- LPP sudah ada data & reconciliation engine (18 Juni) — dashboard belum
-  diupdate untuk menampilkannya
 
 ### Reconciliation Engine — Known Limitations (18 Juni 2026)
 Lihat detail lengkap di section "LPP Web Tracking Reconciliation" di atas.
 Ringkasan: tidak ada freshness indicator (timestamp upload DAT vs LPP),
 tidak ada deteksi cross-CGA mismatch, tidak ada tracking durasi/aging
-untuk item Kondisi 2/4, tidak ada drill-down action dari tabel hasil.
-Belum diprioritaskan, menunggu arahan user.
+untuk item Kondisi 2/4. Drill-down Dashboard→Reconciliation SUDAH ada;
+drill-down dari tabel Reconciliation ke aksi langsung (Buat SJ WT) belum.
+**Prioritas sesi berikutnya** (konfirmasi user, 18 Juni).
 
 ### Classification Accuracy
 - Keyword matching masih rule-based (exact/semi-exact)
@@ -1114,6 +1144,24 @@ Belum diprioritaskan, menunggu arahan user.
 ---
 
 # 10. Recent Major Changes Log
+
+## 18 Juni 2026 (lanjutan — Dashboard Baris 2 + deep-link)
+- **Aktivasi Dashboard Baris 2** (DAT vs LPP per CGA) — komponen baru
+  `DATvsLPPCards.tsx`, reuse `useReconciliation` hook, tidak ada
+  API/query baru. `PlaceholderCards.tsx` dibersihkan (export
+  `DATvsLPPPlaceholder` dihapus, sudah tidak dipakai)
+- **Lesson learned**: desain awal "Selisih" (`Total DAT - Total LPP`)
+  salah secara konseptual — bisa menyembunyikan masalah nyata kalau
+  Kondisi 2 dan Kondisi 4 sama besar (saling meniadakan secara aritmatika
+  padahal itu 2 masalah berbeda, aset berbeda). User menemukan ini dari
+  data asli (CGA1: subtraksi cuma "15", breakdown asli 178+193=371 aset
+  bermasalah). Keputusan final: tampilkan Kondisi 2 & 4 sebagai 2 angka
+  terpisah, tidak pernah digabung jadi 1 angka selisih
+- **Deep-link Dashboard → Reconciliation**: angka "Belum Mutasi Oracle"/
+  "Belum Mutasi WT" jadi `<Link>` ke `/reconciliation?kondisi=X&cga=Y`,
+  halaman tujuan baca query param via `useSearchParams` dan pre-apply
+  filter. Reconciliation page di-refactor pakai `Suspense` boundary
+  (pattern sama dengan `sj/buat/page.tsx`)
 
 ## 18 Juni 2026 (lanjutan — bugfix setelah Reconciliation Tahap 1-3)
 - **Fix kritis: auto-clear `asset_notes` & re-apply tag salah hapus data

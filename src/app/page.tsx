@@ -6,8 +6,8 @@ import DataStatusCards from "@/components/dashboard/DataStatusCards";
 import DashboardWarningCards from "@/components/dashboard/DashboardWarningCards";
 import CGASummaryCards from "@/components/dashboard/CGASummaryCards";
 import RekapPengirimanCards from "@/components/dashboard/RekapPengirimanCards";
+import DATvsLPPCards from "@/components/dashboard/DATvsLPPCards";
 import {
-  DATvsLPPPlaceholder,
   TrendClosingPlaceholder,
   ClosingVsUpdatePlaceholder,
 } from "@/components/dashboard/PlaceholderCards";
@@ -45,8 +45,8 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* Baris 2: DAT vs LPP Comparison (placeholder) */}
-          <DATvsLPPPlaceholder />
+          {/* Baris 2: DAT vs LPP Comparison (LIVE) */}
+          <DATvsLPPCards />
 
           {/* Baris 3: Trend Closing (placeholder) */}
           <TrendClosingPlaceholder />
