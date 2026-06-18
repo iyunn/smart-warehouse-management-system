@@ -3,7 +3,7 @@
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **17 Juni 2026** (setelah fix kritis auto-clear asset_notes, fix pagination PDF SJ, fitur Template Item SJ)
+> Terakhir diupdate: **18 Juni 2026** (setelah LPP Reconciliation Tahap 1-3 implemented — upload pipeline, LPP Monitoring tab, reconciliation engine)
 
 ## Project Identity
 
@@ -92,7 +92,7 @@ Sistem ini bukan pengganti Oracle ERP maupun Web Tracking. Sistem ini berfungsi 
 
 ---
 
-# 2. Current Development State ( per 17 Juni 2026 )
+# 2. Current Development State ( per 18 Juni 2026 )
 
 ## Features Completed
 
@@ -371,8 +371,17 @@ tidak ada fitur yang sedang dikerjakan saat ini
 
 ## Features Planned
 
-### 🎯 Next (Updated 17 Juni 2026)
-- **LPP Web Tracking Reconciliation (THESIS CORE)** — lihat desain lengkap di bawah
+### 🎯 Next (Updated 18 Juni 2026)
+- **Integrasi Mutasi WT otomatis** dari LPP (cross-check kode_asset SJ vs
+  LPP, auto-lock kalau sudah tidak ada di LPP CGA) — sengaja ditunda sampai
+  reconciliation core stabil
+- Kondisi 3 "Aset Intransit" — butuh format file Report Intransit (belum diperoleh)
+- Aktivasi Dashboard Baris 2 (DAT vs LPP per CGA) — bisa pakai summary count yang sama
+- **Gap teknis Reconciliation (ditemukan saat audit 18 Juni, belum dikerjakan)**
+  — lihat detail lengkap di "Known Limitations" pada section LPP Reconciliation:
+  freshness indicator (timestamp upload DAT vs LPP), deteksi cross-CGA
+  mismatch, aging/durasi tracking untuk item Kondisi 2/4, drill-down action
+  dari tabel hasil
 - UI minor: tombol "Pakai Template" di Buat/Edit SJ dipindah posisinya ke
   sebelahan tombol "Tambah Baris" (saat ini di header "Detail Barang")
 - "Changed" filter di Classification (prev_jenis/prev_merk, ACC/Revert) — prioritas rendah, ditunda sampai core selesai
@@ -381,50 +390,105 @@ tidak ada fitur yang sedang dikerjakan saat ini
 - Bab 3 & 4 laporan TA — semua fitur core sudah cukup matang untuk ditulis
 
 ### LPP Web Tracking Reconciliation (THESIS CORE TOPIC)
-Status: 📌 Design Complete — Implementasi belum dimulai
+Status: ✅ Tahap 1-3 Implemented (18 Juni 2026) — Kondisi 3 "Aset Intransit" belum (butuh file Report Intransit)
 
 **Konteks LPP:**
 - LPP = output dari program Web Tracking (.xls per cost center, file
   terpisah untuk CGA1/CGA2/CGA3). Kolom: Nomor, No Aktiva (= kode_asset),
   Deskripsi, Saldo Awal, Masuk, Keluar, Saldo_Akhir
+- File `.xls` sebenarnya **HTML table** (bukan Excel biner) — diparse via
+  `DOMParser`, bukan SheetJS
 - LPP CGA = daftar kode_asset yang menurut Web Tracking masih berlokasi di CGA
 - Perpindahan lokasi terjadi via Surat Jalan Web Tracking (per kode_asset),
   harus di-BTB (Bukti Terima Barang) oleh cost center tujuan. Sebelum BTB,
   status "intransit" di lokasi asal
 - Ada output terpisah "Report Intransit" — daftar kode_asset yang sudah
-  dibuatkan SJ WT tapi belum di-BTB tujuan (file belum diperoleh)
+  dibuatkan SJ WT tapi belum di-BTB tujuan (file belum diperoleh — kondisi
+  3 masih belum bisa diimplementasi)
 
-**5 Kondisi Reconciliation (DAT vs LPP — 2x2 matrix + Intransit):**
+**4 Kondisi yang sudah aktif (kondisi 3 "Aset Intransit" pending):**
 
 | # | DAT (CGA?) | LPP (CGA?) | Status | Aksi |
 |---|---|---|---|---|
 | 1 | Ya | Ya | Fisik masih di CGA | Normal, tidak ada aksi |
 | 2 | Ya | Tidak | Belum Mutasi Oracle | Admin gudang harus mutasi Oracle segera |
-| 3 | — | — | Aset Intransit (cross-cut) | Sudah SJ WT, belum BTB tujuan — butuh file Intransit |
+| 3 | — | — | Aset Intransit (cross-cut) | Sudah SJ WT, belum BTB tujuan — **belum aktif**, butuh file Intransit |
 | 4 | Tidak | Ya | Belum Mutasi WT | Admin gudang harus buat SJ WT segera |
 | 5 | Tidak | Tidak | Fisik Allocated | Normal, konsisten sudah keluar CGA |
 
 Kondisi 2 dan 4 adalah **warning aktif** yang harus ditangani admin gudang —
 keduanya sama pentingnya (administrasi sehat = tidak ada selisih = kondisi 1/5).
 
-**Integrasi dengan Mutasi WT (sudah ada):**
-Checkbox "Mutasi WT" manual yang sudah dibangun (Sesi 4) akan punya mekanisme
-sama dengan Mutasi Oracle — bisa manual (user centang) ATAU otomatis (cross-check
-kode_asset SJ Manual terhadap LPP: kalau tidak ada di LPP CGA = sudah keluar
-secara WT = auto-true/lock).
+**Universe untuk kondisi 5** dibatasi ke kode_asset yang PERNAH tercatat di
+sistem (union `assets_raw` ∪ `lpp_raw` ∪ `surat_jalan_items.kode_asset`) —
+bukan literal seluruh kode aset yang mungkin ada, supaya hasilnya bermakna
+dan terbatas (finite).
 
-**Yang perlu didesain:**
-- Schema `lpp_raw` (per CGA, kemungkinan delete-then-insert seperti DAT) +
-  `intransit_raw`
-- Upload pipeline LPP (.xls parser, 3 file per upload — CGA1/2/3 terpisah)
-- Reconciliation engine — cross join DAT vs LPP by kode_asset, kategorikan
-  ke 5 kondisi
-- UI Monitoring Tab LPP / halaman reconciliation tersendiri — summary
-  (jumlah per kondisi) + detail table (mirip Monitoring DAT)
-- Aktivasi Dashboard Baris 2 (DAT vs LPP per CGA)
-- Konfirmasi format file Report Intransit (belum diperoleh)
+**Implementasi (Tahap 1-3, selesai):**
+- **Tahap 1 — Upload pipeline**: `lpp_raw` table, `lppParser.ts` (parse
+  HTML-table-as-.xls client-side, auto-detect CGA dari nama file),
+  `lppBatchProcessor.ts`, API `/api/lpp/clear` + `/api/lpp/process`,
+  UI `UploadLPPSection.tsx` (drag 3 file sekaligus di halaman Upload Data)
+- **Tahap 2 — LPP Monitoring tab**: tab "LPP Monitoring" di halaman
+  Monitoring (sebelumnya empty state) sekarang fungsional — filter Cost
+  Center, search kode_asset/deskripsi, 4 summary card, tabel berpaginasi.
+  API `/api/lpp/monitoring`, hook `useLPPMonitoring`
+- **Tahap 3 — Reconciliation engine**: API `/api/reconciliation` hitung 4
+  kondisi (server-side, fetch `assets_raw`+`lpp_raw`+`surat_jalan_items`,
+  set operations by kode_asset). Halaman baru `/reconciliation` — 4 summary
+  card (clickable filter), filter Cost Center + search, tabel hasil dengan
+  badge kondisi. Hook `useReconciliation`. Menu baru di Sidebar.
+
+**Bug ditemukan & fixed (18 Juni 2026):** badge CGA di tabel reconciliation
+tampil sebagai teks panjang ("CGA1 - Cadangan General Affairs 1") bukan
+badge bersih "CGA1" — root cause: `assets_raw.toko` simpan label panjang,
+beda dengan `lpp_raw.toko` yang sudah bersih (diekstrak dari filename).
+Fix: helper `extractCGACode()` (regex `CGA\d`) diterapkan saat build
+`datMap` di `reconciliation-route.ts`, sebelum dikirim ke client.
+
+**Status repo:** sudah di-merge ke `main` (18 Juni 2026). Dikerjakan di
+branch `feature/reconciliation` (dibuat di GitHub Codespace untuk
+menghindari risiko kehilangan progress / merusak `main` kalau session
+berakhir di tengah jalan), commit di-amend jadi message proper, di-merge
+ke `main` dengan `--ff-only`, branch lokal & remote sudah dihapus.
+
+**Known Limitations (ditemukan saat audit 18 Juni, belum dikerjakan):**
+- **Tidak ada freshness indicator** — halaman reconciliation tidak
+  menampilkan timestamp upload terakhir DAT vs LPP. Kalau kedua sumber
+  diupload di waktu yang jauh berbeda (mis. DAT hari ini, LPP 3 hari lalu),
+  hasil bisa false-positive (item yang sebenarnya baru saja dimutasi
+  muncul sebagai "Belum Mutasi Oracle" padahal cuma soal timing, bukan
+  kelalaian admin). Perlu tambah tampilan "DAT terakhir diupload: ..." /
+  "LPP terakhir diupload: ..." di halaman, idealnya dengan warning kalau
+  selisihnya terlalu jauh
+- **Tidak ada deteksi cross-CGA mismatch** — engine cuma cek presence
+  (ada/tidak ada by kode_asset), bukan kecocokan CGA. Kalau kode_asset
+  ada di DAT CGA1 tapi di LPP tercatat CGA2 (administratif salah cost
+  center), saat ini dianggap Kondisi 1 "Fisik di CGA" (normal) — padahal
+  itu selisih juga, hanya tidak ter-flag karena beda jenis masalah dari
+  4 kondisi yang sudah didesain
+- **Tidak ada tracking durasi/aging** — karena `assets_raw` & `lpp_raw`
+  di-full-replace tiap upload (tidak ada histori), sistem tidak tahu
+  "sejak kapan" suatu kode_asset stuck di Kondisi 2/4. Untuk akuntabilitas
+  atau bab analisis skripsi, "sudah 3 minggu belum mutasi Oracle" jauh
+  lebih bermakna daripada snapshot sesaat — butuh skema tambahan (mis.
+  tabel histori kondisi per kode_asset, dicatat per upload) kalau mau
+  diimplementasi
+- **Tidak ada drill-down/aksi langsung** dari tabel hasil — klik item
+  Kondisi 4 ("Belum Mutasi WT") cuma menampilkan badge, belum ada tombol
+  langsung ke "Buat SJ WT" atau link ke baris terkait di Rekap Alokasi
+
+**Yang belum dikerjakan (next session):**
+- **Integrasi Mutasi WT otomatis** — checkbox "Mutasi WT" manual yang sudah
+  ada (Sesi 4) akan punya mekanisme sama dengan Mutasi Oracle: bisa manual
+  (user centang) ATAU otomatis (cross-check kode_asset SJ Manual terhadap
+  LPP — kalau tidak ada di LPP CGA = sudah keluar secara WT = auto-true/lock).
+  **Sengaja ditunda** sampai reconciliation core stabil (konfirmasi user)
+- Kondisi 3 "Aset Intransit" — butuh format file Report Intransit (belum diperoleh)
+- Aktivasi Dashboard Baris 2 (DAT vs LPP per CGA) — bisa pakai summary count yang sama
 - Konfirmasi: kondisi 2 (sudah SJ WT tapi belum BTB) — apakah actionable
   warning untuk admin gudang atau informational (BTB kewenangan toko tujuan)
+- 4 known limitations di atas — belum diprioritaskan, tunggu arahan user
 
 ### DAT/LPP Closing Architecture
 Status: 📌 Planned (architecture sudah diputuskan, implementasi TBA)
@@ -718,6 +782,34 @@ Field utama:
 
 ---
 
+## lpp_raw
+
+Data LPP (Laporan Posisi Perlengkapan) dari Web Tracking — 1 baris per
+kode_asset per CGA. Sumber: file `.xls` per cost center (CGA1/CGA2/CGA3),
+sebenarnya HTML table dengan ekstensi `.xls` (bukan Excel biner), diparse
+client-side via `DOMParser` (bukan SheetJS).
+
+Field utama:
+- `id` (uuid, PK)
+- `kode_asset` (text) — sama format dengan `assets_raw.kode_asset`
+- `toko` (text) — "CGA1"/"CGA2"/"CGA3", **sudah bersih** (diekstrak dari
+  nama file saat upload, BEDA dengan `assets_raw.toko` yang masih label
+  panjang "CGA1 - Cadangan General Affairs 1")
+- `deskripsi` (text)
+- `saldo_awal`, `masuk`, `keluar`, `saldo_akhir` (integer)
+- `uploaded_at` (timestamptz)
+
+Strategi upload: Full Replace (Delete-then-Insert) — 3 file (CGA1/2/3)
+selalu diupload bersamaan dalam 1 dropzone, CGA auto-detect dari nama file
+(regex `CGA[123]`, case-insensitive). Memakai pola `isLastBatch` yang sama
+dengan fix DAT (lihat 17 Juni) untuk mencegah kelas bug yang sama.
+
+Index: `kode_asset`, `toko` (untuk lookup cepat saat reconciliation).
+
+RLS: policy "Allow all on lpp_raw" (PERMISSIVE, public, ALL, true/true).
+
+---
+
 ## asset_notes
 
 Catatan bebas per kode_asset (Monitoring v2). Independen dari lifecycle DAT —
@@ -809,8 +901,9 @@ src/
 │   ├── layout.tsx
 │   ├── globals.css                   + CSS untuk hide number input spinners
 │   │
-│   ├── upload/page.tsx               Upload Data (4 panel)
-│   ├── monitoring/page.tsx           Monitoring (2 tab)
+│   ├── upload/page.tsx               Upload Data (4 panel, + UploadLPPSection)
+│   ├── monitoring/page.tsx           Monitoring (2 tab — DAT + LPP, keduanya live)
+│   ├── reconciliation/page.tsx       Reconciliation DAT vs LPP (4 kondisi, kondisi 3 pending)
 │   ├── review/page.tsx               Classification
 │   │
 │   ├── sj/
@@ -827,7 +920,12 @@ src/
 │       ├── reclassify/route.ts       Reclassify engine
 │       ├── reports/dat-summary/route.ts  Dipanggil dari tombol Export PDF di Monitoring
 │       ├── dashboard/stats/route.ts  Dashboard live data (+ Rekap Pengiriman)
-│       ├── monitoring/route.ts       Monitoring data (GET + PATCH catatan)
+│       ├── monitoring/route.ts       Monitoring data DAT (GET + PATCH catatan)
+│       ├── reconciliation/route.ts   Engine 4 kondisi (set ops by kode_asset, extractCGACode untuk badge)
+│       ├── lpp/
+│       │   ├── clear/route.ts        DELETE semua lpp_raw (full replace)
+│       │   ├── process/route.ts      Batch insert lpp_raw
+│       │   └── monitoring/route.ts   GET semua lpp_raw (untuk LPP Monitoring tab)
 │       └── sj/
 │           ├── route.ts              GET/POST/PATCH/DELETE SJ (+ archive_only)
 │           ├── report/route.ts       PATCH alokasi (kode_asset, mutasi_oracle, mutasi_wt)
@@ -838,10 +936,11 @@ src/
 │               └── merk/route.ts     DISTINCT 5-min cache
 │
 ├── components/
-│   ├── Sidebar.tsx                   Dropdown support (menu Reports dihapus, +Template Item)
+│   ├── Sidebar.tsx                   Dropdown support (menu Reports dihapus, +Template Item, +Reconciliation)
 │   ├── Topbar.tsx
 │   ├── SummaryCard.tsx
-│   ├── UploadSection.tsx             Dipakai di /upload
+│   ├── UploadSection.tsx             Dipakai di /upload (DAT)
+│   ├── UploadLPPSection.tsx          Dipakai di /upload (LPP, multi-file 3 CGA sekaligus)
 │   │
 │   ├── review/
 │   │   ├── ReviewSummaryCards.tsx
@@ -872,7 +971,8 @@ src/
 │   ├── useKeywordRule.ts
 │   ├── useReclassify.ts
 │   ├── useDashboardStats.ts          + RekapPengiriman, MutasiProgress, TopJenis
-│   ├── useMonitoring.ts              + invoice_number, tanggal_dokumen, catatan
+│   ├── useMonitoring.ts              + invoice_number, tanggal_dokumen, catatan, useLPPMonitoring
+│   ├── useReconciliation.ts          Fetch hasil reconciliation 4 kondisi
 │   ├── useSJList.ts                  + is_archived
 │   ├── useSJReport.ts                + mutasi_wt, is_mutated
 │   └── useSJMaster.ts                4 hooks: jenis/merk/tujuan/templates
@@ -882,6 +982,8 @@ src/
     ├── supabaseClient.ts
     ├── txtParser.ts                  Auto-detect PIPE/TAB + parseTanggalDokumen
     ├── batchProcessor.ts
+    ├── lppParser.ts                  Parse HTML-table-as-.xls (DOMParser, bukan SheetJS), auto-detect CGA dari filename
+    ├── lppBatchProcessor.ts          Mirror batchProcessor.ts, pola isLastBatch sama
     ├── types.ts                      AssetRecord + invoice_number, tanggal_dokumen
     ├── excelExporter.ts              SJ Rekap Alokasi export + kolom mutasi
     ├── monitoringExporter.ts         Monitoring export (2 sheet)
@@ -934,8 +1036,9 @@ src/
 3. Show Dashboard → live CGA summary + Rekap Pengiriman
 4. Show Monitoring v2 → Invoice Number, Tanggal Dokumen, Catatan, sortable header
 5. Buat SJ Manual → autorecap, alokasi kode aset, mutasi Oracle & WT
-6. (Core/Future) Upload LPP → reconciliation engine: 5 kondisi DAT vs LPP,
+6. Upload LPP (3 file CGA1/2/3) → Reconciliation engine: 4 kondisi DAT vs LPP,
    warning admin gudang untuk Belum Mutasi Oracle & Belum Mutasi WT
+   (Kondisi 3 Aset Intransit belum aktif)
 
 ---
 
@@ -944,9 +1047,19 @@ src/
 ## Current Issues
 
 ### Dashboard Placeholders
-- Baris 2, 3, 5 masih placeholder (menunggu LPP reconciliation & Closing Snapshot)
+- Baris 2, 3, 5 masih placeholder (Baris 2 "DAT vs LPP" bisa diaktivasi
+  sekarang karena reconciliation engine sudah ada datanya, tinggal
+  diintegrasikan — Baris 3 & 5 masih menunggu Closing Snapshot)
 - Baris 6 (Rekap Pengiriman) sudah LIVE
-- LPP belum ada data sama sekali — ini fokus pengembangan berikutnya (thesis core)
+- LPP sudah ada data & reconciliation engine (18 Juni) — dashboard belum
+  diupdate untuk menampilkannya
+
+### Reconciliation Engine — Known Limitations (18 Juni 2026)
+Lihat detail lengkap di section "LPP Web Tracking Reconciliation" di atas.
+Ringkasan: tidak ada freshness indicator (timestamp upload DAT vs LPP),
+tidak ada deteksi cross-CGA mismatch, tidak ada tracking durasi/aging
+untuk item Kondisi 2/4, tidak ada drill-down action dari tabel hasil.
+Belum diprioritaskan, menunggu arahan user.
 
 ### Classification Accuracy
 - Keyword matching masih rule-based (exact/semi-exact)
@@ -991,6 +1104,27 @@ src/
 ---
 
 # 10. Recent Major Changes Log
+
+## 18 Juni 2026
+- **LPP Web Tracking Reconciliation — Tahap 1-3 implemented** (THESIS CORE):
+  - Tahap 1: schema `lpp_raw`, parser HTML-table-as-.xls (`lppParser.ts`,
+    DOMParser bukan SheetJS, auto-detect CGA dari nama file), upload
+    pipeline multi-file (`UploadLPPSection.tsx`, 3 file CGA1/2/3 sekaligus,
+    full-replace dengan pola `isLastBatch`)
+  - Tahap 2: tab "LPP Monitoring" jadi fungsional (sebelumnya empty state)
+    — filter, search, 4 summary card, tabel berpaginasi
+  - Tahap 3: reconciliation engine (4 kondisi DAT vs LPP by kode_asset,
+    universe dibatasi ke union assets_raw∪lpp_raw∪surat_jalan_items),
+    halaman baru `/reconciliation`, menu baru di Sidebar
+  - Kondisi 3 "Aset Intransit" belum aktif (butuh file Report Intransit)
+  - Integrasi Mutasi WT otomatis sengaja ditunda (konfirmasi user)
+- **Bug fix: badge CGA di tabel reconciliation** — `assets_raw.toko`
+  simpan label panjang ("CGA1 - Cadangan General Affairs 1"), beda dengan
+  `lpp_raw.toko` yang sudah bersih. Fix: `extractCGACode()` helper di
+  `reconciliation-route.ts`
+- **Git**: kerjaan di-commit ke branch `feature/reconciliation` (bukan
+  langsung ke `main`) dengan message sementara, di-push ke remote. Perlu
+  amend message + merge ke `main` setelah stabil
 
 ## 17 Juni 2026
 - **Fix kritis: auto-clear `asset_notes` menghapus SEMUA catatan** — root
