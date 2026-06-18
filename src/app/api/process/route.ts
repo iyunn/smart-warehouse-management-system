@@ -2,6 +2,36 @@ import { NextResponse } from 'next/server'
 import { classifyAsset } from '@/lib/classifier'
 import { supabase } from '@/lib/supabaseClient'
 
+// Supabase PostgREST membatasi default 1000 baris per query. Untuk tabel
+// yang bisa lebih besar dari itu (assets_raw bisa 4000-5000+ baris), WAJIB
+// pakai pagination loop — query tanpa .range() akan diam-diam truncate ke
+// 1000 baris pertama tanpa error, menyebabkan data parsial dianggap lengkap.
+// (Root cause bug 18 Juni: auto-clear asset_notes salah hapus 8/10 catatan
+// karena query assets_raw.kode_asset cuma dapat ~1000 dari 4666 baris.)
+async function fetchAllKodeAsset(): Promise<Set<string>> {
+  let allKodes: string[] = []
+  let from = 0
+  const FETCH_SIZE = 1000
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('assets_raw')
+      .select('kode_asset')
+      .range(from, from + FETCH_SIZE - 1)
+
+    if (error) throw new Error(error.message)
+
+    const batch = data ?? []
+    allKodes = [...allKodes, ...batch.map((r: any) => r.kode_asset)]
+
+    if (batch.length < FETCH_SIZE) break
+    from += FETCH_SIZE
+    if (from > 200000) break // safety guard
+  }
+
+  return new Set(allKodes)
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -114,13 +144,25 @@ export async function POST(req: Request) {
         // Query ulang SEMUA raw_id dari DB (bukan rawIdMap lokal yang cuma
         // berisi kode_asset dari batch ini) — karena di titik ini semua
         // batch sudah commit, assets_raw berisi data lengkap.
-        const allocatedKodes = allocatedItems.map((it: any) => it.kode_asset)
-        const { data: matchedRaw } = await supabase
-          .from('assets_raw')
-          .select('id, kode_asset')
-          .in('kode_asset', allocatedKodes)
+        //
+        // Query di-chunk per 200 kode_asset (bukan 1 query .in() besar) —
+        // kalau allocatedKodes banyak, hasil match per query tetap jauh di
+        // bawah limit default Supabase (1000 baris/query), jadi tidak ada
+        // hasil yang diam-diam ke-truncate.
+        const allocatedKodes = [...new Set(allocatedItems.map((it: any) => it.kode_asset))]
+        const MATCH_CHUNK = 200
+        let rawIdsToTag: string[] = []
 
-        const rawIdsToTag = (matchedRaw ?? []).map((r: any) => r.id)
+        for (let i = 0; i < allocatedKodes.length; i += MATCH_CHUNK) {
+          const kodeChunk = allocatedKodes.slice(i, i + MATCH_CHUNK)
+          const { data: matchedRaw } = await supabase
+            .from('assets_raw')
+            .select('id')
+            .in('kode_asset', kodeChunk)
+
+          rawIdsToTag = [...rawIdsToTag, ...(matchedRaw ?? []).map((r: any) => r.id)]
+        }
+
         const uniqueRawIds = [...new Set(rawIdsToTag)]
 
         // Batch update assets_clean tag = 'Allocated' (500 per batch)
@@ -140,19 +182,13 @@ export async function POST(req: Request) {
     // sudah keluar/mutasi → catatan dianggap selesai siklusnya → hapus.
     // Kalau aset balik lagi 6 bulan kemudian, itu siklus baru tanpa catatan basi.
     //
-    // PENTING: hanya jalan di batch TERAKHIR. rawIdMap lokal di request ini
-    // cuma berisi kode_asset dari batch ini saja (sebagian kecil dari total
-    // DAT) — kalau dipakai untuk auto-clear di setiap batch, hampir semua
-    // catatan akan salah dianggap "stale" dan terhapus meski asetnya masih
-    // aktif di CGA (cuma belum sampai batch ini). Karena itu, saat batch
-    // terakhir, query ulang SEMUA kode_asset dari assets_raw (bukan rawIdMap)
-    // — di titik ini semua batch sudah commit, jadi datanya lengkap.
+    // PENTING: hanya jalan di batch TERAKHIR — di titik ini semua batch
+    // sudah commit, assets_raw berisi data lengkap. Pakai fetchAllKodeAsset()
+    // (pagination loop) BUKAN query .select() polos — assets_raw bisa
+    // >1000 baris dan Supabase diam-diam truncate ke 1000 tanpa error
+    // (root cause bug 18 Juni, lihat komentar di definisi fetchAllKodeAsset).
     if (isLastBatch) {
-      const { data: allRawKodes } = await supabase
-        .from('assets_raw')
-        .select('kode_asset')
-
-      const currentKodeSet = new Set((allRawKodes ?? []).map((r: any) => r.kode_asset))
+      const currentKodeSet = await fetchAllKodeAsset()
 
       const { data: allNotes } = await supabase
         .from('asset_notes')
