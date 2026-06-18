@@ -3,7 +3,7 @@
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **18 Juni 2026** (setelah LPP Reconciliation Tahap 1-3 implemented — upload pipeline, LPP Monitoring tab, reconciliation engine)
+> Terakhir diupdate: **18 Juni 2026** (LPP Reconciliation Tahap 1-3 implemented + fix kritis pagination row-limit di auto-clear asset_notes)
 
 ## Project Identity
 
@@ -161,10 +161,12 @@ Status: ✅ Completed
     `isLastBatch` di setiap request batch
   - DAT adalah full snapshot — aset tidak ada di file = sudah dimutasi keluar CGA
 - Re-apply tag "Allocated" — hanya jalan di **batch terakhir** (`isLastBatch`), query
-  ulang `assets_raw` lengkap dari DB (bukan data parsial per-batch)
+  ulang `assets_raw` lengkap dari DB (bukan data parsial per-batch). Query
+  `.in()` di-chunk per 200 kode_asset (fix 18 Juni, lihat di bawah)
 - Auto-clear `asset_notes` untuk kode_asset yang sudah keluar CGA — hanya jalan di
-  **batch terakhir**, dibandingkan terhadap seluruh `assets_raw` dari DB (lihat fix
-  kritis 17 Juni di Recent Changes Log)
+  **batch terakhir**, dibandingkan terhadap seluruh `assets_raw` dari DB via
+  `fetchAllKodeAsset()` (helper dengan pagination loop, fix 18 Juni — lihat
+  fix kritis 17 Juni & 18 Juni di Recent Changes Log)
 
 ### Asset Classification Engine
 Status: ✅ Completed
@@ -878,6 +880,14 @@ Setiap keputusan teknis harus tunduk pada prinsip ini:
 - Tailwind utility classes
 - Clean separation of concerns
 - PascalCase untuk components, camelCase untuk hooks/utils
+- **WAJIB pagination loop untuk query tabel besar** (per 18 Juni 2026) —
+  Supabase PostgREST default limit 1000 baris/query, query tanpa `.range()`
+  DIAM-DIAM truncate tanpa error. Berlaku untuk SEMUA tabel yang bisa >1000
+  baris (`assets_raw`, `lpp_raw`, dst): pakai pola `FETCH_SIZE=1000` + loop
+  `.range(from, from+FETCH_SIZE-1)` sampai batch result < FETCH_SIZE. Sudah
+  diterapkan di `dat-summary`, `lpp/monitoring`, `reconciliation` — celah
+  ditemukan & fixed di `api/process/route.ts` (auto-clear asset_notes +
+  re-apply tag Allocated, root cause bug data loss 18 Juni)
 
 ## UI Standards
 
@@ -1104,6 +1114,24 @@ Belum diprioritaskan, menunggu arahan user.
 ---
 
 # 10. Recent Major Changes Log
+
+## 18 Juni 2026 (lanjutan — bugfix setelah Reconciliation Tahap 1-3)
+- **Fix kritis: auto-clear `asset_notes` & re-apply tag salah hapus data
+  karena Supabase row-limit** — root cause: query `assets_raw.kode_asset`
+  di `api/process/route.ts` tidak pakai pagination, Supabase PostgREST
+  diam-diam truncate ke 1000 baris pertama (DAT 4666 baris → cuma 1000
+  ke-fetch → 3666 kode_asset valid salah dianggap "tidak ada di DAT" →
+  catatan di kode_asset yang jatuh di luar 1000 pertama ikut terhapus).
+  User melaporkan 8 dari 10 catatan hilang setelah reupload DAT meski
+  aset-nya masih ada di Monitoring
+- Fix: helper `fetchAllKodeAsset()` (pagination loop, `FETCH_SIZE=1000`)
+  dipakai di step auto-clear; step re-apply tag Allocated di-chunk per 200
+  kode_asset untuk konsistensi. Diverifikasi dengan simulasi node (query
+  lama: 1000/4666 baris, query baru: 4666/4666 dalam 5 iterasi)
+- **Rule baru ditambahkan**: WAJIB pagination loop untuk semua query tabel
+  besar (>1000 baris potensial) — lihat Coding Standards
+- Data loss: 8 catatan yang sudah terhapus sebelum fix ini tidak bisa
+  direcover otomatis
 
 ## 18 Juni 2026
 - **LPP Web Tracking Reconciliation — Tahap 1-3 implemented** (THESIS CORE):

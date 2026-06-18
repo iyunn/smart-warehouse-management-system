@@ -2032,3 +2032,71 @@ sementara : proses reconciliation belum selesai..."), push ke remote.
 - Konfirmasi: kondisi 2 (SJ WT dibuat tapi belum BTB) — actionable warning
   atau informational saja (BTB kewenangan toko tujuan)
 - Export Excel/PDF untuk hasil reconciliation (belum ada)
+
+## 18 Juni 2026 (lanjutan) — Fix Kritis: Pagination Row-Limit di Auto-clear asset_notes
+
+### Laporan bug
+User update beberapa catatan di tabel Monitoring (10 catatan di 10
+kode_asset berbeda, hasil pencarian "DVR"), refresh — masih ada (jadi
+sudah masuk DB). Reupload DAT — setelah itu cuma 2 dari 10 catatan yang
+selamat. Dikonfirmasi kode_asset terkait masih muncul normal di Monitoring
+DAT (jadi bukan auto-clear yang benar/legit — asetnya tidak keluar CGA).
+
+### Investigasi
+File DAT yang diupload: 4666 baris, 10 batch. Fix kritis 17 Juni (skip
+auto-clear kecuali `isLastBatch`, query ulang `assets_raw` saat batch
+terakhir) sudah benar diterapkan — dikonfirmasi masih ada di kode saat
+file diupload untuk dicek. Jadi ini BUKAN regresi dari fix 17 Juni,
+melainkan bug baru yang sebelumnya tidak ketauan.
+
+### Root cause
+Step 7 (auto-clear `asset_notes`) di `api/process/route.ts`:
+```js
+const { data: allRawKodes } = await supabase
+  .from('assets_raw')
+  .select('kode_asset')
+```
+Query ini **tidak pakai `.range()` / pagination**. Supabase PostgREST
+punya limit default **1000 baris per query** — query tanpa pagination
+diam-diam truncate ke 1000 baris pertama TANPA error. Dengan DAT 4666
+baris, query ini cuma dapat ~1000 kode_asset (urutan dari Postgres, bukan
+urutan tertentu yang predictable), bukan semua 4666. Akibatnya 3666
+kode_asset valid lainnya salah dianggap "tidak ada di DAT" — kalau ada
+catatan di kode_asset yang kebetulan jatuh di luar 1000 yang ke-fetch,
+catatan itu ikut dihapus sebagai "stale".
+
+Simulasi node mengkonfirmasi: query lama dapat 1000/4666 baris (3666
+hilang dari pembanding), query dengan pagination loop dapat semua
+4666/4666 dalam 5 iterasi (`FETCH_SIZE=1000`).
+
+Step 6 (re-apply tag "Allocated") punya celah serupa secara prinsip —
+`.in('kode_asset', allocatedKodes)` bisa kena limit yang sama kalau hasil
+match-nya >1000 baris (belum terjadi karena jumlah aset teralokasi masih
+di bawah situ, tapi berpotensi seiring data bertambah).
+
+### Fix
+- Tambah helper `fetchAllKodeAsset()` — pagination loop (`.range()`,
+  `FETCH_SIZE=1000`, sama pola dengan `dat-summary` & `lpp/monitoring`
+  yang sudah benar dari awal) — dipakai di step auto-clear `asset_notes`
+- Step re-apply tag Allocated: query `.in()` di-chunk per 200 kode_asset
+  (bukan 1 query besar) — hasil match per chunk otomatis jauh di bawah
+  limit 1000, jadi tidak ada kemungkinan ke-truncate sama sekali
+- Update komentar kode supaya jelas KENAPA pagination wajib di sini
+
+File: `api/process/route.ts`.
+
+### Rule baru ditambahkan ke project_context.md
+**WAJIB pagination loop untuk query tabel apapun yang potensial >1000
+baris.** Ini bukan cuma soal `assets_raw` — berlaku untuk tabel besar
+manapun di masa depan. Ditambahkan ke Coding Standards sebagai reminder
+permanen, supaya kelas bug ini tidak terulang lagi di kode baru.
+
+### Data loss
+8 dari 10 catatan yang hilang sudah terhapus dari DB sebelum fix
+diterapkan — tidak ada cara recover otomatis. User perlu input ulang
+manual kalau masih ingat isinya.
+
+### Verifikasi
+User konfirmasi fix bekerja — test dengan catatan tersebar di halaman
+awal/tengah/akhir Monitoring (PAGE_SIZE=30, ±156 halaman untuk 4666 aset),
+reupload DAT, semua catatan utuh.
