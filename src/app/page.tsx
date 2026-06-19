@@ -2,7 +2,6 @@
 
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
-import DataStatusCards from "@/components/dashboard/DataStatusCards";
 import DashboardWarningCards from "@/components/dashboard/DashboardWarningCards";
 import CGASummaryCards from "@/components/dashboard/CGASummaryCards";
 import RekapPengirimanCards from "@/components/dashboard/RekapPengirimanCards";
@@ -29,18 +28,6 @@ export default function DashboardPage() {
             <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-2">Perlu Tindakan</p>
             <DashboardWarningCards
               warnings={(data as any)?.warnings ?? null}
-              loading={loading}
-            />
-          </div>
-
-          {/* Baris 1: Status Data */}
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-2">Status Data</p>
-            <DataStatusCards
-              datUpdate={data?.dataStatus.datUpdate ?? null}
-              datClosing={data?.dataStatus.datClosing ?? null}
-              lppUpdate={data?.dataStatus.lppUpdate ?? null}
-              lppClosing={data?.dataStatus.lppClosing ?? null}
               loading={loading}
             />
           </div>

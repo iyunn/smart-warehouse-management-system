@@ -4,6 +4,29 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+// Hook ringan untuk timestamp upload DAT & LPP — dipanggil di Sidebar
+// supaya terlihat di semua halaman tanpa user harus buka Reconciliation.
+function useFreshness() {
+  const [dat, setDat] = useState<string | null>(null);
+  const [lpp, setLpp] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/freshness")
+      .then(r => r.json())
+      .then(j => { setDat(j.datLastUpload ?? null); setLpp(j.lppLastUpload ?? null); })
+      .catch(() => {});
+  }, []);
+
+  return { dat, lpp };
+}
+
+function formatSidebarTime(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })
+    + " " + d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+}
+
 type NavItem = {
   id: string;
   label: string;
@@ -110,6 +133,7 @@ export default function Sidebar() {
   const activeId = getActiveId(pathname);
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const { dat: datUpload, lpp: lppUpload } = useFreshness();
 
   // Auto-expand kalau anak aktif
   useEffect(() => {
@@ -175,6 +199,20 @@ export default function Sidebar() {
           />
         ))}
       </nav>
+
+      {/* Freshness indicator — kapan DAT & LPP terakhir diupload */}
+      {!collapsed && (
+        <div className="mx-3 mb-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 space-y-2">
+          <div>
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-white/30">DAT Update</p>
+            <p className="text-[10px] font-mono text-cyan-300/80 mt-0.5 leading-tight">{formatSidebarTime(datUpload)}</p>
+          </div>
+          <div>
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-white/30">LPP Update</p>
+            <p className="text-[10px] font-mono text-violet-300/80 mt-0.5 leading-tight">{formatSidebarTime(lppUpload)}</p>
+          </div>
+        </div>
+      )}
 
       <div className={`p-3 border-t border-white/[0.06] ${collapsed ? "flex justify-center" : ""}`}>
         {collapsed ? (
