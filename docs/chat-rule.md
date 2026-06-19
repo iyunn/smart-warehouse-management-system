@@ -57,6 +57,14 @@ Repo SmartWMS: **`github.com/iyunn/smart-warehouse-management-system`** (PUBLIC)
 
 Claude membaca file langsung dari GitHub — **Fillian tidak perlu upload file manual**.
 
+> **⚠️ Penting — Codespace Workflow:** Fillian SELALU bekerja di **GitHub Codespace**
+> yang di-generate dari `main` branch (bukan di mesin lokal). Implikasinya:
+> - File yang di-apply di Codespace **TIDAK terlihat Claude** sampai Fillian push ke remote
+> - Claude hanya bisa lihat perubahan yang sudah di-push via `raw.githubusercontent.com`
+> - Kalau URL Codespace tiba-tiba 404 setelah apply file baru, itu **biasanya port
+>   forwarding timeout** (bukan error kode) — cukup klik "Open in Browser" ulang dari
+>   VS Code, atau restart `npm run dev`
+
 ### Prioritas metode (dari paling hemat token ke paling boros):
 
 | # | Metode | Kapan dipakai |
@@ -91,7 +99,7 @@ dan Fillian nyaman dengan style ini.
 ## 6. Arsitektur & Teknologi
 
 - **Stack**: Next.js, React, TypeScript, Tailwind CSS v4, Supabase PostgreSQL, Vercel
-- **Repo lokal Fillian**: `E:/Kuliah/Tugas-Akhir/smart-warehouse-management-system`
+- **Environment**: GitHub Codespace (bukan mesin lokal) — Codespace di-generate dari `main` branch
 - **Scope data**: CGA-only (Cadangan General Affairs 1/2/3)
 - **Prinsip arsitektur** (tidak boleh dilanggar):
   - Lightweight & performant — koneksi kantor Fillian rendah

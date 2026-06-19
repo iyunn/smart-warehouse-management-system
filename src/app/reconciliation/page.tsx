@@ -9,10 +9,11 @@ import { useReconciliation, type ReconciliationItem } from "@/hooks/useReconcili
 const PAGE_SIZE = 30;
 
 const KONDISI_CONFIG: Record<number, { label: string; desc: string; badge: string; severity: "normal" | "warning" }> = {
-  1: { label: "Fisik di CGA",        desc: "Ada di DAT & LPP — konsisten, aset masih di gudang",     badge: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20", severity: "normal" },
+  1: { label: "Fisik di CGA",        desc: "Ada di DAT & LPP, CGA sama — konsisten",                 badge: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20", severity: "normal" },
   2: { label: "Belum Mutasi Oracle", desc: "Ada di DAT, tidak ada di LPP — segera mutasi Oracle",     badge: "bg-amber-500/10 text-amber-300 border-amber-500/20",       severity: "warning" },
   4: { label: "Belum Mutasi WT",     desc: "Ada di LPP, tidak ada di DAT — segera buat SJ WT",        badge: "bg-rose-500/10 text-rose-300 border-rose-500/20",          severity: "warning" },
   5: { label: "Fisik Allocated",     desc: "Tidak ada di DAT & LPP — konsisten, sudah keluar CGA",    badge: "bg-slate-500/10 text-slate-300 border-slate-500/20",       severity: "normal" },
+  6: { label: "Mismatch CGA",        desc: "Ada di DAT & LPP tapi CGA berbeda — perlu investigasi",   badge: "bg-purple-500/10 text-purple-300 border-purple-500/20",    severity: "warning" },
 };
 
 const CGA_BADGE: Record<string, string> = {
@@ -51,7 +52,7 @@ function ReconciliationPageContent() {
 
     if (kondisiParam) {
       const parsed = parseInt(kondisiParam, 10);
-      if ([1, 2, 4, 5].includes(parsed)) setActiveKondisi(parsed);
+      if ([1, 2, 4, 5, 6].includes(parsed)) setActiveKondisi(parsed);
     }
     if (cgaParam && ["CGA1", "CGA2", "CGA3"].includes(cgaParam)) {
       setCga(cgaParam as "CGA1" | "CGA2" | "CGA3");
@@ -82,6 +83,7 @@ function ReconciliationPageContent() {
     { kondisi: 2, count: summary?.kondisi2 ?? 0 },
     { kondisi: 4, count: summary?.kondisi4 ?? 0 },
     { kondisi: 5, count: summary?.kondisi5 ?? 0 },
+    { kondisi: 6, count: summary?.kondisi6 ?? 0 },
   ];
 
   return (
@@ -101,7 +103,7 @@ function ReconciliationPageContent() {
           </div>
 
           {/* Summary cards — clickable filter */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {cards.map((c) => {
               const cfg = KONDISI_CONFIG[c.kondisi];
               const isActive = activeKondisi === c.kondisi;
@@ -190,7 +192,18 @@ function ReconciliationPageContent() {
                         <span className="text-white/30 font-mono">{(page - 1) * PAGE_SIZE + idx + 1}</span>
                         <span className="text-white/70 font-mono">{it.kode_asset}</span>
                         <span className="text-white/60 truncate">{it.deskripsi || "—"}</span>
-                        {it.toko !== "-" ? (
+                        {it.kondisi === 6 ? (
+                          // Mismatch CGA: tampilkan "DAT → LPP"
+                          <div className="flex items-center gap-1">
+                            <span className={`inline-flex items-center text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-md border ${CGA_BADGE[it.toko] ?? ""}`}>
+                              {it.toko}
+                            </span>
+                            <span className="text-white/30 text-[10px]">→</span>
+                            <span className={`inline-flex items-center text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-md border ${CGA_BADGE[it.tokoLPP ?? ""] ?? ""}`}>
+                              {it.tokoLPP}
+                            </span>
+                          </div>
+                        ) : it.toko !== "-" ? (
                           <span className={`inline-flex w-fit items-center text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md border ${CGA_BADGE[it.toko] ?? ""}`}>
                             {it.toko}
                           </span>

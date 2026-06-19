@@ -5,8 +5,9 @@ import { useState, useEffect, useCallback } from "react";
 export interface ReconciliationItem {
   kode_asset: string;
   toko: string;
+  tokoLPP: string | null; // hanya diisi untuk kondisi 6 (mismatch CGA)
   deskripsi: string;
-  kondisi: 1 | 2 | 4 | 5;
+  kondisi: 1 | 2 | 4 | 5 | 6;
   inDAT: boolean;
   inLPP: boolean;
 }
@@ -16,6 +17,7 @@ export interface ReconciliationSummary {
   kondisi2: number;
   kondisi4: number;
   kondisi5: number;
+  kondisi6: number;
 }
 
 export function useReconciliation() {

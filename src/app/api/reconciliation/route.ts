@@ -3,17 +3,17 @@ import { supabase } from "@/lib/supabaseClient";
 
 /**
  * Reconciliation Engine — bandingkan DAT (assets_raw) vs LPP (lpp_raw) by
- * kode_asset, hasilkan 4 kondisi (kondisi 3 "Aset Intransit" belum
+ * kode_asset, hasilkan 5 kondisi aktif (kondisi 3 "Aset Intransit" belum
  * diimplementasi, butuh data Report Intransit yang belum tersedia):
  *
- *   1. Ada di DAT & Ada di LPP    → Fisik di CGA (normal)
- *   2. Ada di DAT & Tidak di LPP  → Belum Mutasi Oracle (warning)
- *   4. Tidak di DAT & Ada di LPP  → Belum Mutasi WT (warning)
- *   5. Tidak di DAT & Tidak LPP   → Fisik Allocated (normal, sudah keluar CGA)
+ *   1. Ada di DAT & Ada di LPP & CGA sama    → Fisik di CGA (normal)
+ *   2. Ada di DAT & Tidak di LPP             → Belum Mutasi Oracle (warning)
+ *   4. Tidak di DAT & Ada di LPP             → Belum Mutasi WT (warning)
+ *   5. Tidak di DAT & Tidak LPP              → Fisik Allocated (normal)
+ *   6. Ada di DAT & Ada di LPP & CGA BEDA   → Mismatch CGA (warning)
  *
  * Universe pembanding untuk kondisi 5 dibatasi ke kode_asset yang PERNAH
- * tercatat di sistem (union DAT ∪ LPP ∪ surat_jalan_items.kode_asset) —
- * bukan seluruh kode aset yang mungkin ada di alam semesta.
+ * tercatat di sistem (union DAT ∪ LPP ∪ surat_jalan_items.kode_asset).
  */
 
 async function fetchAll(table: string, columns: string) {
@@ -84,15 +84,16 @@ export async function GET() {
 
     type ReconItem = {
       kode_asset: string;
-      toko: string;
+      toko: string;      // CGA dari DAT (kondisi 1,2,6) atau LPP (kondisi 4) atau "-" (kondisi 5)
+      tokoLPP: string | null; // CGA dari LPP, hanya diisi untuk kondisi 6 (mismatch)
       deskripsi: string;
-      kondisi: 1 | 2 | 4 | 5;
+      kondisi: 1 | 2 | 4 | 5 | 6;
       inDAT: boolean;
       inLPP: boolean;
     };
 
     const items: ReconItem[] = [];
-    const summary = { kondisi1: 0, kondisi2: 0, kondisi4: 0, kondisi5: 0 };
+    const summary = { kondisi1: 0, kondisi2: 0, kondisi4: 0, kondisi5: 0, kondisi6: 0 };
 
     for (const kode of universe) {
       const dat = datMap.get(kode);
@@ -100,13 +101,24 @@ export async function GET() {
       const inDAT = !!dat;
       const inLPP = !!lpp;
 
-      let kondisi: 1 | 2 | 4 | 5;
+      let kondisi: 1 | 2 | 4 | 5 | 6;
       let toko = "";
+      let tokoLPP: string | null = null;
       let deskripsi = "";
 
       if (inDAT && inLPP) {
-        kondisi = 1; toko = dat!.toko; deskripsi = dat!.deskripsi;
-        summary.kondisi1++;
+        toko = dat!.toko;
+        deskripsi = dat!.deskripsi;
+        if (dat!.toko === lpp!.toko) {
+          // CGA sama di DAT dan LPP — normal
+          kondisi = 1;
+          summary.kondisi1++;
+        } else {
+          // CGA BEDA antara DAT dan LPP — mismatch, perlu investigasi
+          kondisi = 6;
+          tokoLPP = lpp!.toko; // simpan CGA sisi LPP untuk ditampilkan di UI
+          summary.kondisi6++;
+        }
       } else if (inDAT && !inLPP) {
         kondisi = 2; toko = dat!.toko; deskripsi = dat!.deskripsi;
         summary.kondisi2++;
@@ -118,7 +130,7 @@ export async function GET() {
         summary.kondisi5++;
       }
 
-      items.push({ kode_asset: kode, toko, deskripsi, kondisi, inDAT, inLPP });
+      items.push({ kode_asset: kode, toko, tokoLPP, deskripsi, kondisi, inDAT, inLPP });
     }
 
     return NextResponse.json({ summary, items, totalUniverse: universe.size });
