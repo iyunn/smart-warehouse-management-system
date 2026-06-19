@@ -3,7 +3,7 @@
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **18 Juni 2026** (LPP Reconciliation Tahap 1-3 + fix pagination row-limit + Dashboard Baris 2 live + deep-link Dashboard↔Reconciliation)
+> Terakhir diupdate: **18 Juni 2026** (LPP Reconciliation Tahap 1-3 + fix pagination row-limit + Dashboard Baris 2 live + deep-link Dashboard↔Reconciliation + freshness indicator DAT/LPP di Sidebar)
 
 ## Project Identity
 
@@ -374,21 +374,15 @@ tidak ada fitur yang sedang dikerjakan saat ini
 ## Features Planned
 
 ### 🎯 Next (Updated 18 Juni 2026)
-- **Gap teknis Reconciliation (prioritas sesi berikutnya)** — lihat detail
-  lengkap di "Known Limitations" pada section LPP Reconciliation:
-  freshness indicator (timestamp upload DAT vs LPP), deteksi cross-CGA
-  mismatch, aging/durasi tracking untuk item Kondisi 2/4. Drill-down
-  Dashboard→Reconciliation SUDAH ada (18 Juni); yang masih kurang adalah
-  drill-down dari tabel Reconciliation langsung ke aksi (mis. "Buat SJ WT")
-- **Integrasi Mutasi WT otomatis** dari LPP (cross-check kode_asset SJ vs
-  LPP, auto-lock kalau sudah tidak ada di LPP CGA) — sengaja ditunda sampai
-  reconciliation core stabil
-- Kondisi 3 "Aset Intransit" — butuh format file Report Intransit (belum diperoleh)
-- UI minor: tombol "Pakai Template" di Buat/Edit SJ dipindah posisinya ke
-  sebelahan tombol "Tambah Baris" (saat ini di header "Detail Barang")
-- "Changed" filter di Classification (prev_jenis/prev_merk, ACC/Revert) — prioritas rendah, ditunda sampai core selesai
-- Closing Snapshot Architecture — ditunda, fokus reconciliation dulu
-- Authentication (Supabase Auth, role Admin/Viewer, protected routes)
+- **Gap teknis Reconciliation — 2 sisanya (belum dikerjakan)**:
+  - Cross-CGA mismatch — deteksi aset yang CGA-nya beda antara DAT vs LPP
+  - Aging/durasi tracking — catat sejak kapan aset stuck di Kondisi 2/4 (butuh skema DB baru)
+- **Integrasi Mutasi WT otomatis** dari LPP — sengaja ditunda
+- Kondisi 3 "Aset Intransit" — butuh file Report Intransit (belum diperoleh)
+- UI minor: tombol "Pakai Template" dipindah ke sebelahan "Tambah Baris"
+- "Changed" filter di Classification — prioritas rendah
+- Closing Snapshot Architecture — ditunda
+- Authentication (Supabase Auth, role Admin/Viewer)
 - Bab 3 & 4 laporan TA — semua fitur core sudah cukup matang untuk ditulis
 
 ### LPP Web Tracking Reconciliation (THESIS CORE TOPIC)
@@ -454,15 +448,12 @@ menghindari risiko kehilangan progress / merusak `main` kalau session
 berakhir di tengah jalan), commit di-amend jadi message proper, di-merge
 ke `main` dengan `--ff-only`, branch lokal & remote sudah dihapus.
 
-**Known Limitations (ditemukan saat audit 18 Juni, belum dikerjakan):**
-- **Tidak ada freshness indicator** — halaman reconciliation tidak
-  menampilkan timestamp upload terakhir DAT vs LPP. Kalau kedua sumber
-  diupload di waktu yang jauh berbeda (mis. DAT hari ini, LPP 3 hari lalu),
-  hasil bisa false-positive (item yang sebenarnya baru saja dimutasi
-  muncul sebagai "Belum Mutasi Oracle" padahal cuma soal timing, bukan
-  kelalaian admin). Perlu tambah tampilan "DAT terakhir diupload: ..." /
-  "LPP terakhir diupload: ..." di halaman, idealnya dengan warning kalau
-  selisihnya terlalu jauh
+**Known Limitations (ditemukan saat audit 18 Juni):**
+- ~~**Tidak ada freshness indicator**~~ — **SELESAI (18 Juni)**: timestamp
+  DAT & LPP terakhir diupload dipindah ke **Sidebar** (widget "DAT Update"/
+  "LPP Update" di atas user profile, hanya saat sidebar tidak collapsed) via
+  API ringan `/api/freshness`. `DataStatusCards` di Dashboard dihapus karena
+  info ini sudah ada di Sidebar yang lebih persistent lintas halaman.
 - **Tidak ada deteksi cross-CGA mismatch** — engine cuma cek presence
   (ada/tidak ada by kode_asset), bukan kecocokan CGA. Kalau kode_asset
   ada di DAT CGA1 tapi di LPP tercatat CGA2 (administratif salah cost
@@ -962,6 +953,7 @@ src/
 │       ├── reports/dat-summary/route.ts  Dipanggil dari tombol Export PDF di Monitoring
 │       ├── dashboard/stats/route.ts  Dashboard live data (+ Rekap Pengiriman)
 │       ├── monitoring/route.ts       Monitoring data DAT (GET + PATCH catatan)
+│       ├── freshness/route.ts          GET timestamp upload terakhir DAT & LPP (2 query ringan, maybeSingle)
 │       ├── reconciliation/route.ts   Engine 4 kondisi (set ops by kode_asset, extractCGACode untuk badge)
 │       ├── lpp/
 │       │   ├── clear/route.ts        DELETE semua lpp_raw (full replace)
@@ -993,7 +985,7 @@ src/
 │   │   └── KeywordRulesTab.tsx
 │   │
 │   ├── dashboard/
-│   │   ├── DataStatusCards.tsx       Baris 1 (live)
+│   │   ├── DataStatusCards.tsx       Baris 1 — DIHAPUS dari Dashboard (18 Juni, info pindah ke widget Sidebar)
 │   │   ├── CGASummaryCards.tsx       Baris 4 (live)
 │   │   ├── DashboardWarningCards.tsx Warning cards (3, semua live)
 │   │   ├── RekapPengirimanCards.tsx  Baris 6 (live, 3 card)
@@ -1090,16 +1082,16 @@ src/
 
 ### Dashboard Placeholders
 - Baris 3 & 5 masih placeholder (menunggu Closing Snapshot Architecture)
+- Baris 1 "Status Data" (`DataStatusCards`) **dihapus** (18 Juni) — info
+  digantikan oleh widget freshness di Sidebar yang lebih persistent
 - Baris 2 (DAT vs LPP per CGA) sudah LIVE sejak 18 Juni — `DATvsLPPCards.tsx`
 - Baris 6 (Rekap Pengiriman) sudah LIVE
 
-### Reconciliation Engine — Known Limitations (18 Juni 2026)
-Lihat detail lengkap di section "LPP Web Tracking Reconciliation" di atas.
-Ringkasan: tidak ada freshness indicator (timestamp upload DAT vs LPP),
-tidak ada deteksi cross-CGA mismatch, tidak ada tracking durasi/aging
-untuk item Kondisi 2/4. Drill-down Dashboard→Reconciliation SUDAH ada;
-drill-down dari tabel Reconciliation ke aksi langsung (Buat SJ WT) belum.
-**Prioritas sesi berikutnya** (konfirmasi user, 18 Juni).
+### Reconciliation Engine — Known Limitations
+- ✅ Freshness indicator — SELESAI, di Sidebar (`/api/freshness`)
+- ⏳ Cross-CGA mismatch — belum dikerjakan
+- ⏳ Aging/durasi tracking — belum dikerjakan (butuh skema DB baru)
+- ⏳ Drill-down dari tabel ke aksi langsung — belum dikerjakan
 
 ### Classification Accuracy
 - Keyword matching masih rule-based (exact/semi-exact)
@@ -1144,6 +1136,17 @@ drill-down dari tabel Reconciliation ke aksi langsung (Buat SJ WT) belum.
 ---
 
 # 10. Recent Major Changes Log
+
+## 18 Juni 2026 (lanjutan — freshness indicator + DataStatusCards)
+- **Freshness indicator DAT & LPP dipindah ke Sidebar** — widget "DAT
+  Update"/"LPP Update" di atas user profile (hanya saat sidebar tidak
+  collapsed), persistent lintas semua halaman. API baru `/api/freshness`
+  (2 query × 1 baris, `maybeSingle()` agar tidak throw kalau tabel kosong)
+- **DataStatusCards dihapus dari Dashboard** — informasi yang sama sudah
+  ada di Sidebar, jadi card Baris 1 "Status Data" redundant dan dihapus
+- Proses: sempat diimplementasi sebagai `FreshnessBanner` di halaman
+  Reconciliation (3 file), lalu diputuskan dipindah ke Sidebar (lebih
+  persistent). File reconciliation di-revert ke versi sebelum FreshnessBanner
 
 ## 18 Juni 2026 (lanjutan — Dashboard Baris 2 + deep-link)
 - **Aktivasi Dashboard Baris 2** (DAT vs LPP per CGA) — komponen baru

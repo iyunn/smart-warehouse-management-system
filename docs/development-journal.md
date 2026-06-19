@@ -2197,3 +2197,35 @@ dari URL sekali di awal, behavior manual filter tidak berubah).
 2. Integrasi Mutasi WT otomatis (ditunda sejak awal)
 3. Kondisi 3 Aset Intransit (butuh file)
 4. Drill-down dari tabel Reconciliation ke aksi langsung (Buat SJ WT)
+
+## 18 Juni 2026 (lanjutan) — Freshness Indicator DAT & LPP pindah ke Sidebar
+
+### Konteks
+User meminta freshness indicator (kapan DAT & LPP terakhir diupload) dipindah
+ke Sidebar supaya terlihat di semua halaman tanpa harus buka halaman Reconciliation.
+Sekaligus menghapus DataStatusCards dari Dashboard karena info sudah ada di Sidebar.
+
+### Proses
+Sempat diimplementasi sebagai FreshnessBanner di halaman Reconciliation (3 file:
+`reconciliation-route.ts` + `useReconciliation.ts` + `reconciliation-page.tsx`)
+dalam sesi sebelumnya. User sudah apply ke lokal tapi belum push ke remote.
+Keputusan: pindah ke Sidebar supaya lebih persistent. 3 file reconciliation
+di-revert ke versi sebelum FreshnessBanner, digantikan pendekatan Sidebar.
+
+### Implementasi
+- API baru `/api/freshness` — 2 query ringan (MAX uploaded_at dari `assets_raw`
+  dan `lpp_raw`), pakai `.maybeSingle()` bukan `.single()` agar tidak throw
+  error kalau tabel kosong (pelajaran dari bug `.single()` sebelumnya)
+- `Sidebar.tsx` — hook `useFreshness()` inline, fetch `/api/freshness` sekali
+  saat mount. Widget "DAT Update" + "LPP Update" di atas user profile block,
+  hanya muncul saat sidebar tidak collapsed. Format: `18 Jun 2026 10:30`
+- `src/app/page.tsx` (Dashboard) — hapus import `DataStatusCards` dan blok
+  JSX "Baris 1: Status Data" — info sudah ada di Sidebar, jadi redundant
+
+### Catatan teknis
+- File reconciliation (route, hook, page) di-revert ke versi remote yang bersih
+  (tanpa FreshnessBanner) karena user sudah apply lokal tapi belum push
+- `.maybeSingle()` vs `.single()` — penting: `.single()` throw error kalau
+  0 baris, `.maybeSingle()` return null dengan aman. Gunakan `.maybeSingle()`
+  untuk query yang mungkin return 0 baris (tabel baru/kosong)
+
