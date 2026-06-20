@@ -363,6 +363,29 @@ Status: ✅ Completed (semua sesi + fitur pelengkap)
   saat ini di header "Detail Barang" — **rencana pindah** ke sebelahan
   tombol "Tambah Baris" (belum dikerjakan, next session)
 
+### ✅ Import SJ Web Tracking dari PDF (19 Juni 2026)
+Status: ✅ Completed
+
+User upload PDF SJ WT → SmartWMS otomatis buat SJ record + isi kode_asset
+di Rekap Alokasi tanpa input manual. Menyelesaikan gap "WT tidak ada fitur autorecap".
+
+**Tantangan teknis:** pdfjs-dist ekstrak teks per "text run" PDF (tiap kolom
+tabel = item terpisah). Solusi: dual-mode parsing — `fullText` (join spasi)
+untuk header regex, `lines` (join newline) untuk kode_asset detection. Tidak
+andalkan header tabel, langsung cari kode_asset pertama sebagai anchor.
+
+**Implementasi:**
+- `pdfjs-dist@3.11.174` — Worker di-copy ke `public/pdf.worker.min.js`
+- `src/lib/wtSJParser.ts` — parser PDF → `WTParsedSJ`
+- `src/app/api/sj/import-wt/route.ts` — auto-create tujuan, generate No SJ
+  SmartWMS, insert surat_jalan + items (`kode_asset` + `mutasi_wt_status=true`)
+- `src/components/UploadWTSJSection.tsx` — drag PDF → preview modal → submit
+  (dynamic import `ssr:false`, hindari konflik canvas module Turbopack)
+- Section baru "Surat Jalan Web Tracking" di halaman Upload Data
+
+**Pending minor:** card "Import SJ WT Bulk" dipindah ke bawah agar card utama
+bisa full-width (keterangan tidak overflow).
+
 ---
 
 ## Features In Progress
@@ -374,17 +397,18 @@ tidak ada fitur yang sedang dikerjakan saat ini
 ## Features Planned
 
 ### 🎯 Next (Updated 19 Juni 2026)
+- **Export Excel hasil Reconciliation** — satu-satunya yang masih kurang dari fitur reconciliation
 - **Integrasi Mutasi WT otomatis** dari LPP — sengaja ditunda
 - **UI minor: card Import SJ WT Bulk** dipindah ke bawah card Import SJ WT (keterangan overflow card)
-- Kondisi 3 "Aset Intransit" — butuh file Report Intransit (belum diperoleh)
-- UI minor: tombol "Pakai Template" dipindah ke sebelahan "Tambah Baris"
-- Authentication (Supabase Auth, role Admin/Viewer)
-- Bab 3 & 4 laporan TA — semua fitur core sudah cukup matang untuk ditulis
+- **UI minor: tombol "Pakai Template"** dipindah ke sebelahan "Tambah Baris"
+- Kondisi 3 "Aset Intransit" — **target pengembangan jangka panjang (sebagai bahan penelitian lanjutan dan tidak akan dilakukan di penelitian ini)** (butuh file Report Intransit yang belum diperoleh, bukan prioritas saat ini)
 - "Changed" filter di Classification — prioritas rendah
 - Closing Snapshot Architecture — ditunda
+- Authentication (Supabase Auth, role Admin/Viewer)
+- Bab 3 & 4 laporan TA — semua fitur core sudah cukup matang untuk ditulis
 
 ### LPP Web Tracking Reconciliation (THESIS CORE TOPIC)
-Status: ✅ Tahap 1-3 Implemented (18 Juni 2026) — Kondisi 3 "Aset Intransit" belum (butuh file Report Intransit)
+Status: ✅ Tahap 1-3 Implemented (18 Juni 2026) — kurang: Export Excel hasil reconciliation + Kondisi 3 "Aset Intransit" (target jangka panjang / sebagai bahan penelitian lanjutan dan tidak akan dilakukan di penelitian ini)
 
 **Konteks LPP:**
 - LPP = output dari program Web Tracking (.xls per cost center, file
@@ -398,15 +422,15 @@ Status: ✅ Tahap 1-3 Implemented (18 Juni 2026) — Kondisi 3 "Aset Intransit" 
   status "intransit" di lokasi asal
 - Ada output terpisah "Report Intransit" — daftar kode_asset yang sudah
   dibuatkan SJ WT tapi belum di-BTB tujuan (file belum diperoleh — kondisi
-  3 masih belum bisa diimplementasi)
+  3 masih belum bisa diimplementasi namun sekarang sebagai bahan penelitian lanjutan dan tidak akan dilakukan di penelitian ini)
 
-**4 Kondisi yang sudah aktif (kondisi 3 "Aset Intransit" pending):**
+**5 Kondisi (kondisi 3 "Aset Intransit" tidak diimplementasi dalam TA ini — saran penelitian lanjutan):**
 
 | # | DAT (CGA?) | LPP (CGA?) | Status | Aksi |
 |---|---|---|---|---|
 | 1 | Ya | Ya | Fisik masih di CGA | Normal, tidak ada aksi |
 | 2 | Ya | Tidak | Belum Mutasi Oracle | Admin gudang harus mutasi Oracle segera |
-| 3 | — | — | Aset Intransit (cross-cut) | Sudah SJ WT, belum BTB tujuan — **belum aktif**, butuh file Intransit |
+| 3 | — | — | Aset Intransit (cross-cut) | Sudah SJ WT, belum BTB tujuan — **tidak diimplementasi dalam TA ini, dijadikan saran penelitian lanjutan** |
 | 4 | Tidak | Ya | Belum Mutasi WT | Admin gudang harus buat SJ WT segera |
 | 5 | Tidak | Tidak | Fisik Allocated | Normal, konsisten sudah keluar CGA |
 
@@ -498,44 +522,14 @@ sekarang live, reuse `useReconciliation` hook (tidak ada API/query baru):
 
 **Yang belum dikerjakan:**
 - **Integrasi Mutasi WT otomatis** — sengaja ditunda
-- Kondisi 3 "Aset Intransit" — butuh file Report Intransit (belum diperoleh)
+- Kondisi 3 "Aset Intransit" — **tidak diimplementasi dalam TA ini**,
+  dijadikan **saran penelitian lanjutan** (butuh file Report Intransit
+  yang belum diperoleh + di luar boundary penelitian ini)
+- **Export Excel hasil Reconciliation** — belum ada, ini yang paling
+  actionable untuk dilengkapi (bisa reuse pattern export dari Monitoring)
 - Drill-down dari tabel `/reconciliation` ke aksi langsung (Buat SJ WT, dst)
 - Semua gap teknis dari audit 18 Juni sudah resolved/skipped (lihat Known Limitations)
   **prioritas sesi berikutnya** (konfirmasi user, 18 Juni)
-
-### ✅ Fitur Baru — Import SJ Web Tracking dari PDF (19 Juni 2026)
-User bisa upload PDF Surat Jalan dari Web Tracking (WT) → SmartWMS otomatis
-membuat SJ record + mengisi kode_asset di Rekap Alokasi, tanpa input manual.
-Ini menyelesaikan gap "WT tidak ada fitur autorecap".
-
-**Format PDF SJ WT:** konsisten (semua SJ WT sama strukturnya) — header: No SJ,
-Tujuan, Tanggal Cetak, Pembawa; tabel: No SN (=kode_asset), Nama Barang,
-Kondisi, Owner, Keterangan.
-
-**Tantangan teknis:** pdfjs-dist mengekstrak teks per "text run" PDF (setiap
-kolom tabel = item terpisah, tidak satu baris). "1 Baik" tersplit jadi "1" dan
-"Baik", header tabel tersplit per kolom. Solusi: dual-mode parsing —
-`fullText` (join spasi) untuk header regex, `lines` (join newline) untuk
-kode_asset detection. Tidak andalkan header tabel, langsung cari kode_asset
-pertama sebagai anchor.
-
-**Implementasi:**
-- `pdfjs-dist@3.11.174` (bukan v6 — v6 butuh `Promise.withResolvers` &
-  `Promise.try` ES2024 yang belum ada di Codespace Node.js). Worker di-copy
-  ke `public/pdf.worker.min.js`
-- `src/lib/wtSJParser.ts` — parser PDF → `WTParsedSJ` (No SJ WT, tujuan kode/
-  nama, tanggal, pembawa, items dengan kode_asset)
-- `src/app/api/sj/import-wt/route.ts` — lookup tujuan → **auto-create** kalau
-  tidak ada → generate No SJ SmartWMS → insert `surat_jalan` + items dengan
-  `kode_asset` & `mutasi_wt_status=true`
-- `src/components/UploadWTSJSection.tsx` — drag PDF → parse → **preview modal**
-  (user bisa edit Jenis, Merk, Keterangan, Qty, Baru sebelum submit) → import.
-  Dynamic import `ssr: false` untuk hindari konflik `canvas` module Turbopack
-- Section baru "Surat Jalan Web Tracking" di halaman Upload Data
-
-**Pending (next session):** layout — card "Import SJ WT Bulk" (Coming Soon)
-dipindah ke bawah card utama supaya card Import SJ WT bisa full-width dan
-field Keterangan tidak overflow card.
 
 ### DAT/LPP Closing Architecture
 Status: 📌 Planned (architecture sudah diputuskan, implementasi TBA)
@@ -558,7 +552,8 @@ Status: ✅ Sebagian besar selesai (SJ Rekap Alokasi, Monitoring 3-tabel per CGA
 - Monitoring Excel: 3 tabel side-by-side per CGA dengan grouping Kategori→Jenis
   (tanpa warna — limitasi SheetJS community edition)
 - DAT Summary PDF: page-break + warna per CGA, trigger dari tombol di Monitoring
-- Pending: export untuk hasil reconciliation LPP setelah diimplementasi
+- Pending: Export Excel untuk hasil reconciliation (belum ada, prioritas berikutnya)
+- Kondisi 3 "Aset Intransit" — **tidak diimplementasi dalam TA ini** (saran penelitian lanjutan)
 
 ### Authentication & Role Management
 Status: 📌 Planned
@@ -1096,9 +1091,8 @@ src/
 3. Show Dashboard → live CGA summary + Rekap Pengiriman
 4. Show Monitoring v2 → Invoice Number, Tanggal Dokumen, Catatan, sortable header
 5. Buat SJ Manual → autorecap, alokasi kode aset, mutasi Oracle & WT
-6. Upload LPP (3 file CGA1/2/3) → Reconciliation engine: 4 kondisi DAT vs LPP,
-   warning admin gudang untuk Belum Mutasi Oracle & Belum Mutasi WT
-   (Kondisi 3 Aset Intransit belum aktif)
+6. Upload LPP (3 file CGA1/2/3) → Reconciliation engine: 5 kondisi DAT vs LPP
+   (Kondisi 3 Aset Intransit tidak diimplementasi — saran penelitian lanjutan)
 
 ---
 
@@ -1264,7 +1258,7 @@ Proyeksi: ~117 KB/bulan dari tabel SJ (estimasi 50 SJ × 8 item). Butuh **ratusa
   - Tahap 3: reconciliation engine (4 kondisi DAT vs LPP by kode_asset,
     universe dibatasi ke union assets_raw∪lpp_raw∪surat_jalan_items),
     halaman baru `/reconciliation`, menu baru di Sidebar
-  - Kondisi 3 "Aset Intransit" belum aktif (butuh file Report Intransit)
+  - Kondisi 3 "Aset Intransit" — **tidak diimplementasi dalam TA ini**, dijadikan saran penelitian lanjutan
   - Integrasi Mutasi WT otomatis sengaja ditunda (konfirmasi user)
 - **Bug fix: badge CGA di tabel reconciliation** — `assets_raw.toko`
   simpan label panjang ("CGA1 - Cadangan General Affairs 1"), beda dengan
