@@ -2282,3 +2282,59 @@ VS Code → "Open in Browser". Memory dan `chat-rule.md` diupdate untuk
 catat bahwa Fillian SELALU bekerja di Codespace (bukan mesin lokal),
 sehingga perubahan yang di-apply di Codespace tidak terlihat Claude
 sampai di-push ke remote.
+
+# 19 Juni 2026 (lanjutan) — Import SJ WT dari PDF + Storage Analysis + chat-rule.md
+
+### Fitur: Import Surat Jalan Web Tracking dari PDF
+
+User meminta fitur agar PDF SJ WT bisa di-upload → SmartWMS otomatis buat
+SJ record + isi kode_asset di Rekap Alokasi (WT tidak punya fitur autorecap).
+
+**Tantangan parsing PDF:**
+pdfjs-dist mengekstrak teks per "text run" PDF. Setiap kolom tabel dan label
+field menjadi item terpisah. "1 Baik" tersplit jadi "1" dan "Baik". Header
+tabel tersplit per kolom (bukan 1 baris utuh). Debugging dilakukan dengan
+console.log raw text di browser untuk lihat struktur asli.
+
+**Solusi parser (dual-mode):**
+- `fullText` (join spasi) untuk header regex — Tujuan, Tanggal, Pembawa, No SJ
+- `lines` (join newline) untuk deteksi kode_asset — TIDAK pakai header tabel,
+  langsung cari kode_asset pertama (`/^[A-Z]\d{2}\.\d+$/`) sebagai anchor
+- Kondisi: cari baris `/^\d{1,2}$/` (angka saja), bukan "1 Baik" satu baris
+
+**pdfjs-dist version saga:**
+- v6 (latest): gagal dengan `Promise.withResolvers` dan `Promise.try` (ES2024,
+  belum ada di Codespace Node.js)
+- v3.11.174: error `canvas` module karena Next.js SSR coba bundle Node.js code
+- Fix canvas: `dynamic({ ssr: false })` di upload page — cukup, tidak perlu
+  webpack externals (yang malah konflik dengan Turbopack Next.js 16)
+- Worker: copy ke `public/pdf.worker.min.js` (CDN tidak reliable di Codespace)
+
+**Files:**
+- `src/lib/wtSJParser.ts` — parser dengan dual-mode
+- `src/app/api/sj/import-wt/route.ts` — lookup/auto-create tujuan, generate
+  No SJ SmartWMS, insert surat_jalan + items (kode_asset + mutasi_wt_status=true)
+- `src/components/UploadWTSJSection.tsx` — drag PDF → preview modal → submit
+- `src/app/upload/page.tsx` — section baru "Surat Jalan Web Tracking"
+- `public/pdf.worker.min.js` — worker file pdfjs-dist
+
+**Pending:** card "Import SJ WT Bulk" (Coming Soon) perlu dipindah ke bawah
+supaya card Import SJ WT bisa full-width (keterangan overflow card saat ini).
+
+### Supabase Storage Analysis
+
+Dilakukan karena user khawatir soal limit 500MB Supabase free plan.
+Total saat ini: ~4MB (0.8%). Tabel full-replace tidak bertumbuh. Tabel
+akumulasi (sj*, asset_notes, keyword_rules) tumbuh ~117KB/bulan.
+Risiko nyata: pause proyek setelah 7 hari tidak aktif — lebih kritis untuk
+demo TA daripada storage limit. Future re-struktur: fokus ke surat_jalan*
+kalau data sudah ribuan (archiving/soft-delete strategy).
+Disimpan ke memory Claude dan didokumentasikan di Known Issues.
+
+### docs/chat-rule.md
+
+File baru ditambahkan ke repo: panduan cara kerja antara Fillian & Claude/AI
+lain, berisi: session startup protocol (baca project_context.md dulu), cara
+baca repo via curl (hemat token vs git clone), Codespace workflow notes (bukan
+mesin lokal, port timeout bukan code error), Supabase row-limit reminder, dan
+checklist sebelum present file ke user.

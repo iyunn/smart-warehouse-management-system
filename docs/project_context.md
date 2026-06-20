@@ -3,7 +3,7 @@
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **19 Juni 2026** (Cross-CGA Mismatch Kondisi 6 + aging tracking di-skip)
+> Terakhir diupdate: **19 Juni 2026** (Cross-CGA Mismatch Kondisi 6 + Import SJ Web Tracking dari PDF)
 
 ## Project Identity
 
@@ -375,6 +375,7 @@ tidak ada fitur yang sedang dikerjakan saat ini
 
 ### 🎯 Next (Updated 19 Juni 2026)
 - **Integrasi Mutasi WT otomatis** dari LPP — sengaja ditunda
+- **UI minor: card Import SJ WT Bulk** dipindah ke bawah card Import SJ WT (keterangan overflow card)
 - Kondisi 3 "Aset Intransit" — butuh file Report Intransit (belum diperoleh)
 - UI minor: tombol "Pakai Template" dipindah ke sebelahan "Tambah Baris"
 - Authentication (Supabase Auth, role Admin/Viewer)
@@ -501,6 +502,40 @@ sekarang live, reuse `useReconciliation` hook (tidak ada API/query baru):
 - Drill-down dari tabel `/reconciliation` ke aksi langsung (Buat SJ WT, dst)
 - Semua gap teknis dari audit 18 Juni sudah resolved/skipped (lihat Known Limitations)
   **prioritas sesi berikutnya** (konfirmasi user, 18 Juni)
+
+### ✅ Fitur Baru — Import SJ Web Tracking dari PDF (19 Juni 2026)
+User bisa upload PDF Surat Jalan dari Web Tracking (WT) → SmartWMS otomatis
+membuat SJ record + mengisi kode_asset di Rekap Alokasi, tanpa input manual.
+Ini menyelesaikan gap "WT tidak ada fitur autorecap".
+
+**Format PDF SJ WT:** konsisten (semua SJ WT sama strukturnya) — header: No SJ,
+Tujuan, Tanggal Cetak, Pembawa; tabel: No SN (=kode_asset), Nama Barang,
+Kondisi, Owner, Keterangan.
+
+**Tantangan teknis:** pdfjs-dist mengekstrak teks per "text run" PDF (setiap
+kolom tabel = item terpisah, tidak satu baris). "1 Baik" tersplit jadi "1" dan
+"Baik", header tabel tersplit per kolom. Solusi: dual-mode parsing —
+`fullText` (join spasi) untuk header regex, `lines` (join newline) untuk
+kode_asset detection. Tidak andalkan header tabel, langsung cari kode_asset
+pertama sebagai anchor.
+
+**Implementasi:**
+- `pdfjs-dist@3.11.174` (bukan v6 — v6 butuh `Promise.withResolvers` &
+  `Promise.try` ES2024 yang belum ada di Codespace Node.js). Worker di-copy
+  ke `public/pdf.worker.min.js`
+- `src/lib/wtSJParser.ts` — parser PDF → `WTParsedSJ` (No SJ WT, tujuan kode/
+  nama, tanggal, pembawa, items dengan kode_asset)
+- `src/app/api/sj/import-wt/route.ts` — lookup tujuan → **auto-create** kalau
+  tidak ada → generate No SJ SmartWMS → insert `surat_jalan` + items dengan
+  `kode_asset` & `mutasi_wt_status=true`
+- `src/components/UploadWTSJSection.tsx` — drag PDF → parse → **preview modal**
+  (user bisa edit Jenis, Merk, Keterangan, Qty, Baru sebelum submit) → import.
+  Dynamic import `ssr: false` untuk hindari konflik `canvas` module Turbopack
+- Section baru "Surat Jalan Web Tracking" di halaman Upload Data
+
+**Pending (next session):** layout — card "Import SJ WT Bulk" (Coming Soon)
+dipindah ke bawah card utama supaya card Import SJ WT bisa full-width dan
+field Keterangan tidak overflow card.
 
 ### DAT/LPP Closing Architecture
 Status: 📌 Planned (architecture sudah diputuskan, implementasi TBA)
@@ -952,6 +987,7 @@ src/
 │           ├── report/route.ts       PATCH alokasi (kode_asset, mutasi_oracle, mutasi_wt)
 │           ├── tujuan/route.ts       CRUD tujuan
 │           ├── templates/route.ts    GET/POST/DELETE template item
+│           ├── import-wt/route.ts    POST import SJ dari PDF WT (auto-create tujuan, mutasi_wt_status=true)
 │           └── master/
 │               ├── jenis/route.ts    DISTINCT 5-min cache
 │               └── merk/route.ts     DISTINCT 5-min cache
@@ -962,6 +998,7 @@ src/
 │   ├── SummaryCard.tsx
 │   ├── UploadSection.tsx             Dipakai di /upload (DAT)
 │   ├── UploadLPPSection.tsx          Dipakai di /upload (LPP, multi-file 3 CGA sekaligus)
+│   ├── UploadWTSJSection.tsx         Dipakai di /upload (Import SJ WT dari PDF, dynamic ssr:false)
 │   │
 │   ├── review/
 │   │   ├── ReviewSummaryCards.tsx
@@ -1006,6 +1043,7 @@ src/
     ├── batchProcessor.ts
     ├── lppParser.ts                  Parse HTML-table-as-.xls (DOMParser, bukan SheetJS), auto-detect CGA dari filename
     ├── lppBatchProcessor.ts          Mirror batchProcessor.ts, pola isLastBatch sama
+    └── wtSJParser.ts                 Parse PDF SJ WT via pdfjs-dist v3 (dual-mode: fullText untuk header, lines untuk tabel)
     ├── types.ts                      AssetRecord + invoice_number, tanggal_dokumen
     ├── excelExporter.ts              SJ Rekap Alokasi export + kolom mutasi
     ├── monitoringExporter.ts         Monitoring export (2 sheet)
@@ -1083,6 +1121,22 @@ src/
 - ⏳ Drill-down dari tabel ke aksi langsung — belum dikerjakan
 
 ### Classification Accuracy
+
+### Supabase Storage & Scaling Analysis (19 Juni 2026)
+Total storage terpakai: **~4 MB dari 500 MB** (0.8%) — sangat aman.
+
+Tabel berdasarkan pola pertumbuhan:
+- **Full-replace (tidak bertumbuh):** `assets_raw`, `assets_clean`, `lpp_raw` — ukuran tetap ~4666/4666/4690 rows setiap upload
+- **Akumulasi (bertumbuh):** `surat_jalan`, `surat_jalan_items`, `asset_notes`, `keyword_rules`
+
+Proyeksi: ~117 KB/bulan dari tabel SJ (estimasi 50 SJ × 8 item). Butuh **ratusan tahun** untuk kena limit 500 MB dari data SJ saja.
+
+**Risiko lebih nyata:** Supabase free plan **pause proyek setelah 7 hari tidak aktif** — ini yang perlu diwaspadai untuk demo TA, bukan storage.
+
+**Untuk re-struktur DB di masa depan** (kalau data SJ sudah ribuan):
+- Fokus ke tabel yang bertumbuh: `surat_jalan*` dan `asset_notes`
+- Pertimbangkan archiving/soft-delete strategy (misal SJ > 1 tahun di-archive ke tabel terpisah)
+- `keyword_rules` bisa dibersihkan kalau ada duplikat/stale rules
 - Keyword matching masih rule-based (exact/semi-exact)
 - Belum ada fuzzy matching atau synonym handling
 - Sebagian aset masih Unknown (butuh lebih banyak keyword rules dari user)
@@ -1125,6 +1179,22 @@ src/
 ---
 
 # 10. Recent Major Changes Log
+
+## 19 Juni 2026 (lanjutan — Import SJ WT + Supabase Storage Analysis)
+- **Fitur Import SJ Web Tracking dari PDF** — user upload PDF SJ WT →
+  SmartWMS otomatis buat SJ record + isi kode_asset di Rekap Alokasi.
+  Parser dual-mode (fullText spasi untuk header, lines newline untuk tabel)
+  karena pdfjs-dist v3 split teks per text run. Auto-create tujuan kalau
+  belum ada. `mutasi_wt_status=true` otomatis. Preview modal sebelum submit.
+  Pakai pdfjs-dist v3 (bukan v6 — v6 butuh ES2024 API yang belum tersedia
+  di Codespace). Dynamic import `ssr:false` untuk hindari konflik Turbopack.
+- **Supabase storage analysis** — total ~4MB dari 500MB (0.8%). Tabel yang
+  bertumbuh: surat_jalan*, asset_notes, keyword_rules. Risiko lebih nyata:
+  pause 7 hari tidak aktif (penting untuk demo TA). Lihat detail di Known
+  Issues "Supabase Storage & Scaling Analysis"
+- **`docs/chat-rule.md`** ditambahkan ke repo — panduan untuk AI/sesi baru,
+  berisi workflow rules, cara baca repo via curl, Codespace workflow notes,
+  Supabase row-limit reminder, dan session startup protocol
 
 ## 19 Juni 2026
 - **Cross-CGA Mismatch — Kondisi 6**: engine reconciliation sekarang deteksi
