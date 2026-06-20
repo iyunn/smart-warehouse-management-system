@@ -1,9 +1,21 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import UploadSection from "@/components/UploadSection";
 import UploadLPPSection from "@/components/UploadLPPSection";
+
+// pdfjs-dist tidak kompatibel dengan SSR (mengandung Node.js `canvas` module
+// yang tidak ada di browser) — load komponen ini client-side only.
+const UploadWTSJSection = dynamic(
+  () => import("@/components/UploadWTSJSection"),
+  { ssr: false, loading: () => (
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 h-[160px] flex items-center justify-center">
+      <span className="text-[12px] text-white/30">Memuat...</span>
+    </div>
+  )}
+);
 
 function PlaceholderUploadCard({ title, description }: { title: string; description: string }) {
   return (
@@ -65,6 +77,19 @@ export default function UploadDataPage() {
               <PlaceholderUploadCard
                 title="Upload LPP Closing"
                 description="Snapshot cut-off bulanan LPP Web Tracking"
+              />
+            </div>
+          </div>
+
+          <div>
+            <h2 className="text-[12px] font-semibold uppercase tracking-widest text-rose-400/70 mb-3">
+              Surat Jalan Web Tracking
+            </h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <UploadWTSJSection />
+              <PlaceholderUploadCard
+                title="Import SJ WT Bulk"
+                description="Import beberapa SJ WT sekaligus (batch)"
               />
             </div>
           </div>

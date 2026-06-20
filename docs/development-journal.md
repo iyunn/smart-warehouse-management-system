@@ -2229,3 +2229,56 @@ di-revert ke versi sebelum FreshnessBanner, digantikan pendekatan Sidebar.
   0 baris, `.maybeSingle()` return null dengan aman. Gunakan `.maybeSingle()`
   untuk query yang mungkin return 0 baris (tabel baru/kosong)
 
+
+# 19 Juni 2026 — Cross-CGA Mismatch (Kondisi 6) + Skip Aging Tracking
+
+### Fitur: Cross-CGA Mismatch Detection (Kondisi 6)
+
+Engine reconciliation sebelumnya hanya cek presence (ada/tidak ada
+by kode_asset), tidak cek konsistensi CGA. Aset yang ada di DAT CGA1
+tapi di LPP tercatat CGA2 dianggap Kondisi 1 "normal" — padahal itu
+selisih administrasi yang perlu investigasi.
+
+**Fix:** Kondisi 1 dipecah jadi 2 kasus:
+- CGA sama di DAT dan LPP → tetap Kondisi 1 (normal)
+- CGA BEDA → Kondisi 6 "Mismatch CGA" (warning, badge ungu)
+
+**Perubahan teknis:**
+- `reconciliation-route.ts` — cek `dat.toko === lpp.toko` saat keduanya ada.
+  Field baru `tokoLPP: string | null` di ReconItem, hanya diisi untuk K6.
+  Summary tambah `kondisi6: 0`
+- `useReconciliation.ts` — update `ReconciliationItem` (tambah `tokoLPP?`,
+  `kondisi: 1|2|4|5|6`) dan `ReconciliationSummary` (tambah `kondisi6`)
+- `reconciliation-page.tsx` — tambah Kondisi 6 ke KONDISI_CONFIG (label
+  "Mismatch CGA", warna ungu), grid summary card jadi `md:grid-cols-5`,
+  kolom CGA di tabel untuk K6 tampilkan `[CGA1] → [CGA2]` (DAT → LPP
+  via dua badge warna masing-masing + arrow), URL param deep-link support
+  `kondisi=6`
+
+Logic diverifikasi via node simulasi — A2 dengan DAT:CGA1/LPP:CGA2
+terdeteksi K6 dengan `tokoLPP:"CGA2"`, semua kondisi lain tidak terpengaruh.
+
+### Keputusan: Skip Aging/Durasi Tracking
+
+Gap teknis terakhir (aging = catat sejak kapan aset stuck di K2/K4)
+diputuskan **tidak perlu diimplementasi** setelah diskusi:
+- Tim pengguna kecil (1-2 admin GA) yang tau konteks sendiri
+- Upload DAT & LPP tidak terjadwal rutin (ad-hoc), jadi angka aging
+  misleading dan tidak actionable
+- Yang penting untuk admin GA: ada/tidaknya selisih, bukan berapa hari
+- Untuk laporan TA: bisa disebutkan sebagai "future enhancement" tanpa
+  diimplementasi — tidak mempengaruhi kelengkapan core feature
+
+### Known Limitations Reconciliation — Status Final
+- ✅ Freshness indicator → di Sidebar
+- ✅ Cross-CGA mismatch → Kondisi 6
+- ~~Aging/durasi tracking~~ → SKIP (keputusan final)
+- ⏳ Drill-down tabel → aksi langsung (belum dikerjakan)
+
+### Catatan Workflow
+Ditemukan bahwa Codespace URL 404 sering terjadi karena port forwarding
+timeout (bukan error kode). Solusi: klik kanan port 3000 di tab "Ports"
+VS Code → "Open in Browser". Memory dan `chat-rule.md` diupdate untuk
+catat bahwa Fillian SELALU bekerja di Codespace (bukan mesin lokal),
+sehingga perubahan yang di-apply di Codespace tidak terlihat Claude
+sampai di-push ke remote.
