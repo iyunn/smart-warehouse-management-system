@@ -85,12 +85,14 @@ export default function UploadDataPage() {
             <h2 className="text-[12px] font-semibold uppercase tracking-widest text-rose-400/70 mb-3">
               Surat Jalan Web Tracking
             </h2>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="space-y-3">
               <UploadWTSJSection />
-              <PlaceholderUploadCard
-                title="Import SJ WT Bulk"
-                description="Import beberapa SJ WT sekaligus (batch)"
-              />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <PlaceholderUploadCard
+                  title="Import SJ WT Bulk"
+                  description="Import beberapa SJ WT sekaligus (batch)"
+                />
+              </div>
             </div>
           </div>
         </main>
