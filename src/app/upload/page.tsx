@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import UploadSection from "@/components/UploadSection";
 import UploadLPPSection from "@/components/UploadLPPSection";
+import UploadClosingSection from "@/components/UploadClosingSection";
 
 // pdfjs-dist tidak kompatibel dengan SSR (mengandung Node.js `canvas` module
 // yang tidak ada di browser) — load komponen ini client-side only.
@@ -74,10 +75,15 @@ export default function UploadDataPage() {
             </h2>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <UploadLPPSection />
-              <PlaceholderUploadCard
-                title="Upload LPP Closing"
-                description="Snapshot cut-off bulanan LPP Web Tracking"
-              />
+            </div>
+          </div>
+
+          <div>
+            <h2 className="text-[12px] font-semibold uppercase tracking-widest text-cyan-400/70 mb-3">
+              DAT Closing
+            </h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <UploadClosingSection />
             </div>
           </div>
 
