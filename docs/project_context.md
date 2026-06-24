@@ -3,7 +3,7 @@
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **19 Juni 2026** (Cross-CGA Mismatch Kondisi 6 + Import SJ Web Tracking dari PDF)
+> Terakhir diupdate: **20 Juni 2026** (Export Excel Reconciliation + Fitur Barang Masuk/Penerimaan Barang)
 
 ## Project Identity
 
@@ -383,8 +383,42 @@ andalkan header tabel, langsung cari kode_asset pertama sebagai anchor.
   (dynamic import `ssr:false`, hindari konflik canvas module Turbopack)
 - Section baru "Surat Jalan Web Tracking" di halaman Upload Data
 
-**Pending minor:** card "Import SJ WT Bulk" dipindah ke bawah agar card utama
-bisa full-width (keterangan tidak overflow).
+### ✅ Export Excel Hasil Reconciliation (20 Juni 2026)
+Status: ✅ Completed
+
+Tombol "Export Excel" (emerald) di kanan atas halaman `/reconciliation`.
+File Excel berisi 3 sheet:
+- **Ringkasan** — count + persentase per kondisi, breakdown Total DAT/LPP/Selisih per CGA dari semua data
+- **Detail** — semua item sesuai filter aktif di layar (kondisi + CGA yang sedang dipilih)
+- **Perlu Tindakan** — khusus Kondisi 2, 4, 6 dari seluruh data + kolom "Aksi Diperlukan" eksplisit
+
+File: `src/lib/reconciliationExporter.ts` (new), `src/app/reconciliation/page.tsx` (tambah tombol + handler).
+
+### ✅ Fitur Barang Masuk / Penerimaan Barang (20 Juni 2026)
+Status: ✅ Completed
+
+Mekanisme pencatatan barang yang kembali dari toko ke CGA (return/tarikan).
+Menghasilkan dokumen "Surat Penerimaan Barang" (portrait, aksen emerald).
+Barang tanpa kode aset (gaib) — kode_asset dikosongkan, keterangan diisi manual.
+
+**Skema:** extend `surat_jalan` dengan kolom `jenis` ('keluar'|'masuk', default 'keluar') —
+backward compatible, semua SJ existing otomatis jadi 'keluar'.
+
+**Implementasi:**
+- SQL migration: `ALTER TABLE surat_jalan ADD COLUMN jenis TEXT NOT NULL DEFAULT 'keluar'`
+- `src/lib/sjTypes.ts` — tambah `JenisSJ` type + field `jenis` ke `SuratJalan`
+- `src/hooks/useSJList.ts` — tambah `jenis` ke `SJListItem`
+- `src/app/api/sj/route.ts` — handle `jenis` di POST/PATCH/GET
+- `src/app/sj/masuk/page.tsx` — form penerimaan (Asal Toko, Pengirim, tidak ada Draft)
+- `src/components/sj/SuratPenerimaanPDF.tsx` — PDF portrait, tanda tangan pengirim = nama yang diinput
+- `src/lib/sjPdfHelpers.ts` — support generate/download/print SPB PDF berdasarkan jenis
+- `src/components/sj/SJPreviewModal.tsx` — prop `jenis` untuk render PDF yang tepat
+- `src/app/sj/list/page.tsx` — badge ↑ Keluar (cyan) / ↓ Masuk (emerald) di tabel
+- `src/components/Sidebar.tsx` — menu baru "Penerimaan Barang" di group SJ
+- `src/hooks/useSJReport.ts` — tambah `jenis_sj` ke `SJReportItem`
+- `src/app/api/sj/report/route.ts` — return `jenis_sj` dari surat_jalan
+- `src/app/sj/report/page.tsx` — no_sj hijau kalau jenis masuk, cyan kalau keluar
+- `src/lib/excelExporter.ts` — kolom baru "Masuk/Keluar" di export Excel rekap alokasi
 
 ---
 
@@ -396,12 +430,10 @@ tidak ada fitur yang sedang dikerjakan saat ini
 
 ## Features Planned
 
-### 🎯 Next (Updated 19 Juni 2026)
-- **Export Excel hasil Reconciliation** — satu-satunya yang masih kurang dari fitur reconciliation
+### 🎯 Next (Updated 20 Juni 2026)
 - **Integrasi Mutasi WT otomatis** dari LPP — sengaja ditunda
-- **UI minor: card Import SJ WT Bulk** dipindah ke bawah card Import SJ WT (keterangan overflow card)
 - **UI minor: tombol "Pakai Template"** dipindah ke sebelahan "Tambah Baris"
-- Kondisi 3 "Aset Intransit" — **target pengembangan jangka panjang (sebagai bahan penelitian lanjutan dan tidak akan dilakukan di penelitian ini)** (butuh file Report Intransit yang belum diperoleh, bukan prioritas saat ini)
+- Kondisi 3 "Aset Intransit" — **tidak diimplementasi dalam TA ini**, saran penelitian lanjutan
 - "Changed" filter di Classification — prioritas rendah
 - Closing Snapshot Architecture — ditunda
 - Authentication (Supabase Auth, role Admin/Viewer)
@@ -552,7 +584,7 @@ Status: ✅ Sebagian besar selesai (SJ Rekap Alokasi, Monitoring 3-tabel per CGA
 - Monitoring Excel: 3 tabel side-by-side per CGA dengan grouping Kategori→Jenis
   (tanpa warna — limitasi SheetJS community edition)
 - DAT Summary PDF: page-break + warna per CGA, trigger dari tombol di Monitoring
-- Pending: Export Excel untuk hasil reconciliation (belum ada, prioritas berikutnya)
+- ✅ Export Excel untuk hasil reconciliation — `src/lib/reconciliationExporter.ts` (3 sheet: Ringkasan, Detail, Perlu Tindakan)
 - Kondisi 3 "Aset Intransit" — **tidak diimplementasi dalam TA ini** (saran penelitian lanjutan)
 
 ### Authentication & Role Management
@@ -722,6 +754,13 @@ Redirect ke /sj/list (kalau submit)
    atau reset form (kalau draft)
 ```
 
+**Halaman /sj/masuk — Penerimaan Barang (20 Juni 2026):**
+Form untuk mencatat barang kembali dari toko ke CGA. Field: Asal Toko
+(= tujuan_id di DB), Pengirim (= pembawa di DB), tanggal. Tidak ada
+mode Draft. POST ke `/api/sj` dengan `jenis: 'masuk'`. PDF yang
+dihasilkan: "Surat Penerimaan Barang" (portrait, emerald, tanda tangan
+pengirim = nama yang diinput).
+
 ---
 
 # 5. Database Architecture
@@ -794,6 +833,7 @@ Field utama:
 - `tujuan_id` (uuid, FK → sj_tujuan)
 - `pembawa` (text)
 - `penerima` (text) — auto = label tujuan
+- `jenis` (text) — 'keluar' (default) | 'masuk' (Surat Penerimaan Barang)
 - `status` (text) — 'draft' | 'submitted' | 'completed'
 - `is_archived` (bool) — fisik kertas SJ sudah diarsipkan
 - `created_by` (text) — default 'Admin User'
@@ -1018,7 +1058,8 @@ src/
 │   │
 │   └── reports/
 │       ├── DATSummaryDocument.tsx    Page-break per CGA, styling warna per CGA
-│       └── SuratJalanPDF.tsx         Manual pagination max 15 item/halaman
+│       ├── SuratJalanPDF.tsx         Manual pagination max 15 item/halaman
+│       └── SuratPenerimaanPDF.tsx    PDF Surat Penerimaan Barang (jenis masuk, portrait, emerald)
 │
 ├── hooks/
 │   ├── useReviewAssets.ts            Client-side pagination
@@ -1026,9 +1067,9 @@ src/
 │   ├── useReclassify.ts
 │   ├── useDashboardStats.ts          + RekapPengiriman, MutasiProgress, TopJenis
 │   ├── useMonitoring.ts              + invoice_number, tanggal_dokumen, catatan, useLPPMonitoring
-│   ├── useReconciliation.ts          Fetch hasil reconciliation 4 kondisi
-│   ├── useSJList.ts                  + is_archived
-│   ├── useSJReport.ts                + mutasi_wt, is_mutated
+│   ├── useReconciliation.ts          Fetch hasil reconciliation 5 kondisi (incl. K6 Mismatch CGA)
+│   ├── useSJList.ts                  + is_archived, jenis
+│   ├── useSJReport.ts                + mutasi_wt, is_mutated, jenis_sj
 │   └── useSJMaster.ts                4 hooks: jenis/merk/tujuan/templates
 │
 └── lib/
@@ -1040,10 +1081,11 @@ src/
     ├── lppBatchProcessor.ts          Mirror batchProcessor.ts, pola isLastBatch sama
     └── wtSJParser.ts                 Parse PDF SJ WT via pdfjs-dist v3 (dual-mode: fullText untuk header, lines untuk tabel)
     ├── types.ts                      AssetRecord + invoice_number, tanggal_dokumen
-    ├── excelExporter.ts              SJ Rekap Alokasi export + kolom mutasi
+    ├── excelExporter.ts              SJ Rekap Alokasi export + kolom mutasi + kolom Masuk/Keluar
     ├── monitoringExporter.ts         Monitoring export (2 sheet)
+    ├── reconciliationExporter.ts     Reconciliation export (3 sheet: Ringkasan, Detail, Perlu Tindakan)
     ├── reviewTypes.ts
-    └── sjTypes.ts                    + mutasi_wt_status, mutasi_wt_at
+    └── sjTypes.ts                    + JenisSJ type, jenis field di SuratJalan, kode_asset di SJItemForPDF
 ```
 
 ### File yang Sudah Dihapus
@@ -1110,6 +1152,7 @@ src/
 ### Reconciliation Engine — Known Limitations
 - ✅ Freshness indicator — SELESAI, di Sidebar (`/api/freshness`)
 - ✅ Cross-CGA mismatch — SELESAI (19 Juni), Kondisi 6 di engine + halaman
+- ✅ Export Excel hasil reconciliation — SELESAI (20 Juni), `reconciliationExporter.ts` (3 sheet)
 - ~~Aging/durasi tracking~~ — **SKIP** (tidak relevan untuk konteks tim kecil
   + upload ad-hoc, bisa disebutkan sebagai future enhancement di laporan TA)
 - ⏳ Drill-down dari tabel ke aksi langsung — belum dikerjakan
@@ -1174,6 +1217,17 @@ Proyeksi: ~117 KB/bulan dari tabel SJ (estimasi 50 SJ × 8 item). Butuh **ratusa
 
 # 10. Recent Major Changes Log
 
+
+## 20 Juni 2026 — Export Excel Reconciliation + Fitur Barang Masuk
+- **Export Excel Reconciliation** — `reconciliationExporter.ts` (3 sheet):
+  Ringkasan (count/% per kondisi + breakdown per CGA), Detail (sesuai
+  filter layar), Perlu Tindakan (K2/K4/K6 + kolom aksi). Tombol emerald
+  di kanan atas halaman `/reconciliation`
+- **Fitur Barang Masuk / Penerimaan Barang** — extend `surat_jalan` dengan
+  kolom `jenis` (`keluar`|`masuk`, default `keluar`, backward compatible).
+  Halaman `/sj/masuk` (Asal Toko, Pengirim, tidak ada Draft). PDF "Surat
+  Penerimaan Barang" portrait emerald. Badge di Daftar SJ. No SJ hijau di
+  Rekap Alokasi kalau masuk. Kolom "Masuk/Keluar" di export Excel Rekap.
 ## 19 Juni 2026 (lanjutan — Import SJ WT + Supabase Storage Analysis)
 - **Fitur Import SJ Web Tracking dari PDF** — user upload PDF SJ WT →
   SmartWMS otomatis buat SJ record + isi kode_asset di Rekap Alokasi.

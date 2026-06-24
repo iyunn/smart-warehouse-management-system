@@ -2338,3 +2338,85 @@ lain, berisi: session startup protocol (baca project_context.md dulu), cara
 baca repo via curl (hemat token vs git clone), Codespace workflow notes (bukan
 mesin lokal, port timeout bukan code error), Supabase row-limit reminder, dan
 checklist sebelum present file ke user.
+
+# 20 Juni 2026 — Export Excel Reconciliation + Fitur Barang Masuk/Penerimaan Barang
+
+### Export Excel Hasil Reconciliation
+
+Melengkapi fitur reconciliation yang sudah ada — satu-satunya yang kurang
+adalah output file untuk dibawa ke luar sistem (laporan ke atasan, dll).
+
+**Implementasi:**
+- `src/lib/reconciliationExporter.ts` (new) — 3 sheet:
+  - Ringkasan: count + persentase per kondisi, breakdown Total DAT/LPP/Selisih
+    per CGA dari SEMUA data (tidak dipengaruhi filter aktif di layar)
+  - Detail: item sesuai filter aktif di layar (kondisi + CGA yang dipilih),
+    termasuk info filter di header sheet
+  - Perlu Tindakan: khusus Kondisi 2/4/6 dari seluruh data + kolom "Aksi
+    Diperlukan" yang eksplisit per kondisi
+- `src/app/reconciliation/page.tsx` — tambah tombol "Export Excel" (emerald)
+  di kanan atas, `handleExport` useCallback diletakkan SETELAH `filtered` dan
+  `paginated` declaration (bug awal: diletakkan sebelum — `filtered used before
+  declaration` error TypeScript)
+
+---
+
+### Fitur Barang Masuk / Penerimaan Barang
+
+Mekanisme baru untuk mencatat barang yang kembali dari toko ke CGA (return/
+tarikan). Menghasilkan dokumen "Surat Penerimaan Barang".
+
+**Keputusan desain:**
+- Extend `surat_jalan` (bukan tabel baru) karena ditampilkan dalam 1 tabel
+  rekap alokasi yang sama
+- Kolom `jenis` ('keluar'|'masuk', DEFAULT 'keluar') — backward compatible
+  100%, semua SJ existing otomatis jadi 'keluar' tanpa update data
+- Barang gaib (tidak diketahui kode_asset): kode_asset dikosongkan, keterangan
+  diisi manual — tidak butuh flag khusus
+- Nomor dokumen: tetap format `SJ-Manual/CGA/...` (beda di jenis field)
+
+**Tahap 1 — Fondasi:**
+- SQL migration: `ALTER TABLE surat_jalan ADD COLUMN jenis TEXT NOT NULL
+  DEFAULT 'keluar' CHECK (jenis IN ('keluar', 'masuk'))`
+- `sjTypes.ts`: tambah `JenisSJ` type + field `jenis` ke `SuratJalan`,
+  tambah `kode_asset?` ke `SJItemForPDF` (dibutuhkan `SuratPenerimaanPDF`)
+- `useSJList.ts`: tambah `jenis` ke `SJListItem`
+- `api/sj/route.ts`: handle `jenis` di POST/PATCH/GET (select `jenis` di list)
+
+**Tahap 2 — Form Penerimaan:**
+- `src/app/sj/masuk/page.tsx`: form mirip `/sj/buat` tapi semantik berbeda —
+  "Asal Toko" (bukan Tujuan), "Pengirim" (bukan Pembawa), penerima auto
+  "Admin GA", tidak ada mode Draft, POST dengan `jenis: 'masuk'`. Aksen
+  warna emerald (beda dari SJ keluar yang cyan)
+- `Sidebar.tsx`: tambah menu "Penerimaan Barang" di group "Surat Jalan Manual"
+
+**Tahap 3 — PDF + UI:**
+- `SuratPenerimaanPDF.tsx`: PDF portrait (bukan landscape seperti SJ keluar),
+  aksen emerald, kolom Kode Aset di tabel, tanda tangan pengirim = nama yang
+  diinput (bukan placeholder)
+- `sjPdfHelpers.ts`: semua fungsi (generate/download/print) terima parameter
+  `jenis` opsional, auto-pilih PDF yang tepat. Backward compatible — default
+  'keluar'
+- `SJPreviewModal.tsx`: prop `jenis` opsional (default 'keluar'), diteruskan
+  ke helpers
+- `sj/list/page.tsx`: badge `↑ Keluar` (cyan) / `↓ Masuk` (emerald) di
+  kolom baru, header "Tujuan / Asal"
+- `hooks/useSJReport.ts`: tambah `jenis_sj: 'keluar'|'masuk'`
+- `api/sj/report/route.ts`: select `jenis` dari surat_jalan, return sebagai
+  `jenis_sj`
+- `sj/report/page.tsx` (Rekap Alokasi): no_sj emerald kalau masuk, cyan
+  kalau keluar
+- `excelExporter.ts`: kolom baru "Masuk/Keluar" setelah No. SJ di export Excel
+
+**Revisi setelah test:**
+1. PDF portrait (bukan landscape)
+2. Nama pengirim di tanda tangan = `data.pembawa` (nama yang diinput)
+3. Teks: "Barang di atas telah diterima oleh pihak kami" (bukan "kondisi baik
+   oleh pihak CGA/GA")
+4. Warna no_sj hijau di Rekap Alokasi untuk jenis masuk
+5. Kolom Masuk/Keluar di Excel export Rekap Alokasi
+
+**Bug fix selama development:**
+- `SuratPenerimaanPDF.tsx`: error `Property 'kode_asset' does not exist on
+  type 'SJItemForPDF'` — fix dengan menambah `kode_asset?: string` ke
+  `SJItemForPDF` di `SuratJalanPDF.tsx` (proper typed, bukan cast `as any`)

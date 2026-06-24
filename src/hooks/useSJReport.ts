@@ -25,6 +25,7 @@ export interface SJReportItem {
   penerima: string;
   status: string;
   approved_by: string;
+  jenis_sj: 'keluar' | 'masuk';  // jenis SJ: barang keluar atau masuk
   // Tujuan info
   tujuan_id: string | null;
   tujuan_kode: string;

@@ -22,7 +22,7 @@ export async function GET() {
           id, urutan, jenis, merk, serial_number, qty, satuan,
           is_baru, is_aktiva, keterangan, mutasi_oracle_status, kode_asset, mutasi_wt_status,
           sj:surat_jalan!inner (
-            id, no_sj, tanggal, pembawa, penerima, status, approved_by,
+            id, no_sj, tanggal, pembawa, penerima, status, approved_by, jenis,
             tujuan:sj_tujuan (id, kode, nama)
           )
         `)
@@ -109,6 +109,7 @@ export async function GET() {
         penerima:        sj?.penerima ?? '',
         status:          sj?.status ?? '',
         approved_by:     sj?.approved_by ?? '',
+        jenis_sj:        sj?.jenis === 'masuk' ? 'masuk' : 'keluar',
         // Tujuan info
         tujuan_id:       tujuan?.id ?? null,
         tujuan_kode:     tujuan?.kode ?? '',

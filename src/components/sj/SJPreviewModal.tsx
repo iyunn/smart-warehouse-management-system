@@ -7,10 +7,11 @@ import type { SJDataForPDF } from "@/components/sj/SuratJalanPDF";
 interface SJPreviewModalProps {
   data: SJDataForPDF;
   title?: string;
+  jenis?: 'keluar' | 'masuk';
   onClose: () => void;
 }
 
-function SJPreviewModal({ data, title = "Surat Jalan Berhasil Disimpan", onClose }: SJPreviewModalProps) {
+function SJPreviewModal({ data, title = "Surat Jalan Berhasil Disimpan", jenis = 'keluar', onClose }: SJPreviewModalProps) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +25,7 @@ function SJPreviewModal({ data, title = "Surat Jalan Berhasil Disimpan", onClose
       setLoading(true);
       setError(null);
       try {
-        const blob = await generateSJPdfBlob(data);
+        const blob = await generateSJPdfBlob(data, jenis);
         if (cancelled) return;
         const url = URL.createObjectURL(blob);
         urlToRevoke = url;
@@ -45,7 +46,7 @@ function SJPreviewModal({ data, title = "Surat Jalan Berhasil Disimpan", onClose
 
   const handleDownload = async () => {
     try {
-      await downloadSJPdf(data);
+      await downloadSJPdf(data, jenis);
     } catch (err) {
       alert("Gagal download PDF: " + (err instanceof Error ? err.message : "Error"));
     }
@@ -53,7 +54,7 @@ function SJPreviewModal({ data, title = "Surat Jalan Berhasil Disimpan", onClose
 
   const handlePrint = async () => {
     try {
-      await openSJPdfForPrint(data);
+      await openSJPdfForPrint(data, jenis);
     } catch (err) {
       alert("Gagal buka PDF: " + (err instanceof Error ? err.message : "Error"));
     }

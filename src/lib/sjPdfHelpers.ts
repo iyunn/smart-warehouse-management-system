@@ -2,6 +2,7 @@
 
 import { pdf } from "@react-pdf/renderer";
 import { SuratJalanPDF, type SJDataForPDF } from "@/components/sj/SuratJalanPDF";
+import { SuratPenerimaanPDF } from "@/components/sj/SuratPenerimaanPDF";
 import React from "react";
 
 // ─── Cache logo base64 di module-level (load sekali per session) ──────────
@@ -37,21 +38,24 @@ async function loadLogo(): Promise<string | null> {
 }
 
 // ─── Generate PDF blob untuk preview ──────────────────────────────────────
-export async function generateSJPdfBlob(data: SJDataForPDF): Promise<Blob> {
+// ─── Generate PDF blob untuk preview ──────────────────────────────────────
+export async function generateSJPdfBlob(data: SJDataForPDF, jenis: 'keluar' | 'masuk' = 'keluar'): Promise<Blob> {
   const logoSrc = await loadLogo();
-  const element = React.createElement(SuratJalanPDF, { data, logoSrc: logoSrc ?? undefined });
+  const element = jenis === 'masuk'
+    ? React.createElement(SuratPenerimaanPDF, { data })
+    : React.createElement(SuratJalanPDF, { data, logoSrc: logoSrc ?? undefined });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pdfDoc = pdf(element as any);
   return await pdfDoc.toBlob();
 }
 
 // ─── Download PDF dengan nama file otomatis ──────────────────────────────
-export async function downloadSJPdf(data: SJDataForPDF): Promise<void> {
-  const blob = await generateSJPdfBlob(data);
+export async function downloadSJPdf(data: SJDataForPDF, jenis: 'keluar' | 'masuk' = 'keluar'): Promise<void> {
+  const blob = await generateSJPdfBlob(data, jenis);
   const url = URL.createObjectURL(blob);
 
   const cleanNoSJ = data.no_sj.replace(/[\/\\:*?"<>|]/g, "-");
-  const filename = `${cleanNoSJ}.pdf`;
+  const filename = jenis === 'masuk' ? `SPB-${cleanNoSJ}.pdf` : `${cleanNoSJ}.pdf`;
 
   const a = document.createElement("a");
   a.href = url;
@@ -63,10 +67,9 @@ export async function downloadSJPdf(data: SJDataForPDF): Promise<void> {
 }
 
 // ─── Open PDF in new tab for print ───────────────────────────────────────
-export async function openSJPdfForPrint(data: SJDataForPDF): Promise<void> {
-  const blob = await generateSJPdfBlob(data);
+export async function openSJPdfForPrint(data: SJDataForPDF, jenis: 'keluar' | 'masuk' = 'keluar'): Promise<void> {
+  const blob = await generateSJPdfBlob(data, jenis);
   const url = URL.createObjectURL(blob);
   window.open(url, "_blank");
-  // URL.revokeObjectURL ditunda agar PDF tetap bisa diakses
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }

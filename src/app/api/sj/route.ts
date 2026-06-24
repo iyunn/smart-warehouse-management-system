@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
     const { data, error } = await supabase
       .from('surat_jalan')
       .select(`
-        id, no_sj, tanggal, pembawa, penerima, status, approved_by, is_archived,
+        id, no_sj, tanggal, pembawa, penerima, status, approved_by, is_archived, jenis,
         created_at, updated_at,
         tujuan:sj_tujuan(id, kode, nama),
         items:surat_jalan_items(jenis, serial_number)
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { tanggal, tujuan_id, pembawa, penerima, approved_by, items, status } = body
+    const { tanggal, tujuan_id, pembawa, penerima, approved_by, items, status, jenis } = body
 
     if (!tanggal || !tujuan_id) {
       return NextResponse.json({ error: 'Tanggal dan tujuan wajib diisi' }, { status: 400 })
@@ -116,6 +116,7 @@ export async function POST(req: NextRequest) {
         penerima:    penerima ?? '',
         approved_by: approved_by ?? '',
         status:      status ?? 'draft',
+        jenis:       jenis === 'masuk' ? 'masuk' : 'keluar', // default 'keluar'
       })
       .select()
       .single()
@@ -157,7 +158,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { id, tanggal, tujuan_id, pembawa, penerima, approved_by, items, status, reschedule_only, archive_only, is_archived } = body
+    const { id, tanggal, tujuan_id, pembawa, penerima, approved_by, items, status, reschedule_only, archive_only, is_archived, jenis } = body
 
     if (!id) {
       return NextResponse.json({ error: 'ID wajib' }, { status: 400 })
@@ -210,6 +211,7 @@ export async function PATCH(req: NextRequest) {
         penerima:    penerima ?? '',
         approved_by: approved_by ?? '',
         status:      status ?? 'draft',
+        jenis:       jenis === 'masuk' ? 'masuk' : 'keluar',
         updated_at:  new Date().toISOString(),
       })
       .eq('id', id)

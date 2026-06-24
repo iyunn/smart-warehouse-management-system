@@ -822,7 +822,7 @@ export default function SJReportPage() {
                             <p className="text-white/60">{formatTanggal(it.tanggal)}</p>
                             <p className="text-[9px] text-white/30">{formatHari(it.tanggal)}</p>
                           </div>
-                          <span className="font-mono text-cyan-400 truncate" title={it.no_sj}>{it.no_sj}</span>
+                          <span className={`font-mono truncate ${it.jenis_sj === 'masuk' ? 'text-emerald-400' : 'text-cyan-400'}`} title={it.no_sj}>{it.no_sj}</span>
                           <div className="min-w-0">
                             <p className="text-white/80 truncate" title={it.tujuan_kode}>{it.tujuan_kode}</p>
                             <p className="text-[9px] text-white/40 truncate" title={it.tujuan_nama}>{it.tujuan_nama}</p>

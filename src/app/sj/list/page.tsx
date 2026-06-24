@@ -68,6 +68,13 @@ const StatusBadge = memo(({ status }: { status: string }) => (
 ));
 StatusBadge.displayName = "StatusBadge";
 
+const JenisBadge = memo(({ jenis }: { jenis?: string }) => (
+  jenis === "masuk"
+    ? <span className="inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">↓ Masuk</span>
+    : <span className="inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">↑ Keluar</span>
+));
+JenisBadge.displayName = "JenisBadge";
+
 // ─── Archive Cell ──────────────────────────────────────────────────────────
 // Checkbox untuk menandai apakah fisik kertas SJ sudah diarsipkan.
 // Independen, save onChange langsung ke /api/sj (mode archive_only).
@@ -509,10 +516,11 @@ export default function SJListPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-[200px_100px_180px_80px_60px_100px_70px_165px] gap-3 border-b border-white/[0.06] px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+            <div className="grid grid-cols-[200px_100px_50px_160px_80px_60px_100px_70px_165px] gap-3 border-b border-white/[0.06] px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
               <span>No. SJ</span>
               <span>Tanggal</span>
-              <span>Tujuan</span>
+              <span>Jenis</span>
+              <span>Tujuan / Asal</span>
               <span>Pembawa</span>
               <span className="text-right">Items</span>
               <span>Status</span>
@@ -543,12 +551,13 @@ export default function SJListPage() {
                   {paginated.map(sj => {
                     const archivedVal = archiveOverride[sj.id] ?? sj.is_archived;
                     return (
-                    <div key={sj.id} className="grid grid-cols-[200px_100px_180px_80px_60px_100px_70px_165px] gap-3 items-center px-5 py-3 hover:bg-white/[0.02] transition-colors">
+                    <div key={sj.id} className="grid grid-cols-[200px_100px_50px_160px_80px_60px_100px_70px_165px] gap-3 items-center px-5 py-3 hover:bg-white/[0.02] transition-colors">
                       <span className="text-[11px] font-mono font-semibold text-cyan-400 truncate" title={sj.no_sj}>{sj.no_sj}</span>
                       <div className="min-w-0">
                         <p className="text-[11px] text-white/70">{formatTanggal(sj.tanggal)}</p>
                         <p className="text-[9px] text-white/30">{formatHari(sj.tanggal)}</p>
                       </div>
+                      <div><JenisBadge jenis={sj.jenis} /></div>
                       <div className="min-w-0">
                         <p className="text-[11px] font-medium text-white/80 truncate">{sj.tujuan?.kode ?? "-"}</p>
                         <p className="text-[10px] text-white/40 truncate">{sj.tujuan?.nama ?? "-"}</p>

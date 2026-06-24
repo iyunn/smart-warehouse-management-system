@@ -30,6 +30,8 @@ export interface SJItem {
   mutasi_wt_at?: string;
 }
 
+export type JenisSJ = 'keluar' | 'masuk';
+
 export interface SuratJalan {
   id?: string;
   no_sj: string;
@@ -38,6 +40,7 @@ export interface SuratJalan {
   tujuan?: SJTujuan;
   pembawa: string;
   penerima: string;
+  jenis: JenisSJ;         // 'keluar' (SJ Manual) | 'masuk' (Surat Penerimaan Barang)
   status: 'draft' | 'submitted' | 'completed';
   created_by?: string;
   approved_by?: string;

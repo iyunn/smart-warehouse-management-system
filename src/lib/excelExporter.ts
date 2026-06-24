@@ -26,6 +26,7 @@ export function exportSJReportToExcel({
     "No":            idx + 1,
     "Tanggal":       formatDateForExcel(it.tanggal),
     "No. SJ":        it.no_sj,
+    "Masuk/Keluar":  it.jenis_sj === 'masuk' ? 'Masuk' : 'Keluar',
     "Kode Tujuan":   it.tujuan_kode,
     "Nama Tujuan":   it.tujuan_nama,
     "Pembawa":       it.pembawa,
@@ -53,6 +54,7 @@ export function exportSJReportToExcel({
     { wch: 5 },   // No
     { wch: 12 },  // Tanggal
     { wch: 28 },  // No. SJ
+    { wch: 12 },  // Masuk/Keluar
     { wch: 12 },  // Kode Tujuan
     { wch: 25 },  // Nama Tujuan
     { wch: 18 },  // Pembawa

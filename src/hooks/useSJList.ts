@@ -8,6 +8,7 @@ export interface SJListItem {
   tanggal: string;
   pembawa: string;
   penerima: string;
+  jenis: 'keluar' | 'masuk';
   status: 'draft' | 'submitted' | 'completed';
   approved_by: string;
   is_archived: boolean;

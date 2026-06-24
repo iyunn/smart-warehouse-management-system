@@ -13,6 +13,7 @@ export interface SJItemForPDF {
   is_baru: boolean;
   is_aktiva: boolean;
   keterangan: string;
+  kode_asset?: string;  // opsional — diisi di Rekap Alokasi, dipakai SuratPenerimaanPDF
 }
 
 export interface SJDataForPDF {
