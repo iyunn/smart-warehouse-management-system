@@ -2420,3 +2420,60 @@ tarikan). Menghasilkan dokumen "Surat Penerimaan Barang".
 - `SuratPenerimaanPDF.tsx`: error `Property 'kode_asset' does not exist on
   type 'SJItemForPDF'` — fix dengan menambah `kode_asset?: string` ke
   `SJItemForPDF` di `SuratJalanPDF.tsx` (proper typed, bukan cast `as any`)
+
+# 25 Juni 2026 — DAT Closing Snapshot + Dashboard Trend CGA
+
+### Fitur: DAT Closing Snapshot Bulanan
+
+Upload DAT closing per bulan → simpan hanya agregasi per CGA ke DB.
+4666 baris raw data → 3 rows di DB (1 per CGA per bulan). Sangat ringan.
+
+**Keputusan desain:**
+- Tabel baru `dat_closing` terpisah dari `assets_raw` (bukan di-reuse)
+  karena data closing adalah snapshot historis, bukan current state
+- UNIQUE(bulan, cga) → upload ulang bulan yang sama = timpa (upsert)
+- Hanya 4 metric: total_items, total_qty, total_nilai, total_tercatat
+  (sama persis dengan yang ditampilkan di Monitoring — akurat)
+- Raw data di-discard setelah kalkulasi client-side → DB tetap ringan
+
+**Bug fix:** `parseTxtFile` menerima `File` bukan string, dan return
+`Promise<ParseResult>` bukan synchronous — perlu `await` dan destructure
+dari result, bukan langsung dari return value.
+
+### Fitur: Dashboard Baris 3 — Trend CGA
+
+Line chart 3 garis (CGA1 emerald, CGA2 amber, CGA3 rose) dari data
+dat_closing. Toggle 4 metric tanpa reload. Export Excel 1 sheet semua
+metric sekaligus (12 kolom: 3 CGA × 4 metric).
+
+### Upload Page Revisi
+
+- UploadClosingSection replace placeholder "DAT Closing" yang sudah ada
+  di grid DAT section (bukan tambah section baru)
+- LPP Closing placeholder dihapus (tidak akan diimplementasi)
+- Style fix: semua upload card (`UploadLPPSection`, `UploadWTSJSection`,
+  `UploadClosingSection`) disamakan ke `bg-[#111827]` agar lebih visible
+  di atas background halaman `bg-[#080e18]`
+
+### Diskusi arsitektur LAN offline
+
+User bertanya soal kemungkinan self-hosted LAN di kantor PT. Indomarco.
+Kesimpulan: perubahan terbesar adalah Supabase → PostgreSQL lokal (ratusan
+query perlu dimigasi). Frontend tidak berubah. Untuk saat ini tetap pakai
+Supabase (lebih dari cukup untuk skala SmartWMS). LAN implementation bisa
+jadi "rencana implementasi" di Bab 5 laporan TA.
+
+### Diskusi fitur Live Stock / Budget Stok
+
+User mengusulkan fitur perbandingan aktual aset vs budget/target per jenis
+per CGA dengan flag over/under. Formula budget belum fix (CGA1: toko baru/
+upgrade/peremajaan; CGA2: toko tutup + 5% total cabang; CGA3: belum ada).
+Keputusan: masuk sebagai planned feature, budget diinput manual user dulu,
+formula dinamis ditambahkan setelah formula dikonfirmasi ke stakeholder GA.
+
+### Diskusi dark/light mode
+
+User tanya kemungkinan fitur dark/light toggle. Kesimpulan: perubahan
+besar-besaran karena semua styling hardcoded dark mode. Solusi efisien:
+Tailwind `dark:` variant + CSS variables. Ditunda sampai fitur core selesai
+— dimasukkan ke "saran pengembangan lanjutan".

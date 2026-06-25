@@ -3,7 +3,7 @@
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **20 Juni 2026** (Export Excel Reconciliation + Fitur Barang Masuk/Penerimaan Barang)
+> Terakhir diupdate: **25 Juni 2026** (DAT Closing snapshot bulanan + Dashboard Trend CGA live)
 
 ## Project Identity
 
@@ -103,7 +103,7 @@ Layout final dashboard:
 
 | Baris | Konten | Status |
 |---|---|---|
-| 1 | Status Data: DAT Update, DAT Closing, LPP Update, LPP Closing | DAT Update LIVE, lainnya placeholder |
+| 1 | Status Data: DAT Update, DAT Closing, LPP Update, LPP Closing | DAT Update LIVE, DAT Closing LIVE (Trend CGA), lainnya placeholder |
 | 2 | DAT vs LPP Comparison (per CGA1/2/3) | Placeholder — menunggu LPP reconciliation |
 | 3 | Trend Closing Bulanan (chart 12 bulan) | Placeholder — menunggu Closing Snapshot |
 | 4 | CGA Summary 3 cards: hijau/kuning/merah | LIVE |
@@ -115,13 +115,13 @@ Plus:
 - DAT Update terakhir dari `MAX(uploaded_at)` di `assets_raw`
 
 ### Halaman /upload — Upload Data
-Status: ✅ Completed (DAT Update fungsional, lainnya placeholder)
+Status: ✅ Completed
 
 4 panel upload:
-- DAT Update (LIVE)
-- DAT Closing (placeholder)
-- LPP Update (placeholder)
-- LPP Closing (placeholder)
+- DAT Update (LIVE) — upload DAT monitoring harian
+- DAT Closing (LIVE) — upload DAT closing bulanan, simpan agregasi ke `dat_closing`
+- LPP Update (LIVE) — upload 3 file LPP per CGA
+- LPP Closing placeholder dihapus (tidak direncanakan)
 
 ### Halaman /monitoring — Monitoring v2
 Status: ✅ Completed (DAT live dengan fitur lengkap, LPP empty state)
@@ -420,6 +420,24 @@ backward compatible, semua SJ existing otomatis jadi 'keluar'.
 - `src/app/sj/report/page.tsx` — no_sj hijau kalau jenis masuk, cyan kalau keluar
 - `src/lib/excelExporter.ts` — kolom baru "Masuk/Keluar" di export Excel rekap alokasi
 
+### ✅ DAT Closing Snapshot + Dashboard Trend CGA (25 Juni 2026)
+Status: ✅ Completed
+
+**DAT Closing** — upload DAT bulanan, simpan hanya agregasi per CGA (3 rows per upload).
+Sangat ringan: 4666 baris raw → 3 rows di DB. Kalkulasi client-side identik dengan Monitoring.
+Upsert by bulan+cga — upload ulang bulan yang sama = timpa data lama.
+- `src/app/api/closing/route.ts` (new) — GET semua data trend, POST upsert stats
+- `src/components/UploadClosingSection.tsx` (new) — month picker, parse DAT, preview, submit
+- `src/app/upload/page.tsx` — UploadClosingSection replace placeholder DAT Closing,
+  LPP Closing placeholder dihapus. Warna semua upload card disamakan ke `bg-[#111827]`
+
+**Dashboard Baris 3 — Trend CGA** — line chart 3 garis (CGA1/2/3) dari data closing bulanan.
+Toggle 4 metric: Item/Qty/Nilai Perolehan/Tercatat. Export Excel 1 sheet semua metric.
+- `src/components/dashboard/TrendCGACards.tsx` (new)
+- `src/app/page.tsx` — replace `TrendClosingPlaceholder` dengan `TrendCGACards`
+
+**Tabel baru `dat_closing`** — SQL migration dijalankan di Supabase.
+
 ---
 
 ## Features In Progress
@@ -430,13 +448,13 @@ tidak ada fitur yang sedang dikerjakan saat ini
 
 ## Features Planned
 
-### 🎯 Next (Updated 20 Juni 2026)
+### 🎯 Next (Updated 25 Juni 2026)
+- **Authentication** (Supabase Auth, role Admin/Viewer) — prioritas berikutnya
+- **Live Stock / Budget Stok** — tampilkan aktual vs budget per jenis per CGA, flag over/under. Budget diinput manual oleh user GA (formula dinamis CGA1/CGA2 perlu dikonfirmasi ke stakeholder dulu)
 - **Integrasi Mutasi WT otomatis** dari LPP — sengaja ditunda
 - **UI minor: tombol "Pakai Template"** dipindah ke sebelahan "Tambah Baris"
 - Kondisi 3 "Aset Intransit" — **tidak diimplementasi dalam TA ini**, saran penelitian lanjutan
 - "Changed" filter di Classification — prioritas rendah
-- Closing Snapshot Architecture — ditunda
-- Authentication (Supabase Auth, role Admin/Viewer)
 - Bab 3 & 4 laporan TA — semua fitur core sudah cukup matang untuk ditulis
 
 ### LPP Web Tracking Reconciliation (THESIS CORE TOPIC)
@@ -563,21 +581,40 @@ sekarang live, reuse `useReconciliation` hook (tidak ada API/query baru):
 - Semua gap teknis dari audit 18 Juni sudah resolved/skipped (lihat Known Limitations)
   **prioritas sesi berikutnya** (konfirmasi user, 18 Juni)
 
-### DAT/LPP Closing Architecture
-Status: 📌 Planned (architecture sudah diputuskan, implementasi TBA)
+### ✅ DAT Closing Snapshot (25 Juni 2026)
+Status: ✅ Completed (DAT Closing only — LPP Closing tidak direncanakan)
 
-Strategi: **Hanya simpan aggregate metrics + array kode_asset**, bukan row-level data.
+Strategi: **hanya simpan aggregate metrics per CGA per bulan**, bukan raw rows.
+4666 baris DAT → 3 rows di DB (1 per CGA). Sangat ringan.
 
+**Schema `dat_closing`:**
 ```sql
-closing_snapshots (
-  data_type ('DAT'|'LPP'), period ('2026-05'),
-  total_items, total_qty, total_biaya_perolehan, total_jumlah_tercatat,
-  breakdown_by_toko jsonb, breakdown_by_kategori jsonb, breakdown_by_jenis jsonb,
-  kode_assets text[]
+dat_closing (
+  id uuid PK,
+  bulan TEXT,          -- format YYYY-MM (e.g. "2026-06")
+  cga TEXT,            -- 'CGA1'|'CGA2'|'CGA3'
+  total_items INTEGER, -- count kode_asset
+  total_qty NUMERIC,   -- sum kuantitas
+  total_nilai NUMERIC, -- sum biaya_perolehan
+  total_tercatat NUMERIC, -- sum jumlah_tercatat
+  uploaded_at TIMESTAMPTZ,
+  UNIQUE(bulan, cga)   -- upsert-friendly
 )
 ```
 
-Mekanisme upload: user pilih period manual (12 bulan), parser hitung aggregate, simpan ke `closing_snapshots`, data mentah di-discard.
+**Mekanisme upload (`UploadClosingSection`):**
+- User pilih bulan (month picker, default = bulan lalu)
+- Upload file DAT (.txt) — format identik dengan DAT monitoring
+- Parser hitung aggregate per CGA client-side (ekstrak CGA dari field `toko`)
+- Preview stats (total item, qty, nilai, tercatat) sebelum submit
+- POST ke `/api/closing` — upsert by bulan+cga (upload ulang = timpa)
+- Raw data di-discard, hanya 3 rows yang tersimpan di DB
+
+**Dashboard Baris 3 — Trend CGA (`TrendCGACards`):**
+- Line chart 3 garis (CGA1 emerald, CGA2 amber, CGA3 rose) dari `recharts`
+- Toggle 4 metric: Item / Qty / Nilai Perolehan / Tercatat (default: Item)
+- Export Excel 1 sheet semua metric (12 kolom: 3 CGA × 4 metric)
+- Empty state dengan link ke `/upload` kalau belum ada data closing
 
 ### Reporting Module — Excel Export & PDF
 Status: ✅ Sebagian besar selesai (SJ Rekap Alokasi, Monitoring 3-tabel per CGA, DAT Summary PDF)
@@ -909,6 +946,23 @@ siklus catatan dianggap selesai).
 RLS: policy "Allow all on asset_notes" (PERMISSIVE, public, ALL, true/true) —
 replikasi pola tabel lain.
 
+## dat_closing
+
+Snapshot agregasi DAT per CGA per bulan. Sangat ringan — hanya 3 rows per upload
+(1 per CGA), raw data di-discard. Dipakai untuk Trend CGA di Dashboard.
+
+Field utama:
+- `bulan` (text) — format YYYY-MM, misal "2026-06"
+- `cga` (text) — 'CGA1'|'CGA2'|'CGA3'
+- `total_items` (integer) — count kode_asset
+- `total_qty` (numeric) — sum kuantitas
+- `total_nilai` (numeric) — sum biaya_perolehan
+- `total_tercatat` (numeric) — sum jumlah_tercatat
+- `uploaded_at` (timestamptz)
+- UNIQUE(bulan, cga) — upsert-friendly, upload ulang = timpa data lama
+
+Pola pertumbuhan: **3 rows/bulan** × 12 bulan = 36 rows/tahun. Tidak akan jadi masalah.
+
 ---
 
 ## sj_item_templates
@@ -1012,6 +1066,7 @@ src/
 │       ├── dashboard/stats/route.ts  Dashboard live data (+ Rekap Pengiriman)
 │       ├── monitoring/route.ts       Monitoring data DAT (GET + PATCH catatan)
 │       ├── freshness/route.ts          GET timestamp upload terakhir DAT & LPP (2 query ringan, maybeSingle)
+│       ├── closing/route.ts            GET/POST dat_closing (upsert aggregate per CGA per bulan)
 │       ├── reconciliation/route.ts   Engine 4 kondisi (set ops by kode_asset, extractCGACode untuk badge)
 │       ├── lpp/
 │       │   ├── clear/route.ts        DELETE semua lpp_raw (full replace)
@@ -1034,6 +1089,7 @@ src/
 │   ├── UploadSection.tsx             Dipakai di /upload (DAT)
 │   ├── UploadLPPSection.tsx          Dipakai di /upload (LPP, multi-file 3 CGA sekaligus)
 │   ├── UploadWTSJSection.tsx         Dipakai di /upload (Import SJ WT dari PDF, dynamic ssr:false)
+│   ├── UploadClosingSection.tsx      Dipakai di /upload (DAT Closing bulanan, month picker + preview stats)
 │   │
 │   ├── review/
 │   │   ├── ReviewSummaryCards.tsx
@@ -1050,7 +1106,8 @@ src/
 │   │   ├── DashboardWarningCards.tsx Warning cards (3, semua live)
 │   │   ├── RekapPengirimanCards.tsx  Baris 6 (live, 3 card)
 │   │   ├── DATvsLPPCards.tsx         Baris 2 (live sejak 18 Juni, reuse useReconciliation, deep-link ke /reconciliation)
-│   │   └── PlaceholderCards.tsx      Baris 3, 5 (Baris 2 sudah pindah ke DATvsLPPCards.tsx)
+│   │   ├── TrendCGACards.tsx         Baris 3 (live sejak 25 Juni, line chart dari dat_closing, toggle 4 metric + export Excel)
+│   │   └── PlaceholderCards.tsx      Baris 5 (Baris 2 & 3 sudah live)
 │   │
 │   ├── sj/
 │   │   ├── SearchableDropdown.tsx    Portal-based
@@ -1143,10 +1200,10 @@ src/
 ## Current Issues
 
 ### Dashboard Placeholders
-- Baris 3 & 5 masih placeholder (menunggu Closing Snapshot Architecture)
-- Baris 1 "Status Data" (`DataStatusCards`) **dihapus** (18 Juni) — info
-  digantikan oleh widget freshness di Sidebar yang lebih persistent
+- Baris 5 masih placeholder (menunggu fitur lanjutan)
+- Baris 1 "Status Data" (`DataStatusCards`) **dihapus** (18 Juni) — info digantikan widget freshness di Sidebar
 - Baris 2 (DAT vs LPP per CGA) sudah LIVE sejak 18 Juni — `DATvsLPPCards.tsx`
+- Baris 3 (Trend CGA) sudah LIVE sejak 25 Juni — `TrendCGACards.tsx`
 - Baris 6 (Rekap Pengiriman) sudah LIVE
 
 ### Reconciliation Engine — Known Limitations
@@ -1217,6 +1274,16 @@ Proyeksi: ~117 KB/bulan dari tabel SJ (estimasi 50 SJ × 8 item). Butuh **ratusa
 
 # 10. Recent Major Changes Log
 
+
+## 25 Juni 2026 — DAT Closing Snapshot + Dashboard Trend CGA
+- **DAT Closing**: tabel `dat_closing` (3 rows/bulan), UploadClosingSection
+  dengan month picker, parse + hitung aggregate client-side, upsert ke DB.
+  Raw data di-discard. LPP Closing placeholder dihapus dari upload page.
+- **Trend CGA**: line chart Dashboard Baris 3, 4 metric toggle (Item/Qty/
+  Nilai/Tercatat), export Excel 1 sheet semua metric. Data dari dat_closing.
+- **Style fix**: semua upload card (`UploadLPPSection`, `UploadWTSJSection`,
+  `UploadClosingSection`) disamakan ke `bg-[#111827]` (lebih visible di atas
+  background halaman `#080e18`)
 
 ## 20 Juni 2026 — Export Excel Reconciliation + Fitur Barang Masuk
 - **Export Excel Reconciliation** — `reconciliationExporter.ts` (3 sheet):
