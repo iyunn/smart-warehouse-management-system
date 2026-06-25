@@ -129,10 +129,12 @@ function StyledSelect<T extends string>({
 interface MultiFieldTagInputProps {
   tags: FilterTag[];
   onChange: (tags: FilterTag[]) => void;
+  quickSearch: string;
+  onQuickSearchChange: (v: string) => void;
 }
 
-const MultiFieldTagInput = memo(({ tags, onChange }: MultiFieldTagInputProps) => {
-  const [selectedField, setSelectedField] = useState<SearchField>("jenis");
+const MultiFieldTagInput = memo(({ tags, onChange, quickSearch, onQuickSearchChange }: MultiFieldTagInputProps) => {
+  const [selectedField, setSelectedField] = useState<SearchField>("all");
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -186,38 +188,50 @@ const MultiFieldTagInput = memo(({ tags, onChange }: MultiFieldTagInputProps) =>
         />
       </div>
 
-      {/* Tag container + input */}
-      <div
-        className="flex flex-wrap items-center gap-1.5 flex-1 min-h-[34px] min-w-[200px] rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-1.5 cursor-text focus-within:border-cyan-500/50 transition-all"
-        onClick={() => inputRef.current?.focus()}
-      >
-        {tags.map((tag, idx) => (
-          <span key={`${tag.field}-${tag.value}`}
-            className={`inline-flex items-center gap-1 text-[11px] font-medium rounded-md px-2 py-0.5 border ${TAG_COLORS[tag.field]}`}>
-            <span className="opacity-60 text-[9px] mr-0.5">{FIELD_LABEL[tag.field]}:</span>
-            {tag.value}
-            <button type="button"
-              onClick={(e) => { e.stopPropagation(); removeTag(idx); }}
-              className="opacity-60 hover:opacity-100 transition-opacity ml-0.5"
-            >
-              <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M1 1l8 8M9 1L1 9" />
-              </svg>
-            </button>
-          </span>
-        ))}
+      {/* Mode Semua Kolom: real-time input langsung */}
+      {selectedField === "all" ? (
         <input
-          ref={inputRef}
           type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={() => { if (input.trim()) addTag(input); }}
-          placeholder={tags.length === 0 ? `Ketik ${FIELD_LABEL[selectedField]} lalu Enter...` : ""}
+          value={quickSearch}
+          onChange={(e) => onQuickSearchChange(e.target.value)}
+          placeholder="Ketik untuk cari di semua kolom..."
           suppressHydrationWarning
-          className="flex-1 min-w-[120px] bg-transparent text-[12px] text-slate-300 placeholder:text-slate-600 outline-none"
+          className="flex-1 min-h-[34px] min-w-[200px] rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 text-[12px] text-slate-300 placeholder:text-slate-600 outline-none focus:border-cyan-500/50 transition-all"
         />
-      </div>
+      ) : (
+        /* Mode kolom spesifik: tag system (Enter) */
+        <div
+          className="flex flex-wrap items-center gap-1.5 flex-1 min-h-[34px] min-w-[200px] rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-1.5 cursor-text focus-within:border-cyan-500/50 transition-all"
+          onClick={() => inputRef.current?.focus()}
+        >
+          {tags.map((tag, idx) => (
+            <span key={`${tag.field}-${tag.value}`}
+              className={`inline-flex items-center gap-1 text-[11px] font-medium rounded-md px-2 py-0.5 border ${TAG_COLORS[tag.field]}`}>
+              <span className="opacity-60 text-[9px] mr-0.5">{FIELD_LABEL[tag.field]}:</span>
+              {tag.value}
+              <button type="button"
+                onClick={(e) => { e.stopPropagation(); removeTag(idx); }}
+                className="opacity-60 hover:opacity-100 transition-opacity ml-0.5"
+              >
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M1 1l8 8M9 1L1 9" />
+                </svg>
+              </button>
+            </span>
+          ))}
+          <input
+            ref={inputRef}
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={() => { if (input.trim()) addTag(input); }}
+            placeholder={tags.length === 0 ? `Ketik ${FIELD_LABEL[selectedField]} lalu Enter...` : ""}
+            suppressHydrationWarning
+            className="flex-1 min-w-[120px] bg-transparent text-[12px] text-slate-300 placeholder:text-slate-600 outline-none"
+          />
+        </div>
+      )}
     </div>
   );
 });
@@ -392,6 +406,7 @@ export default function MonitoringPage() {
   const [activeTab, setActiveTab]   = useState<"dat" | "lpp">("dat");
   const [costCenter, setCostCenter] = useState<CostCenter>("ALL");
   const [filterTags, setFilterTags] = useState<FilterTag[]>([]);
+  const [quickSearch, setQuickSearch] = useState("");  // real-time search untuk mode "all"
   const [page, setPage]             = useState(1);
   const [sort, setSort]             = useState<SortState>({ key: null, dir: "asc" });
 
@@ -415,7 +430,21 @@ export default function MonitoringPage() {
       result = result.filter(a => extractCGACode(a.toko) === costCenter);
     }
 
-    // AND logic: semua tag harus match
+    // Quick search real-time (mode "Semua Kolom")
+    if (quickSearch.trim()) {
+      const q = quickSearch.toLowerCase().trim();
+      result = result.filter(a =>
+        a.jenis.toLowerCase().includes(q) ||
+        a.merk.toLowerCase().includes(q) ||
+        a.kode_asset.toLowerCase().includes(q) ||
+        a.kategori_oracle.toLowerCase().includes(q) ||
+        a.deskripsi.toLowerCase().includes(q) ||
+        a.invoice_number.toLowerCase().includes(q) ||
+        (catatanOverride[a.kode_asset] ?? a.catatan).toLowerCase().includes(q)
+      );
+    }
+
+    // AND logic: semua tag harus match (mode kolom spesifik)
     if (filterTags.length > 0) {
       result = result.filter(a =>
         filterTags.every(tag => {
@@ -435,7 +464,7 @@ export default function MonitoringPage() {
     }
 
     return result;
-  }, [assets, costCenter, filterTags, catatanOverride]);
+  }, [assets, costCenter, quickSearch, filterTags, catatanOverride]);
 
   // Sort: kalau sort.key null → default multi-sort (Kategori→Jenis→Merk→CGA→Kode).
   // Kalau ada sort.key → sort by kolom itu (asc/desc).
@@ -520,6 +549,7 @@ export default function MonitoringPage() {
   const handleReset = useCallback(() => {
     setCostCenter("ALL");
     setFilterTags([]);
+    setQuickSearch("");
     setSort({ key: null, dir: "asc" });  // reset sort ke default
     setPage(1);
   }, []);
@@ -586,7 +616,7 @@ export default function MonitoringPage() {
   const totalPerolehan = filtered.reduce((s, a) => s + a.biaya_perolehan, 0);
   const totalTercatat  = filtered.reduce((s, a) => s + a.jumlah_tercatat, 0);
 
-  const hasActiveFilter = costCenter !== "ALL" || filterTags.length > 0;
+  const hasActiveFilter = costCenter !== "ALL" || filterTags.length > 0 || quickSearch.trim() !== "";
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#080e18] text-white">
@@ -786,12 +816,14 @@ export default function MonitoringPage() {
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40 shrink-0">Filter Kolom</span>
                     <p className="text-[10px] text-white/25">
-                      Pilih kolom → ketik value → Enter. Tambah kolom lain untuk filter AND.
+                      {MultiFieldTagInput && filterTags.length === 0 && !quickSearch
+                        ? "Pilih kolom → ketik value → Enter. Tambah kolom lain untuk filter AND."
+                        : ""}
                     </p>
                   </div>
                   <div className="flex items-start gap-2 flex-wrap">
                     <div className="flex-1">
-                      <MultiFieldTagInput tags={filterTags} onChange={handleTagChange} />
+                      <MultiFieldTagInput tags={filterTags} onChange={(tags) => { setFilterTags(tags); setPage(1); }} quickSearch={quickSearch} onQuickSearchChange={(v) => { setQuickSearch(v); setPage(1); }} />
                     </div>
                     <button
                       onClick={handleReset}
