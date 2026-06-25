@@ -6,6 +6,7 @@ interface MonitoringExportOptions {
   searchField: string;
   tags: string[];
   costCenter: string;
+  catatanOverride?: Record<string, string>;
   filename?: string;
 }
 
@@ -42,7 +43,7 @@ export function buildMonitoringFilename(
 }
 
 export function exportMonitoringToExcel(opts: MonitoringExportOptions): void {
-  const { assets, searchField, tags, costCenter } = opts;
+  const { assets, searchField, tags, costCenter, catatanOverride = {} } = opts;
 
   if (assets.length === 0) {
     alert("Tidak ada data untuk diekspor.");
@@ -256,6 +257,7 @@ export function exportMonitoringToExcel(opts: MonitoringExportOptions): void {
       "Biaya Perolehan":  formatRupiah(a.biaya_perolehan),
       "Jumlah Tercatat":  formatRupiah(a.jumlah_tercatat),
       "Status Alokasi":   a.tag === "Allocated" ? "Allocated" : "Belum Dialokasikan",
+      "Catatan":          catatanOverride[a.kode_asset] ?? a.catatan ?? "",
     }));
 
   // ── Build workbook ────────────────────────────────────────────────────
@@ -277,6 +279,7 @@ export function exportMonitoringToExcel(opts: MonitoringExportOptions): void {
     { wch: 22 }, // Biaya Perolehan
     { wch: 22 }, // Jumlah Tercatat
     { wch: 20 }, // Status Alokasi
+    { wch: 35 }, // Catatan
   ];
   XLSX.utils.book_append_sheet(wb, ws2, "Detail DAT");
 

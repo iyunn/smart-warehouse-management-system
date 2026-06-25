@@ -7,7 +7,7 @@ import { useMonitoring, useLPPMonitoring, type LPPRawItem } from "@/hooks/useMon
 import { exportMonitoringToExcel, buildMonitoringFilename } from "@/lib/monitoringExporter";
 
 type CostCenter  = "ALL" | "CGA1" | "CGA2" | "CGA3";
-type SearchField = "jenis" | "merk" | "kode_asset" | "kategori_oracle" | "deskripsi" | "invoice_number" | "catatan";
+type SearchField = "all" | "jenis" | "merk" | "kode_asset" | "kategori_oracle" | "deskripsi" | "invoice_number" | "catatan";
 
 // Tag punya field + value masing-masing
 interface FilterTag {
@@ -20,6 +20,7 @@ const PAGE_SIZE = 30;
 
 // ─── Field config ─────────────────────────────────────────────────────────
 const FIELD_OPTIONS: { value: SearchField; label: string }[] = [
+  { value: "all",             label: "Semua Kolom"     },
   { value: "jenis",           label: "Jenis"           },
   { value: "merk",            label: "Merk"            },
   { value: "kode_asset",      label: "Kode Aset"       },
@@ -30,6 +31,7 @@ const FIELD_OPTIONS: { value: SearchField; label: string }[] = [
 ];
 
 const FIELD_LABEL: Record<SearchField, string> = {
+  all:             "Semua Kolom",
   jenis:           "Jenis",
   merk:            "Merk",
   kode_asset:      "Kode Aset",
@@ -168,6 +170,7 @@ const MultiFieldTagInput = memo(({ tags, onChange, quickSearch, onQuickSearchCha
 
   // Warna per field untuk tag
   const TAG_COLORS: Record<SearchField, string> = {
+    all:             "bg-white/10 border-white/20 text-white/70",
     jenis:           "bg-cyan-500/15 border-cyan-500/25 text-cyan-300",
     merk:            "bg-violet-500/15 border-violet-500/25 text-violet-300",
     kode_asset:      "bg-blue-500/15 border-blue-500/25 text-blue-300",
@@ -546,11 +549,14 @@ export default function MonitoringPage() {
   const lppTotalMasuk     = lppFiltered.reduce((s, i) => s + i.masuk, 0);
   const lppTotalSaldoAkhir = lppFiltered.reduce((s, i) => s + i.saldo_akhir, 0);
 
+  const [resetKey, setResetKey]     = useState(0);
+
   const handleReset = useCallback(() => {
     setCostCenter("ALL");
     setFilterTags([]);
     setQuickSearch("");
-    setSort({ key: null, dir: "asc" });  // reset sort ke default
+    setSort({ key: null, dir: "asc" });
+    setResetKey(k => k + 1);  // force remount MultiFieldTagInput → selectedField balik ke "all"
     setPage(1);
   }, []);
 
@@ -607,6 +613,7 @@ export default function MonitoringPage() {
       searchField: filterTags.length > 0 ? filterTags[0].field : "all",
       tags: tagSlugs,
       costCenter,
+      catatanOverride,
     });
   }, [filtered, filterTags, costCenter]);
 
@@ -816,14 +823,12 @@ export default function MonitoringPage() {
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40 shrink-0">Filter Kolom</span>
                     <p className="text-[10px] text-white/25">
-                      {MultiFieldTagInput && filterTags.length === 0 && !quickSearch
-                        ? "Pilih kolom → ketik value → Enter. Tambah kolom lain untuk filter AND."
-                        : ""}
+                      Pilih kolom → ketik value → Enter. Atau gunakan Semua Kolom untuk search real-time.
                     </p>
                   </div>
                   <div className="flex items-start gap-2 flex-wrap">
                     <div className="flex-1">
-                      <MultiFieldTagInput tags={filterTags} onChange={(tags) => { setFilterTags(tags); setPage(1); }} quickSearch={quickSearch} onQuickSearchChange={(v) => { setQuickSearch(v); setPage(1); }} />
+                      <MultiFieldTagInput key={resetKey} tags={filterTags} onChange={(tags) => { setFilterTags(tags); setPage(1); }} quickSearch={quickSearch} onQuickSearchChange={(v) => { setQuickSearch(v); setPage(1); }} />
                     </div>
                     <button
                       onClick={handleReset}
