@@ -52,26 +52,36 @@ function formatValue(v: number, metric: Metric): string {
   return v.toLocaleString("id-ID");
 }
 
-// ── Export Excel ─────────────────────────────────────────────────────────
-function exportTrendToExcel(data: ClosingRow[], metric: Metric) {
+// ── Export Excel — 1 sheet semua metric ──────────────────────────────────
+function exportTrendToExcel(data: ClosingRow[]) {
   const bulanList = [...new Set(data.map(r => r.bulan))].sort();
   const rows: any[][] = [
-    ["Trend CGA — " + METRIC_LABELS[metric]],
-    ["Bulan", "CGA1", "CGA2", "CGA3"],
+    ["Trend CGA — Semua Metric"],
+    ["Bulan",
+     "CGA1 - Item", "CGA2 - Item", "CGA3 - Item",
+     "CGA1 - Qty",  "CGA2 - Qty",  "CGA3 - Qty",
+     "CGA1 - Nilai Perolehan", "CGA2 - Nilai Perolehan", "CGA3 - Nilai Perolehan",
+     "CGA1 - Tercatat", "CGA2 - Tercatat", "CGA3 - Tercatat",
+    ],
   ];
   for (const b of bulanList) {
-    const row = [formatBulan(b)];
-    for (const cga of ["CGA1","CGA2","CGA3"]) {
-      const d = data.find(r => r.bulan === b && r.cga === cga);
-      row.push(d ? (d as any)[metric] : 0);
+    const row: any[] = [formatBulan(b)];
+    for (const metric of ["total_items","total_qty","total_nilai","total_tercatat"] as const) {
+      for (const cga of ["CGA1","CGA2","CGA3"]) {
+        const d = data.find(r => r.bulan === b && r.cga === cga);
+        row.push(d ? (d as any)[metric] : 0);
+      }
     }
     rows.push(row);
   }
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"] = [{ wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+  ws["!cols"] = [
+    { wch: 12 },
+    ...Array(12).fill({ wch: 18 }),
+  ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Trend CGA");
-  XLSX.writeFile(wb, `Trend-CGA-${METRIC_LABELS[metric]}-${new Date().toISOString().slice(0,7)}.xlsx`);
+  XLSX.writeFile(wb, `Trend-CGA-${new Date().toISOString().slice(0,7)}.xlsx`);
 }
 
 // ── Main Component ────────────────────────────────────────────────────────
@@ -102,8 +112,8 @@ function TrendCGACards() {
   }, [data, metric]);
 
   const handleExport = useCallback(() => {
-    exportTrendToExcel(data, metric);
-  }, [data, metric]);
+    exportTrendToExcel(data);
+  }, [data]);
 
   const isEmpty = !loading && chartData.length === 0;
 

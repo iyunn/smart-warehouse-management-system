@@ -70,8 +70,8 @@ export default function UploadClosingSection() {
     setPhase("parsing");
     setErrorMsg("");
     try {
-      const text = await file.text();
-      const { records } = parseTxtFile(text);
+      const result = await parseTxtFile(file);
+      const records = result.records;
       if (records.length === 0) throw new Error("File tidak mengandung data valid.");
       const computed = calcStats(records);
       if (computed.length === 0) throw new Error("Tidak ada data CGA1/CGA2/CGA3 ditemukan.");
@@ -115,7 +115,7 @@ export default function UploadClosingSection() {
   const loadingText = phase === "parsing" ? "Membaca & menghitung data..." : "Menyimpan ke database...";
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+    <div className="rounded-2xl border border-white/[0.06] bg-[#111827] p-5">
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
           <h3 className="text-[13px] font-semibold text-white">Upload DAT Closing</h3>

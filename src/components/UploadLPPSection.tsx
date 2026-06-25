@@ -164,7 +164,7 @@ export default function UploadLPPSection() {
   }, []);
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+    <div className="rounded-2xl border border-white/[0.06] bg-[#111827] p-5">
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
           <h3 className="text-[13px] font-semibold text-white">Upload LPP Update</h3>

@@ -62,10 +62,7 @@ export default function UploadDataPage() {
             </h2>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <UploadSection />
-              <PlaceholderUploadCard
-                title="Upload DAT Closing"
-                description="Snapshot cut-off bulanan DAT Oracle"
-              />
+              <UploadClosingSection />
             </div>
           </div>
 
@@ -75,15 +72,6 @@ export default function UploadDataPage() {
             </h2>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <UploadLPPSection />
-            </div>
-          </div>
-
-          <div>
-            <h2 className="text-[12px] font-semibold uppercase tracking-widest text-cyan-400/70 mb-3">
-              DAT Closing
-            </h2>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <UploadClosingSection />
             </div>
           </div>
 
