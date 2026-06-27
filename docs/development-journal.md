@@ -2477,3 +2477,88 @@ User tanya kemungkinan fitur dark/light toggle. Kesimpulan: perubahan
 besar-besaran karena semua styling hardcoded dark mode. Solusi efisien:
 Tailwind `dark:` variant + CSS variables. Ditunda sampai fitur core selesai
 — dimasukkan ke "saran pengembangan lanjutan".
+
+# 27 Juni 2026 — Sistem Autentikasi Supabase Auth + CRUD User
+
+### Scope & Keputusan Desain
+
+- Provider: Supabase Auth (email+password) — sudah terintegrasi dengan project
+- Role: Super Admin + Admin (Viewer dihapus dari scope — tidak perlu untuk internal tool GA)
+- Registration: terbuka tapi status default `pending` — Super Admin yang approve
+- Forgot password: magic link via Supabase (lebih aman dari kirim password random)
+- `@supabase/ssr` untuk SSR-safe session management di Next.js App Router
+
+### Tahap 1 — Fondasi
+
+**SQL migration:**
+- Tabel `profiles` (extend auth.users): username, nik, email, role, status
+- Trigger `handle_new_user` — auto-create profile saat register
+- RLS policy `authenticated_read_own` — user hanya bisa baca profile sendiri
+
+**Supabase helpers:**
+- `src/lib/supabase-client/client.ts` — browser client (createBrowserClient)
+- `src/lib/supabase-client/server.ts` — server client (createServerClient)
+- `src/lib/supabase-client/middleware.ts` — session refresh helper
+
+**Catatan penting:**
+- Folder dinamai `supabase-client/` bukan `supabase/` karena Turbopack
+  error: "reading file src/lib/supabase — Is a directory (os error 21)".
+  Turbopack conflict saat memproses globals.css dengan folder bernama sama
+  dengan package name.
+- Next.js 16.2.4 rename konvensi `middleware.ts` → `proxy.ts`, dan nama
+  fungsi export dari `middleware` → `proxy`.
+
+**Halaman /login:**
+- Form email + password
+- Cek status profile setelah login — tolak kalau pending/rejected
+- Redirect ke dashboard kalau active
+
+### Tahap 2 — Register, Session, Forgot Password
+
+- `/register` — form username/NIK/email/password, status pending, success screen
+- `/forgot-password` — kirim magic link via `resetPasswordForEmail`
+- `/auth/callback/route.ts` — exchange code untuk session, redirect ke
+  reset-password kalau type=recovery
+- `/auth/reset-password` — set password baru via `updateUser`
+- `SessionContext.tsx` — provider expose user, profile, role, signOut,
+  isSuperAdmin, isAdmin ke seluruh app
+- `layout.tsx` — wrap dengan SessionProvider
+- `Topbar.tsx` — nama + role dinamis dari useSession, klik avatar untuk logout
+
+**Bug ditemui:**
+- "Profil tidak ditemukan" setelah login — RLS memblokir query profiles.
+  Root cause: session belum ter-set di cookies saat query langsung setelah
+  signInWithPassword. Fix: disable RLS untuk testing, lalu buat policy
+  `authenticated_read_own` dengan `TO authenticated` yang benar.
+- RLS policy rekursif (`super_admin_read_all` yang query profiles dari dalam
+  profiles trigger) menyebabkan infinite loop → semua login gagal.
+  Fix: DROP policy rekursif, Super Admin operasi via service_role di API route.
+
+**Email rate limit Supabase free tier:**
+- Limit ~3 email/jam — terlalu ketat untuk onboarding teman-teman di hari Senin
+- Solusi: fitur "Tambah User" oleh Super Admin yang bypass email sama sekali
+
+### Tahap 3 — Role Enforcement + Admin Panel
+
+**Halaman /admin/users:**
+- Lihat semua user + status, approve/reject/nonaktifkan/aktifkan
+- Naik/turun role (admin ↔ super_admin)
+- Tambah User — modal form, langsung active via `auth.admin.createUser` +
+  `email_confirm: true` (bypass email confirmation dan rate limit)
+- Hapus User — konfirmasi modal, permanent delete via `auth.admin.deleteUser`
+  (profiles ikut cascade karena ON DELETE CASCADE)
+
+**API /api/admin/users:**
+- Semua operasi via `SUPABASE_SERVICE_ROLE_KEY` (bypass RLS)
+- `verifySuperAdmin()` — cek session dari cookie sebelum setiap operasi
+- `SUPABASE_SERVICE_ROLE_KEY` perlu diset di Codespace secrets DAN Vercel
+  environment variables (dua tempat terpisah)
+
+**Role enforcement:**
+- Tombol hapus SJ di Daftar Surat Jalan — hidden untuk non-Super Admin
+- Halaman /admin/users — auto-redirect ke / kalau bukan Super Admin
+- Menu "Manajemen User" di Sidebar — hanya tampil untuk Super Admin
+
+**Sidebar:**
+- Tambah menu Manajemen User (violet, hanya Super Admin)
+- Tombol logout di pojok bawah (ikon door-exit)

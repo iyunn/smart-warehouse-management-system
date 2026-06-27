@@ -3,7 +3,7 @@
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **25 Juni 2026** (DAT Closing snapshot bulanan + Dashboard Trend CGA live)
+> Terakhir diupdate: **27 Juni 2026** (Sistem Autentikasi Supabase Auth + CRUD User)
 
 ## Project Identity
 
@@ -448,14 +448,13 @@ tidak ada fitur yang sedang dikerjakan saat ini
 
 ## Features Planned
 
-### 🎯 Next (Updated 25 Juni 2026)
-- **Authentication** (Supabase Auth, role Admin/Viewer) — prioritas berikutnya
-- **Live Stock / Budget Stok** — tampilkan aktual vs budget per jenis per CGA, flag over/under. Budget diinput manual oleh user GA (formula dinamis CGA1/CGA2 perlu dikonfirmasi ke stakeholder dulu)
+### 🎯 Next (Updated 27 Juni 2026)
+- **Live Stock / Budget Stok** — aktual vs budget per jenis per CGA, flag over/under. Budget diinput manual dulu, formula dinamis CGA1/CGA2 dikonfirmasi ke stakeholder
+- **Laporan TA (Bab 3 & 4)** — semua fitur core sudah selesai, saatnya nulis
 - **Integrasi Mutasi WT otomatis** dari LPP — sengaja ditunda
 - **UI minor: tombol "Pakai Template"** dipindah ke sebelahan "Tambah Baris"
-- Kondisi 3 "Aset Intransit" — **tidak diimplementasi dalam TA ini**, saran penelitian lanjutan
-- "Changed" filter di Classification — prioritas rendah
-- Bab 3 & 4 laporan TA — semua fitur core sudah cukup matang untuk ditulis
+- Kondisi 3 "Aset Intransit" — tidak diimplementasi dalam TA, saran penelitian lanjutan
+- Dark/light mode — ditunda sampai semua fitur core selesai
 
 ### LPP Web Tracking Reconciliation (THESIS CORE TOPIC)
 Status: ✅ Tahap 1-3 Implemented (18 Juni 2026) — kurang: Export Excel hasil reconciliation + Kondisi 3 "Aset Intransit" (target jangka panjang / sebagai bahan penelitian lanjutan dan tidak akan dilakukan di penelitian ini)
@@ -624,13 +623,52 @@ Status: ✅ Sebagian besar selesai (SJ Rekap Alokasi, Monitoring 3-tabel per CGA
 - ✅ Export Excel untuk hasil reconciliation — `src/lib/reconciliationExporter.ts` (3 sheet: Ringkasan, Detail, Perlu Tindakan)
 - Kondisi 3 "Aset Intransit" — **tidak diimplementasi dalam TA ini** (saran penelitian lanjutan)
 
-### Authentication & Role Management
-Status: 📌 Planned
+### ✅ Authentication & Role Management (27 Juni 2026)
+Status: ✅ Completed
 
-Rencana:
-- Supabase Auth
-- Role: Admin, Viewer
-- Protected routes
+**Stack:** Supabase Auth (email+password) + `@supabase/ssr` untuk SSR-safe session.
+**Role:** Super Admin dan Admin (Viewer dihapus dari scope).
+**Registration:** Terbuka, tapi status default `pending` — perlu approval Super Admin.
+
+**Tabel `profiles`** (extend `auth.users`):
+- `username`, `nik`, `email`, `role` ('super_admin'|'admin'), `status` ('pending'|'active'|'rejected')
+- Trigger `handle_new_user` — auto-create profile saat user register
+- RLS: `authenticated_read_own` — user hanya bisa baca profile sendiri
+- CRUD oleh Super Admin via service_role key (bypass RLS)
+
+**File-file baru:**
+- `src/lib/supabase-client/client.ts` — browser client (`createBrowserClient`)
+- `src/lib/supabase-client/server.ts` — server client (`createServerClient`)
+- `src/lib/supabase-client/middleware.ts` — session refresh helper
+- `src/proxy.ts` — route protection (Next.js 16 convention, ganti `middleware.ts`)
+- `src/components/SessionContext.tsx` — provider + `useSession` hook (user, profile, role)
+- `src/app/login/page.tsx` — form email + password, cek status pending/active
+- `src/app/register/page.tsx` — form username/NIK/email/password → status pending
+- `src/app/forgot-password/page.tsx` — kirim magic link reset via Supabase
+- `src/app/auth/callback/route.ts` — exchange code untuk session
+- `src/app/auth/reset-password/page.tsx` — set password baru setelah klik link
+- `src/app/admin/users/page.tsx` — halaman Manajemen User (Super Admin only)
+- `src/app/api/admin/users/route.ts` — GET/POST/PATCH/DELETE via `SUPABASE_SERVICE_ROLE_KEY`
+- `src/app/layout.tsx` — wrap dengan `SessionProvider`
+- `src/components/Topbar.tsx` — nama + role dinamis dari session
+- `src/components/Sidebar.tsx` — menu Manajemen User (Super Admin only) + tombol logout
+
+**Fitur Manajemen User (Super Admin):**
+- Lihat semua user + status (pending/active/rejected)
+- Approve / reject / nonaktifkan / aktifkan user
+- Naik/turun role (admin ↔ super_admin)
+- **Tambah User** — modal form, langsung active tanpa email confirmation (bypass rate limit Supabase)
+- **Hapus User** — permanent delete dari auth.users + profiles (cascade)
+
+**Fitur role enforcement:**
+- Tombol hapus SJ di Daftar Surat Jalan — hanya tampil untuk Super Admin
+- Halaman `/admin/users` — auto-redirect ke `/` kalau bukan Super Admin
+
+**Catatan implementasi:**
+- `src/proxy.ts` bukan `middleware.ts` — Next.js 16.2.4 sudah rename konvensi ini
+- Folder `src/lib/supabase-client/` (bukan `supabase/`) — Turbopack error karena nama folder conflict dengan resolusi modul
+- RLS policy rekursif (`super_admin_read_all` yang query profiles dari dalam profiles) menyebabkan semua login gagal — dihindari dengan service_role di API route
+- `SUPABASE_SERVICE_ROLE_KEY` perlu diset di Codespace secrets DAN Vercel environment variables
 
 ### DB Optimization (Deferred)
 Status: 📌 Deferred — sampai semua fitur selesai
@@ -963,6 +1001,23 @@ Field utama:
 
 Pola pertumbuhan: **3 rows/bulan** × 12 bulan = 36 rows/tahun. Tidak akan jadi masalah.
 
+## profiles
+
+Extend `auth.users` Supabase dengan data user SmartWMS. Di-create otomatis via
+trigger `handle_new_user` saat user register.
+
+Field utama:
+- `id` (uuid, PK, FK → auth.users ON DELETE CASCADE)
+- `username` (text)
+- `nik` (text)
+- `email` (text)
+- `role` (text) — 'super_admin' | 'admin'
+- `status` (text) — 'pending' | 'active' | 'rejected' (default: 'pending')
+- `created_at`, `updated_at` (timestamptz)
+
+RLS: `authenticated_read_own` — user hanya bisa baca profile sendiri.
+Super Admin operasi via service_role key di API route (bypass RLS).
+
 ---
 
 ## sj_item_templates
@@ -1040,6 +1095,7 @@ Setiap keputusan teknis harus tunduk pada prinsip ini:
 
 ```
 src/
+├── proxy.ts                          Route protection — Next.js 16 convention (ganti middleware.ts)
 ├── app/
 │   ├── page.tsx                      Dashboard (6 baris)
 │   ├── layout.tsx
@@ -1049,6 +1105,12 @@ src/
 │   ├── monitoring/page.tsx           Monitoring (2 tab — DAT + LPP, keduanya live)
 │   ├── reconciliation/page.tsx       Reconciliation DAT vs LPP (4 kondisi, kondisi 3 pending)
 │   ├── review/page.tsx               Classification
+│   ├── login/page.tsx                Login (email + password, cek status pending/active)
+│   ├── register/page.tsx             Register (status pending, perlu approval Super Admin)
+│   ├── forgot-password/page.tsx      Kirim magic link reset password ke email
+│   ├── auth/callback/route.ts        Exchange code untuk session (magic link)
+│   ├── auth/reset-password/page.tsx  Set password baru setelah klik link
+│   └── admin/users/page.tsx          Manajemen User (Super Admin only, redirect non-SA ke /)
 │   │
 │   ├── sj/
 │   │   ├── buat/page.tsx             Buat Surat Jalan (+ TemplatePicker)
@@ -1068,6 +1130,7 @@ src/
 │       ├── freshness/route.ts          GET timestamp upload terakhir DAT & LPP (2 query ringan, maybeSingle)
 │       ├── closing/route.ts            GET/POST dat_closing (upsert aggregate per CGA per bulan)
 │       ├── reconciliation/route.ts   Engine 4 kondisi (set ops by kode_asset, extractCGACode untuk badge)
+│       └── admin/users/route.ts        GET/POST/PATCH/DELETE profiles via service_role (bypass RLS)
 │       ├── lpp/
 │       │   ├── clear/route.ts        DELETE semua lpp_raw (full replace)
 │       │   ├── process/route.ts      Batch insert lpp_raw
@@ -1090,6 +1153,7 @@ src/
 │   ├── UploadLPPSection.tsx          Dipakai di /upload (LPP, multi-file 3 CGA sekaligus)
 │   ├── UploadWTSJSection.tsx         Dipakai di /upload (Import SJ WT dari PDF, dynamic ssr:false)
 │   ├── UploadClosingSection.tsx      Dipakai di /upload (DAT Closing bulanan, month picker + preview stats)
+│   ├── SessionContext.tsx            Provider + useSession hook (user, profile, role, signOut, isSuperAdmin)
 │   │
 │   ├── review/
 │   │   ├── ReviewSummaryCards.tsx
@@ -1131,7 +1195,11 @@ src/
 │
 └── lib/
     ├── classifier.ts                 Word boundary matching
-    ├── supabaseClient.ts
+    ├── supabaseClient.ts             Legacy client (masih dipakai di API routes lama)
+    ├── supabase-client/
+    │   ├── client.ts               Browser client untuk Client Components
+    │   ├── server.ts               Server client untuk Route Handlers
+    │   └── middleware.ts           Session refresh helper untuk proxy.ts
     ├── txtParser.ts                  Auto-detect PIPE/TAB + parseTanggalDokumen
     ├── batchProcessor.ts
     ├── lppParser.ts                  Parse HTML-table-as-.xls (DOMParser, bukan SheetJS), auto-detect CGA dari filename
@@ -1236,8 +1304,9 @@ Proyeksi: ~117 KB/bulan dari tabel SJ (estimasi 50 SJ × 8 item). Butuh **ratusa
 - Sebagian aset masih Unknown (butuh lebih banyak keyword rules dari user)
 
 ### Authentication
-- Belum diimplementasikan
-- Sistem masih prototype/internal mode
+- ✅ Diimplementasi 27 Juni 2026 (Supabase Auth + role Super Admin/Admin)
+- Magic link reset password butuh Supabase redirect URL dikonfigurasi
+- Email rate limit Supabase free tier (~3/jam) — diatasi dengan fitur "Tambah User" oleh Super Admin (bypass email)
 
 ### Recent Activity Table
 - Masih placeholder
@@ -1274,6 +1343,19 @@ Proyeksi: ~117 KB/bulan dari tabel SJ (estimasi 50 SJ × 8 item). Butuh **ratusa
 
 # 10. Recent Major Changes Log
 
+
+## 27 Juni 2026 — Sistem Autentikasi Supabase Auth + CRUD User
+- Supabase Auth (email+password) + @supabase/ssr untuk SSR-safe session
+- Tabel profiles + trigger auto-create + RLS policy authenticated_read_own
+- proxy.ts (Next.js 16 — ganti middleware.ts), route protection semua halaman
+- SessionContext provider + useSession hook (user, profile, role, signOut)
+- Halaman: /login, /register, /forgot-password, /auth/callback, /auth/reset-password
+- Topbar: nama + role dinamis dari session. Sidebar: menu admin + tombol logout
+- Halaman /admin/users: approve/reject/CRUD user via service_role API (bypass RLS)
+- API /api/admin/users: POST buat user langsung active (bypass email rate limit)
+- Tombol hapus SJ hanya tampil untuk Super Admin
+- Bug kritis dihindari: RLS rekursif (super_admin_read_all) menyebabkan semua login gagal
+- Folder lib/supabase-client/ (bukan supabase/) — Turbopack error nama folder conflict
 
 ## 25 Juni 2026 — DAT Closing Snapshot + Dashboard Trend CGA
 - **DAT Closing**: tabel `dat_closing` (3 rows/bulan), UploadClosingSection

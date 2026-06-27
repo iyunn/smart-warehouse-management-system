@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import Sidebar from "@/components/Sidebar";
+import Sidebar from "@/compogit nents/Sidebar";
 import Topbar from "@/components/Topbar";
 import { useSession } from "@/components/SessionContext";
 
