@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession } from "@/components/SessionContext";
 
 export default function Topbar({ title }: { title: string }) {
   const [search, setSearch] = useState("");
   const [dateStr, setDateStr] = useState("");
+  const { profile, signOut } = useSession();
 
-  // Render tanggal hanya di client untuk hindari hydration mismatch —
-  // new Date() di server vs client bisa beda hari kalau dirender pas tengah malam.
   useEffect(() => {
     setDateStr(
       new Date().toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
@@ -51,14 +51,16 @@ export default function Topbar({ title }: { title: string }) {
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-cyan-400 rounded-full border-2 border-[#0d1117]" />
         </button>
 
-        {/* Avatar */}
-        <div className="flex items-center gap-2 pl-1 cursor-pointer group">
+        {/* Avatar + nama user */}
+        <div className="flex items-center gap-2 pl-1 cursor-pointer group" onClick={signOut} title="Klik untuk logout">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center text-white text-[13px] font-bold shadow-lg shadow-purple-500/20 group-hover:shadow-purple-500/40 transition-shadow">
-            A
+            {profile?.username?.[0]?.toUpperCase() ?? "A"}
           </div>
           <div className="hidden md:block">
-            <p className="text-white text-[12px] font-medium leading-none">Admin</p>
-            <p className="text-slate-500 text-[10px] mt-0.5">Super Admin</p>
+            <p className="text-white text-[12px] font-medium leading-none">{profile?.username ?? "Admin"}</p>
+            <p className="text-slate-500 text-[10px] mt-0.5">
+              {profile?.role === "super_admin" ? "Super Admin" : "Admin"}
+            </p>
           </div>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-600 hidden md:block">
             <polyline points="6 9 12 15 18 9" />

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "@/components/SessionContext";
 
 // Hook ringan untuk timestamp upload DAT & LPP — dipanggil di Sidebar
 // supaya terlihat di semua halaman tanpa user harus buka Reconciliation.
@@ -119,6 +120,7 @@ function getActiveId(pathname: string): string {
   if (pathname.startsWith("/sj/list"))     return "sj-list";
   if (pathname.startsWith("/sj/tujuan"))   return "sj-tujuan";
   if (pathname.startsWith("/sj/report"))   return "sj-report";
+  if (pathname.startsWith("/admin/users")) return "admin-users";
   if (pathname.startsWith("/sj/templates")) return "sj-template";
   if (pathname.startsWith("/sj"))          return "sj";
   if (pathname.startsWith("/upload"))      return "upload";
@@ -133,6 +135,7 @@ function getActiveId(pathname: string): string {
 export default function Sidebar() {
   const pathname = usePathname();
   const activeId = getActiveId(pathname);
+  const { isSuperAdmin, signOut } = useSession();
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const { dat: datUpload, lpp: lppUpload } = useFreshness();
@@ -216,16 +219,48 @@ export default function Sidebar() {
         </div>
       )}
 
+      {/* Admin menu — hanya Super Admin */}
+      {isSuperAdmin && !collapsed && (
+        <div className="px-3 pb-1">
+          <Link href="/admin/users"
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium transition-all ${
+              activeId === "admin-users"
+                ? "bg-violet-500/10 text-violet-300 border border-violet-500/20"
+                : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]"
+            }`}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            Manajemen User
+          </Link>
+        </div>
+      )}
+
+      {/* User info + Logout */}
       <div className={`p-3 border-t border-white/[0.06] ${collapsed ? "flex justify-center" : ""}`}>
         {collapsed ? (
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center text-white text-xs font-bold">A</div>
+          <button onClick={signOut} title="Logout"
+            className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center text-white text-xs font-bold">
+            ↩
+          </button>
         ) : (
-          <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/5 transition-colors cursor-pointer">
+          <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/5 transition-colors">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-purple-500/20">A</div>
             <div className="flex-1 min-w-0">
               <p className="text-white text-[12px] font-medium truncate">Admin User</p>
               <p className="text-slate-500 text-[10px] truncate">admin@wms.id</p>
             </div>
+            <button onClick={signOut} title="Logout"
+              className="p-1.5 rounded-lg text-white/30 hover:text-rose-400 hover:bg-rose-500/10 transition-all">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </button>
           </div>
         )}
       </div>
