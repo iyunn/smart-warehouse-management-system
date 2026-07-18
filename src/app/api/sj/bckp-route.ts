@@ -145,37 +145,6 @@ export async function POST(req: NextRequest) {
       throw new Error(itemsError.message)
     }
 
-    // ── Auto-insert ke staging_area untuk SJ jenis 'masuk' ──────────────────
-    // Barang yang dikembalikan ke CGA ditampung di staging agar user bisa
-    // menambahkan catatan sebelum DAT terbaru di-upload.
-    if (jenis === 'masuk') {
-      // Ambil kode tujuan (asal toko) dari tujuan_id
-      const { data: tujuanData } = await supabase
-        .from('sj_tujuan')
-        .select('kode, nama')
-        .eq('id', tujuan_id)
-        .maybeSingle();
-      const asalToko = tujuanData
-        ? `${tujuanData.kode} - ${tujuanData.nama}`
-        : '';
-
-      const stagingRows = items.map((item: any) => {
-        const kode = (item.kode_asset ?? '').trim();
-        return {
-          kode_asset:    kode || null,
-          jenis:         item.jenis ?? '',
-          merk:          item.merk ?? '',
-          deskripsi:     item.keterangan ?? '',
-          catatan:       '',
-          asal_toko:     asalToko,
-          is_at_lebih:   !kode,   // tidak ada kode_asset = AT Lebih
-          sj_id:         sjData.id,
-        };
-      });
-      // Best-effort — kalau gagal, SJ tetap tersimpan (tidak rollback)
-      await supabase.from('staging_area').insert(stagingRows);
-    }
-
     return NextResponse.json({ sj: sjData, no_sj })
   } catch (error) {
     return NextResponse.json(
