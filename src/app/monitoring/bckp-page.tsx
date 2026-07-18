@@ -5,7 +5,6 @@ import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { useMonitoring, useLPPMonitoring, type LPPRawItem } from "@/hooks/useMonitoring";
 import { exportMonitoringToExcel, buildMonitoringFilename } from "@/lib/monitoringExporter";
-import StagingTab from "@/components/StagingTab";
 
 type CostCenter  = "ALL" | "CGA1" | "CGA2" | "CGA3";
 type SearchField = "all" | "jenis" | "merk" | "kode_asset" | "kategori_oracle" | "deskripsi" | "invoice_number" | "catatan";
@@ -407,7 +406,7 @@ export default function MonitoringPage() {
   const { assets, loading } = useMonitoring();
   const { items: lppItems, loading: lppLoading } = useLPPMonitoring();
 
-  const [activeTab, setActiveTab]   = useState<"dat" | "lpp" | "staging">("dat");
+  const [activeTab, setActiveTab]   = useState<"dat" | "lpp">("dat");
   const [costCenter, setCostCenter] = useState<CostCenter>("ALL");
   const [filterTags, setFilterTags] = useState<FilterTag[]>([]);
   const [quickSearch, setQuickSearch] = useState("");  // real-time search untuk mode "all"
@@ -684,7 +683,6 @@ export default function MonitoringPage() {
             {([
               { id: "dat" as const, label: "DAT Monitoring" },
               { id: "lpp" as const, label: "LPP Monitoring" },
-              { id: "staging" as const, label: "Staging" },
             ]).map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                 className={`px-4 py-2 text-[12px] font-medium border-b-2 transition-all -mb-px ${
@@ -698,9 +696,7 @@ export default function MonitoringPage() {
             ))}
           </div>
 
-          {activeTab === "staging" && <StagingTab />}
-
-          {activeTab !== "staging" && (activeTab === "lpp" ? (
+          {activeTab === "lpp" ? (
             <>
               {/* Filter Panel LPP */}
               <div className="mb-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
@@ -955,7 +951,7 @@ export default function MonitoringPage() {
                 />
               </div>
             </>
-          ))}
+          )}
         </main>
       </div>
     </div>

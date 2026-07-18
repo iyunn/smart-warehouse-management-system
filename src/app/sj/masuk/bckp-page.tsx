@@ -19,7 +19,7 @@ import { useSearchParams } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import SearchableDropdown from "@/components/sj/SearchableDropdown";
-import SJItemsTableMasuk from "@/components/sj/SJItemsTableMasuk";
+import SJItemsTable from "@/components/sj/SJItemsTable";
 import SJPreviewModal from "@/components/sj/SJPreviewModal";
 import { useMasterJenis, useMasterMerk, useMasterTujuan } from "@/hooks/useSJMaster";
 import { createEmptyItem, type SJItem } from "@/lib/sjTypes";
@@ -216,7 +216,7 @@ function TerimaBarangContent() {
             <h2 className="text-[12px] font-semibold uppercase tracking-widest text-emerald-400/70 mb-3">
               Detail Barang Diterima
             </h2>
-            <SJItemsTableMasuk
+            <SJItemsTable
               items={items}
               jenisOptions={jenisOptions}
               merkOptions={merkOptions}
