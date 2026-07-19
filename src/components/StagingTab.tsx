@@ -16,7 +16,7 @@ import { memo, useState, useCallback, useRef, useEffect } from "react";
 import { useStaging, type StagingItem } from "@/hooks/useStaging";
 
 // ── Catatan cell — auto-save on blur ────────────────────────────────────────
-const CatatanCell = memo(({ item, onSaved }: { item: StagingItem; onSaved: () => void }) => {
+const CatatanCell = memo(({ item, onSaved }: { item: StagingItem; onSaved: (id: string, catatan: string) => void }) => {
   const [val, setVal]     = useState(item.catatan ?? "");
   const [saving, setSaving] = useState(false);
   const lastSaved = useRef(item.catatan ?? "");
@@ -39,7 +39,7 @@ const CatatanCell = memo(({ item, onSaved }: { item: StagingItem; onSaved: () =>
       const json = await res.json();
       if (json.success) {
         lastSaved.current = trimmed;
-        onSaved();
+        onSaved(item.id, trimmed);  // update lokal, TIDAK re-fetch seluruh list
       }
     } catch { /* silent */ }
     finally { setSaving(false); }
@@ -65,10 +65,33 @@ const CatatanCell = memo(({ item, onSaved }: { item: StagingItem; onSaved: () =>
 CatatanCell.displayName = "CatatanCell";
 
 function StagingTab() {
-  const { items, loading, refresh } = useStaging();
+  const { items, loading, refresh, updateItemLocal } = useStaging();
   const [syncing, setSyncing]   = useState(false);
   const [syncMsg, setSyncMsg]   = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editKodeId, setEditKodeId] = useState<string | null>(null);  // id item AT Lebih yang sedang diisi kode
+  const [kodeInput, setKodeInput]   = useState("");
+  const [savingKode, setSavingKode] = useState(false);
+
+  const handleSaveKode = useCallback(async (id: string) => {
+    const trimmed = kodeInput.trim();
+    if (!trimmed) { setEditKodeId(null); return; }
+    setSavingKode(true);
+    try {
+      const res = await fetch("/api/staging", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, kode_asset: trimmed }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        updateItemLocal(id, { kode_asset: trimmed, is_at_lebih: false });
+        setEditKodeId(null);
+        setKodeInput("");
+      }
+    } catch { /* silent */ }
+    finally { setSavingKode(false); }
+  }, [kodeInput, updateItemLocal]);
 
   const handleSync = useCallback(async () => {
     setSyncing(true);
@@ -190,9 +213,44 @@ function StagingTab() {
 
                 {/* Kode Aset / AT Lebih */}
                 {item.is_at_lebih ? (
-                  <span className="inline-flex w-fit items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                    AT Lebih
-                  </span>
+                  editKodeId === item.id ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={kodeInput}
+                        onChange={e => setKodeInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") handleSaveKode(item.id);
+                          if (e.key === "Escape") { setEditKodeId(null); setKodeInput(""); }
+                        }}
+                        placeholder="Kode aset..."
+                        autoFocus
+                        disabled={savingKode}
+                        className="w-full bg-white/[0.04] border border-amber-500/40 text-amber-200 text-[11px] placeholder:text-slate-600 rounded-md px-2 py-1 focus:outline-none focus:border-amber-500/70"
+                      />
+                      <button onClick={() => handleSaveKode(item.id)} disabled={savingKode}
+                        title="Simpan" className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-emerald-400 hover:bg-emerald-500/10 transition-all">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                      </button>
+                      <button onClick={() => { setEditKodeId(null); setKodeInput(""); }}
+                        title="Batal" className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-white/40 hover:bg-white/[0.06] transition-all">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-flex w-fit items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                        AT Lebih
+                      </span>
+                      <button
+                        onClick={() => { setEditKodeId(item.id); setKodeInput(""); }}
+                        title="Isi kode aset"
+                        className="shrink-0 w-5 h-5 flex items-center justify-center rounded-md text-amber-400/70 hover:text-amber-300 hover:bg-amber-500/10 border border-amber-500/20 transition-all"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      </button>
+                    </div>
+                  )
                 ) : (
                   <span className="text-[11px] font-mono text-emerald-300 truncate" title={item.kode_asset ?? ""}>
                     {item.kode_asset}
@@ -203,7 +261,7 @@ function StagingTab() {
                 <span className="text-[11px] text-white/60 truncate" title={item.merk}>{item.merk || "—"}</span>
                 <span className="text-[11px] text-white/50 truncate" title={item.asal_toko}>{item.asal_toko || "—"}</span>
 
-                <CatatanCell item={item} onSaved={refresh} />
+                <CatatanCell item={item} onSaved={(id, catatan) => updateItemLocal(id, { catatan })} />
 
                 <div className="flex items-center justify-center">
                   <button

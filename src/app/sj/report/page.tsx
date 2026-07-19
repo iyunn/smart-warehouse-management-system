@@ -12,6 +12,9 @@ type SearchField  =
   | "all" | "no_sj" | "sn" | "pembawa"
   | "tujuan" | "jenis" | "status" | "keterangan";
 
+// Filter status mutasi untuk review cepat item yang belum dimutasi
+type MutasiFilter = "all" | "belum_oracle" | "belum_wt" | "belum_keduanya";
+
 const PAGE_SIZE = 30;
 
 // ─── StyledSelect (sama pattern existing) ────────────────────────────────
@@ -313,14 +316,18 @@ const AllocationCell = memo(({
       return;
     }
     setDupError(false);
+    // Mutasi Oracle TIDAK lagi otomatis ter-checklist saat kode_asset diisi.
+    // Ada case user sudah input kode aset tapi belum bisa mutasi Oracle karena
+    // kendala teknis. Checkbox mutasi murni dikontrol manual oleh user.
+    // Kalau kode dikosongkan, mutasi ikut di-reset false (tidak ada kode = tidak mungkin mutasi).
     const currentMutasi = mutasiRef.current;
-    const nextMutasi = trimmed ? (isAktiva ? true : false) : false;
+    const nextMutasi = trimmed ? currentMutasi : false;
     if (nextMutasi !== currentMutasi) {
       mutasiRef.current = nextMutasi;
       setMutasi(nextMutasi);
     }
     persist({ kode_asset: trimmed, mutasi_oracle: nextMutasi });
-  }, [kode, isAktiva, usedKodes, persist]);
+  }, [kode, initialKode, usedKodes, persist]);
 
   const handleCheckbox = useCallback(() => {
     if (!isAktiva) return;
@@ -530,6 +537,7 @@ export default function SJReportPage() {
   const [dateTo, setDateTo]             = useState("");
   const [searchField, setSearchField]   = useState<SearchField>("all");
   const [search, setSearch]             = useState("");
+  const [mutasiFilter, setMutasiFilter] = useState<MutasiFilter>("all");
   const [page, setPage]                 = useState(1);
 
   // Period preset handler
@@ -586,11 +594,30 @@ export default function SJReportPage() {
       });
     }
 
+    // Filter status mutasi — untuk review item yang belum dimutasi.
+    // Resolve nilai dengan override (allocOverride) agar akurat setelah user
+    // baru ubah checkbox tanpa refetch. Hanya item is_aktiva yang relevan
+    // (barang non-AT tidak perlu mutasi Oracle/WT).
+    if (mutasiFilter !== "all") {
+      result = result.filter(it => {
+        if (!it.is_aktiva) return false;  // non-AT tidak masuk review mutasi
+        const override = allocOverride[it.item_id];
+        const oracleOn = override ? override.mutasi_oracle : it.mutasi_oracle;
+        const wtOn     = override ? override.mutasi_wt     : it.mutasi_wt;
+        switch (mutasiFilter) {
+          case "belum_oracle":   return !oracleOn;
+          case "belum_wt":       return !wtOn;
+          case "belum_keduanya": return !oracleOn && !wtOn;
+          default:               return true;
+        }
+      });
+    }
+
     // Sort by No. SJ desc (terbaru di atas) → urutan asc (item dalam 1 SJ berurutan)
     return [...result].sort((a, b) =>
       b.no_sj.localeCompare(a.no_sj) || a.urutan - b.urutan
     );
-  }, [items, dateFrom, dateTo, search, searchField]);
+  }, [items, dateFrom, dateTo, search, searchField, mutasiFilter, allocOverride]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = useMemo(
@@ -603,6 +630,7 @@ export default function SJReportPage() {
     setPeriodPreset("all");
     setDateFrom(""); setDateTo("");
     setSearchField("all"); setSearch("");
+    setMutasiFilter("all");
     setPage(1);
   }, []);
 
@@ -623,7 +651,7 @@ export default function SJReportPage() {
   const totalQty     = filtered.reduce((s, it) => s + (it.qty ?? 0), 0);
   const periodLabel  = getPeriodLabel(periodPreset, dateFrom, dateTo);
 
-  const hasActiveFilter = periodPreset !== "all" || !!search.trim();
+  const hasActiveFilter = periodPreset !== "all" || !!search.trim() || mutasiFilter !== "all";
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#080e18] text-white">
@@ -698,6 +726,37 @@ export default function SJReportPage() {
                 />
               </div>
             )}
+
+            {/* Row: Filter status mutasi (review cepat item belum dimutasi) */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/[0.04]">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40 mr-1">Review Mutasi</span>
+              {([
+                { value: "all" as const,            label: "Semua",          color: "cyan"    },
+                { value: "belum_oracle" as const,   label: "Belum Oracle",   color: "amber"   },
+                { value: "belum_wt" as const,       label: "Belum WT",       color: "violet"  },
+                { value: "belum_keduanya" as const, label: "Belum Keduanya", color: "rose"    },
+              ]).map(chip => {
+                const active = mutasiFilter === chip.value;
+                const colorCls = active
+                  ? chip.color === "cyan"   ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300"
+                  : chip.color === "amber"  ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
+                  : chip.color === "violet" ? "bg-violet-500/15 border-violet-500/40 text-violet-300"
+                  :                           "bg-rose-500/15 border-rose-500/40 text-rose-300"
+                  : "bg-white/[0.03] border-white/[0.08] text-white/50 hover:text-white/80 hover:bg-white/[0.05]";
+                return (
+                  <button key={chip.value}
+                    onClick={() => { setMutasiFilter(chip.value); setPage(1); }}
+                    className={`text-[11px] font-medium px-3 py-1.5 rounded-lg border transition-all ${colorCls}`}>
+                    {chip.label}
+                  </button>
+                );
+              })}
+              {mutasiFilter !== "all" && (
+                <span className="text-[10px] text-white/30">
+                  {filtered.length} item ditemukan
+                </span>
+              )}
+            </div>
 
             {/* Row 3: Search by field + input + Reset */}
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/[0.04]">

@@ -134,6 +134,10 @@ export async function POST(req: NextRequest) {
       is_baru:       !!item.is_baru,
       is_aktiva:     !!item.is_aktiva,
       keterangan:    item.keterangan ?? '',
+      // kode_asset ikut disimpan (penting untuk Penerimaan Barang — agar muncul
+      // di Rekap Alokasi & PDF). Barang masuk: kode terisi tapi mutasi_oracle_status
+      // tetap default false (logika terbalik — user konfirmasi mutasi manual).
+      kode_asset:    (item.kode_asset ?? '').trim() || null,
     }))
 
     const { error: itemsError } = await supabase
@@ -271,6 +275,7 @@ export async function PATCH(req: NextRequest) {
       is_baru:       !!item.is_baru,
       is_aktiva:     !!item.is_aktiva,
       keterangan:    item.keterangan ?? '',
+      kode_asset:    (item.kode_asset ?? '').trim() || null,
     }))
 
     const { error: itemsError } = await supabase
@@ -298,6 +303,13 @@ export async function DELETE(req: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'ID wajib' }, { status: 400 })
     }
+
+    // Hapus item staging yang terkait SJ ini DULU (sebelum SJ dihapus).
+    // staging_area.sj_id pakai ON DELETE SET NULL, jadi kalau SJ dihapus
+    // duluan, link-nya hilang dan item staging nyangkut selamanya. Hapus
+    // di sini best-effort — item staging dari Penerimaan Barang ikut terhapus
+    // saat SJ-nya dihapus dari Daftar Surat Jalan.
+    await supabase.from('staging_area').delete().eq('sj_id', id)
 
     const { error } = await supabase.from('surat_jalan').delete().eq('id', id)
     if (error) throw new Error(error.message)

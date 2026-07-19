@@ -23,6 +23,12 @@ export function useStaging() {
 
   const refresh = useCallback(() => setRefreshTick(t => t + 1), []);
 
+  // Update satu item di state lokal tanpa re-fetch (untuk edit catatan).
+  // Catatan sudah tersimpan di DB via PATCH — tidak perlu refresh seluruh list.
+  const updateItemLocal = useCallback((id: string, patch: Partial<StagingItem>) => {
+    setItems(prev => prev.map(it => it.id === id ? { ...it, ...patch } : it));
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -34,5 +40,5 @@ export function useStaging() {
     return () => { cancelled = true; };
   }, [refreshTick]);
 
-  return { items, loading, refresh };
+  return { items, loading, refresh, updateItemLocal };
 }

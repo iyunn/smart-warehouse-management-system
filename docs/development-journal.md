@@ -2642,3 +2642,77 @@ item tidak ada di DAT→skip, AT Lebih→difilter di query.
 **Known issue (ditunda):** kode_asset yang diinput di Penerimaan Barang belum
 tampil di PDF Surat Penerimaan Barang. Kemungkinan SuratPenerimaanPDF atau
 sjPdfHelpers tidak pass kode_asset ke data.items.
+
+---
+
+## 19 Juli 2026 (lanjutan) — Perbaikan Konflik Logika & Review Mutasi
+
+Sesi lanjutan setelah Staging Area di-merge ke main. Fokus: beberapa masalah kecil
+dan konflik logika yang muncul saat pemakaian.
+
+### #2 — Staging: edit catatan tidak lagi refresh seluruh list
+
+Root cause: tiap CatatanCell blur memanggil `refresh()` yang re-fetch seluruh list
+staging → re-render penuh (terasa seperti "halaman refresh"). Kalau isi banyak item
+berturut-turut, tiap blur trigger re-fetch = menyebalkan.
+
+Fix: tambah `updateItemLocal` di useStaging — update satu item di state lokal tanpa
+network call. Catatan sudah tersimpan via PATCH, tidak perlu re-fetch. Refresh penuh
+hanya untuk sync & delete (yang mengubah struktur list).
+
+### AT Lebih bisa diisi kode_asset
+
+Gap: item AT Lebih (tanpa kode_asset) tidak pernah ikut sync (query filter
+`.not(kode_asset, is, null)`), nyangkut selamanya. Fix: API PATCH /api/staging
+sekarang bisa update kode_asset (auto-matikan is_at_lebih). UI: tombol "+" di badge
+AT Lebih → input inline → isi kode → badge berubah jadi kode hijau, siap ikut sync.
+
+### #4 — Hapus auto-checklist mutasi Oracle
+
+Root cause: di handleKodeBlur, `nextMutasi = trimmed ? (isAktiva ? true : false)`
+— begitu kode_asset diisi pada item aktiva, mutasi Oracle auto-checklist. Padahal
+ada case user sudah input kode tapi belum bisa mutasi Oracle (kendala teknis).
+
+Fix: `nextMutasi = trimmed ? currentMutasi : false` — status mutasi dipertahankan,
+tidak dipaksa true. User kontrol checkbox manual. Kalau kode dikosongkan, mutasi
+reset false (logis — tidak ada kode = tidak mungkin mutasi).
+
+### #5 — Filter Review Mutasi di Rekap Alokasi
+
+Interface untuk review cepat item yang belum dimutasi. 4 chip filter: Semua,
+Belum Oracle, Belum WT, Belum Keduanya. Bekerja bersama filter existing (periode,
+search). Resolve nilai mutasi dengan allocOverride agar akurat tanpa refetch.
+Hanya item is_aktiva yang masuk review (non-AT tidak perlu mutasi).
+
+### #3 — Auto-isi kode_asset dari Penerimaan + logika mutasi masuk terbalik
+
+Root cause utama: kode_asset yang diinput di Penerimaan Barang TIDAK ikut disimpan
+ke surat_jalan_items (hanya masuk staging_area). Akibatnya kode tidak muncul di
+Rekap Alokasi maupun PDF.
+
+Fix bertahap:
+1. sj-route POST & PATCH: tambah kode_asset ke itemsToInsert
+2. PDF: mapping items ke pdfData men-drop kode_asset di DUA tempat berbeda —
+   sj/list (preview dari daftar) DAN sj/masuk (preview setelah submit). Keduanya
+   diperbaiki. Tipe SJItemForPDF & komponen PDF sudah siap render kode_asset.
+
+**Logika mutasi masuk (TERBALIK dari keluar):**
+- Barang keluar (TIDAK diubah): kode HILANG dari DAT → "✓ Dimutasi" (barang keluar CGA)
+- Barang masuk (reversed K1): kode ADA di DAT → "✓ Dimutasi" (barang kembali ke CGA
+  setelah user mutasi oracle & re-upload DAT terbaru)
+
+computeIsMutated di /api/sj/report sekarang sadar jenis SJ. Lock guard PATCH juga
+reversed untuk masuk (tolak edit kalau kode sudah ada di DAT). Diverifikasi via
+simulasi node — kedua arah benar, barang keluar tidak berubah perilaku.
+
+Alur lengkap barang masuk: penerimaan + input kode → item editable (kode belum di
+DAT lama) → user mutasi oracle + re-upload DAT → kode muncul di DAT → lock "✓ Dimutasi".
+
+### Staging: item terhapus saat SJ induknya dihapus
+
+Root cause: staging_area.sj_id pakai ON DELETE SET NULL — saat SJ dihapus,
+surat_jalan_items CASCADE tapi item staging cuma di-set sj_id NULL → nyangkut.
+
+Fix: DELETE /api/sj hapus item staging (WHERE sj_id = id) SEBELUM hapus SJ (setelah
+SJ dihapus, link sj_id hilang). Item staging yang sudah ke-sync tidak terpengaruh
+(sudah tidak ada di tabel) — catatan di Monitoring tetap aman, memang itu tujuannya.

@@ -134,6 +134,10 @@ export async function POST(req: NextRequest) {
       is_baru:       !!item.is_baru,
       is_aktiva:     !!item.is_aktiva,
       keterangan:    item.keterangan ?? '',
+      // kode_asset ikut disimpan (penting untuk Penerimaan Barang — agar muncul
+      // di Rekap Alokasi & PDF). Barang masuk: kode terisi tapi mutasi_oracle_status
+      // tetap default false (logika terbalik — user konfirmasi mutasi manual).
+      kode_asset:    (item.kode_asset ?? '').trim() || null,
     }))
 
     const { error: itemsError } = await supabase
@@ -143,6 +147,37 @@ export async function POST(req: NextRequest) {
     if (itemsError) {
       await supabase.from('surat_jalan').delete().eq('id', sjData.id)
       throw new Error(itemsError.message)
+    }
+
+    // ── Auto-insert ke staging_area untuk SJ jenis 'masuk' ──────────────────
+    // Barang yang dikembalikan ke CGA ditampung di staging agar user bisa
+    // menambahkan catatan sebelum DAT terbaru di-upload.
+    if (jenis === 'masuk') {
+      // Ambil kode tujuan (asal toko) dari tujuan_id
+      const { data: tujuanData } = await supabase
+        .from('sj_tujuan')
+        .select('kode, nama')
+        .eq('id', tujuan_id)
+        .maybeSingle();
+      const asalToko = tujuanData
+        ? `${tujuanData.kode} - ${tujuanData.nama}`
+        : '';
+
+      const stagingRows = items.map((item: any) => {
+        const kode = (item.kode_asset ?? '').trim();
+        return {
+          kode_asset:    kode || null,
+          jenis:         item.jenis ?? '',
+          merk:          item.merk ?? '',
+          deskripsi:     item.keterangan ?? '',
+          catatan:       '',
+          asal_toko:     asalToko,
+          is_at_lebih:   !kode,   // tidak ada kode_asset = AT Lebih
+          sj_id:         sjData.id,
+        };
+      });
+      // Best-effort — kalau gagal, SJ tetap tersimpan (tidak rollback)
+      await supabase.from('staging_area').insert(stagingRows);
     }
 
     return NextResponse.json({ sj: sjData, no_sj })
@@ -240,6 +275,7 @@ export async function PATCH(req: NextRequest) {
       is_baru:       !!item.is_baru,
       is_aktiva:     !!item.is_aktiva,
       keterangan:    item.keterangan ?? '',
+      kode_asset:    (item.kode_asset ?? '').trim() || null,
     }))
 
     const { error: itemsError } = await supabase

@@ -25,28 +25,15 @@ export async function GET() {
   }
 }
 
-// ── PATCH /api/staging — update catatan dan/atau kode_asset item staging ─────
+// ── PATCH /api/staging — update catatan item staging ────────────────────────
 export async function PATCH(req: NextRequest) {
   try {
-    const { id, catatan, kode_asset } = await req.json();
+    const { id, catatan } = await req.json();
     if (!id) return NextResponse.json({ error: "id wajib diisi" }, { status: 400 });
-
-    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-
-    // Update catatan kalau dikirim
-    if (catatan !== undefined) patch.catatan = catatan ?? "";
-
-    // Update kode_asset kalau dikirim. Kalau kode_asset diisi (tidak kosong),
-    // otomatis matikan flag is_at_lebih (item jadi punya identitas).
-    if (kode_asset !== undefined) {
-      const trimmed = (kode_asset ?? "").trim();
-      patch.kode_asset = trimmed || null;
-      patch.is_at_lebih = !trimmed;  // kosong = tetap AT Lebih, terisi = bukan
-    }
 
     const { error } = await supabase
       .from("staging_area")
-      .update(patch)
+      .update({ catatan: catatan ?? "", updated_at: new Date().toISOString() })
       .eq("id", id);
 
     if (error) throw new Error(error.message);

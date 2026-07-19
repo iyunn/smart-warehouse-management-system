@@ -3,7 +3,7 @@
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **19 Juli 2026** (Staging Area — DAT masuk dari luar CGA)
+> Terakhir diupdate: **19 Juli 2026** (Staging Area + perbaikan alur mutasi masuk & review mutasi)
 
 ## Project Identity
 
@@ -462,6 +462,24 @@ DAT itu belum muncul di Monitoring sehingga catatan tidak bisa langsung ditambah
    DAN toko-nya CGA1/2/3 → catatan pindah ke `asset_notes` (Monitoring) + item dihapus dari staging
 5. Tombol "Sinkronkan Sekarang" manual di tab staging untuk trigger sync yang sama
 
+**Perbaikan lanjutan (19 Juli 2026):**
+- kode_asset dari Penerimaan Barang sekarang ikut disimpan ke `surat_jalan_items`
+  (POST & PATCH /api/sj) → muncul di Rekap Alokasi + PDF Surat Penerimaan.
+  Dua jalur PDF diperbaiki: preview setelah submit (`sj/masuk`) dan dari daftar (`sj/list`).
+- **Logika mutasi masuk (terbalik dari keluar):** barang masuk terkonfirmasi
+  "✓ Dimutasi" kalau kode_asset ADA di DAT terbaru (barang sudah kembali ke CGA
+  setelah user mutasi oracle & re-upload DAT). Kebalikan barang keluar (kode HILANG
+  dari DAT). Lock guard PATCH juga reversed untuk masuk. Barang keluar TIDAK diubah.
+- Hapus auto-checklist mutasi Oracle saat isi kode_asset di Rekap Alokasi — ada case
+  user sudah input kode tapi belum bisa mutasi Oracle karena kendala teknis.
+- Staging: AT Lebih (tanpa kode_asset) bisa diisi kode_asset via tombol "+" di badge,
+  agar bisa ikut sync (sebelumnya nyangkut selamanya).
+- Staging: edit catatan tidak lagi refresh seluruh list (update lokal per-item).
+- Staging: item terhapus otomatis saat SJ induknya dihapus (DELETE /api/sj hapus
+  staging by sj_id sebelum hapus SJ — ON DELETE SET NULL bikin item nyangkut).
+- Rekap Alokasi: filter "Review Mutasi" (Semua / Belum Oracle / Belum WT / Belum
+  Keduanya) untuk review cepat item yang belum dimutasi tanpa cari per halaman.
+
 **Match criteria (untuk trigger pindah catatan):** kode_asset ADA di `assets_raw` (DAT terbaru)
 DAN toko mengandung CGA1/2/3. AT Lebih (tanpa kode_asset) tidak pernah ikut sync.
 
@@ -480,23 +498,111 @@ DAN toko mengandung CGA1/2/3. AT Lebih (tanpa kode_asset) tidak pernah ikut sync
 - `fetchKodeAssetCGASet()` helper terpisah (tidak modif `fetchAllKodeAsset` yang dipakai cleanup asset_notes)
 - Pagination loop untuk scan assets_raw (bisa >1000 baris)
 
-**Known issue:** kode_asset yang diinput di Penerimaan Barang belum tampil di PDF Surat Penerimaan
-(dibenerin nanti — kemungkinan SuratPenerimaanPDF/sjPdfHelpers tidak pass kode_asset).
+**Known issue (RESOLVED 19 Juli 2026):** kode_asset di PDF Surat Penerimaan sudah
+tampil — root cause: mapping items ke pdfData men-drop kode_asset di dua tempat
+(sj/masuk & sj/list), plus kode_asset belum tersimpan ke surat_jalan_items. Semua sudah diperbaiki.
 
 ---
 
-## Features Planned
+### ✅ Aktivasi Dashboard Baris 2 — DAT vs LPP per CGA (18 Juni 2026)
+Baris 2 di Dashboard (sebelumnya placeholder "Coming Soon" 3 card per CGA)
+sekarang live, reuse `useReconciliation` hook (tidak ada API/query baru):
 
-### 🎯 Next (Updated 19 Juli 2026)
-- **Live Stock / Budget Stok** — aktual vs budget per jenis per CGA, flag over/under. Budget diinput manual dulu, formula dinamis CGA1/CGA2 dikonfirmasi ke stakeholder
-- **Laporan TA (Bab 3 & 4)** — semua fitur core sudah selesai, saatnya nulis
-- **Integrasi Mutasi WT otomatis** dari LPP — sengaja ditunda
-- **UI minor: tombol "Pakai Template"** dipindah ke sebelahan "Tambah Baris"
-- Kondisi 3 "Aset Intransit" — tidak diimplementasi dalam TA, saran penelitian lanjutan
-- Dark/light mode — ditunda sampai semua fitur core selesai
+- Komponen baru `DATvsLPPCards.tsx` — self-contained, fetch data sendiri
+- Tiap card CGA tampilkan 4 angka: **Total DAT**, **Total LPP**, **Belum
+  Mutasi Oracle** (Kondisi 2, amber), **Belum Mutasi WT** (Kondisi 4, rose)
+- **Lesson learned penting**: awalnya didesain sebagai 1 angka "Selisih"
+  (`Total DAT - Total LPP`), tapi ini SALAH SECARA KONSEPTUAL — user
+  menyadari subtraksi sederhana bisa menyembunyikan masalah nyata. Contoh
+  kasus asli: CGA1 Total DAT 2.675, Total LPP 2.690 → subtraksi = 15
+  (kelihatan kecil), tapi breakdown asli: 178 aset "Belum Mutasi Oracle" +
+  193 aset "Belum Mutasi WT" (dua masalah BEDA, bukan saling meniadakan)
+  = **371 aset** yang sebenarnya butuh tindakan. Subtraksi naive bikin
+  ~356 aset bermasalah jadi tidak kelihatan. **Keputusan final**: tampilkan
+  Kondisi 2 dan Kondisi 4 sebagai 2 angka terpisah, JANGAN pernah
+  digabung/dikurangi jadi 1 angka "selisih"
+- **Deep-link Dashboard → Reconciliation**: angka "Belum Mutasi Oracle"/
+  "Belum Mutasi WT" adalah `<Link>` ke `/reconciliation?kondisi=2&cga=CGA1`
+  (atau `kondisi=4`). Halaman `/reconciliation` baca query param via
+  `useSearchParams` (di `useEffect`, sekali saat mount) dan pre-apply
+  filter kondisi+CGA. Karena `useSearchParams` butuh `Suspense` boundary,
+  komponen di-rename jadi `ReconciliationPageContent` dibungkus
+  `<Suspense>` di default export — pattern yang sama dengan `sj/buat/page.tsx`
+
+**Yang belum dikerjakan:**
+- **Integrasi Mutasi WT otomatis** — sengaja ditunda
+- Kondisi 3 "Aset Intransit" — **tidak diimplementasi dalam TA ini**,
+  dijadikan **saran penelitian lanjutan** (butuh file Report Intransit
+  yang belum diperoleh + di luar boundary penelitian ini)
+- **Export Excel hasil Reconciliation** — belum ada, ini yang paling
+  actionable untuk dilengkapi (bisa reuse pattern export dari Monitoring)
+- Drill-down dari tabel `/reconciliation` ke aksi langsung (Buat SJ WT, dst)
+- Semua gap teknis dari audit 18 Juni sudah resolved/skipped (lihat Known Limitations)
+  **prioritas sesi berikutnya** (konfirmasi user, 18 Juni)
+
+### Reporting Module — Excel Export & PDF
+Status: ✅ Sebagian besar selesai (SJ Rekap Alokasi, Monitoring 3-tabel per CGA, DAT Summary PDF)
+- Monitoring Excel: 3 tabel side-by-side per CGA dengan grouping Kategori→Jenis
+  (tanpa warna — limitasi SheetJS community edition)
+- DAT Summary PDF: page-break + warna per CGA, trigger dari tombol di Monitoring
+- ✅ Export Excel untuk hasil reconciliation — `src/lib/reconciliationExporter.ts` (3 sheet: Ringkasan, Detail, Perlu Tindakan)
+- Kondisi 3 "Aset Intransit" — **tidak diimplementasi dalam TA ini** (saran penelitian lanjutan)
+
+### ✅ Authentication & Role Management (27 Juni 2026)
+Status: ✅ Completed
+
+**Stack:** Supabase Auth (email+password) + `@supabase/ssr` untuk SSR-safe session.
+**Role:** Super Admin dan Admin (Viewer dihapus dari scope).
+**Registration:** Terbuka, tapi status default `pending` — perlu approval Super Admin.
+
+**Tabel `profiles`** (extend `auth.users`):
+- `username`, `nik`, `email`, `role` ('super_admin'|'admin'), `status` ('pending'|'active'|'rejected')
+- Trigger `handle_new_user` — auto-create profile saat user register
+- RLS: `authenticated_read_own` — user hanya bisa baca profile sendiri
+- CRUD oleh Super Admin via service_role key (bypass RLS)
+
+**File-file baru:**
+- `src/lib/supabase-client/client.ts` — browser client (`createBrowserClient`)
+- `src/lib/supabase-client/server.ts` — server client (`createServerClient`)
+- `src/lib/supabase-client/middleware.ts` — session refresh helper
+- `src/proxy.ts` — route protection (Next.js 16 convention, ganti `middleware.ts`)
+- `src/components/SessionContext.tsx` — provider + `useSession` hook (user, profile, role)
+- `src/app/login/page.tsx` — form email + password, cek status pending/active
+- `src/app/register/page.tsx` — form username/NIK/email/password → status pending
+- `src/app/forgot-password/page.tsx` — kirim magic link reset via Supabase
+- `src/app/auth/callback/route.ts` — exchange code untuk session
+- `src/app/auth/reset-password/page.tsx` — set password baru setelah klik link
+- `src/app/admin/users/page.tsx` — halaman Manajemen User (Super Admin only)
+- `src/app/api/admin/users/route.ts` — GET/POST/PATCH/DELETE via `SUPABASE_SERVICE_ROLE_KEY`
+- `src/app/layout.tsx` — wrap dengan `SessionProvider`
+- `src/components/Topbar.tsx` — nama + role dinamis dari session
+- `src/components/Sidebar.tsx` — menu Manajemen User (Super Admin only) + tombol logout
+
+**Fitur Manajemen User (Super Admin):**
+- Lihat semua user + status (pending/active/rejected)
+- Approve / reject / nonaktifkan / aktifkan user
+- Naik/turun role (admin ↔ super_admin)
+- **Tambah User** — modal form, langsung active tanpa email confirmation (bypass rate limit Supabase)
+- **Hapus User** — permanent delete dari auth.users + profiles (cascade)
+
+**Fitur role enforcement:**
+- Tombol hapus SJ di Daftar Surat Jalan — hanya tampil untuk Super Admin
+- Halaman `/admin/users` — auto-redirect ke `/` kalau bukan Super Admin
+
+**Catatan implementasi:**
+- `src/proxy.ts` bukan `middleware.ts` — Next.js 16.2.4 sudah rename konvensi ini
+- Folder `src/lib/supabase-client/` (bukan `supabase/`) — Turbopack error karena nama folder conflict dengan resolusi modul
+- RLS policy rekursif (`super_admin_read_all` yang query profiles dari dalam profiles) menyebabkan semua login gagal — dihindari dengan service_role di API route
+- `SUPABASE_SERVICE_ROLE_KEY` perlu diset di Codespace secrets DAN Vercel environment variables
+
+---
 
 ### LPP Web Tracking Reconciliation (THESIS CORE TOPIC)
-Status: ✅ Tahap 1-3 Implemented (18 Juni 2026) — kurang: Export Excel hasil reconciliation + Kondisi 3 "Aset Intransit" (target jangka panjang / sebagai bahan penelitian lanjutan dan tidak akan dilakukan di penelitian ini)
+Status: ✅ Implemented (18 Juni 2026) — engine 5 kondisi + Export Excel hasil
+reconciliation sudah selesai. Kondisi 3 "Aset Intransit" sengaja TIDAK
+diimplementasi (di luar boundary penelitian, jadi saran penelitian lanjutan —
+butuh file Report Intransit yang belum diperoleh). Integrasi Mutasi WT otomatis
+juga ditunda. Fitur core reconciliation sudah lengkap untuk kebutuhan TA.
 
 **Konteks LPP:**
 - LPP = output dari program Web Tracking (.xls per cost center, file
@@ -583,131 +689,17 @@ ke `main` dengan `--ff-only`, branch lokal & remote sudah dihapus.
   terkait di Rekap Alokasi — drill-down baru sampai level filter, belum
   sampai level aksi
 
-### ✅ Aktivasi Dashboard Baris 2 — DAT vs LPP per CGA (18 Juni 2026)
-Baris 2 di Dashboard (sebelumnya placeholder "Coming Soon" 3 card per CGA)
-sekarang live, reuse `useReconciliation` hook (tidak ada API/query baru):
+---
 
-- Komponen baru `DATvsLPPCards.tsx` — self-contained, fetch data sendiri
-- Tiap card CGA tampilkan 4 angka: **Total DAT**, **Total LPP**, **Belum
-  Mutasi Oracle** (Kondisi 2, amber), **Belum Mutasi WT** (Kondisi 4, rose)
-- **Lesson learned penting**: awalnya didesain sebagai 1 angka "Selisih"
-  (`Total DAT - Total LPP`), tapi ini SALAH SECARA KONSEPTUAL — user
-  menyadari subtraksi sederhana bisa menyembunyikan masalah nyata. Contoh
-  kasus asli: CGA1 Total DAT 2.675, Total LPP 2.690 → subtraksi = 15
-  (kelihatan kecil), tapi breakdown asli: 178 aset "Belum Mutasi Oracle" +
-  193 aset "Belum Mutasi WT" (dua masalah BEDA, bukan saling meniadakan)
-  = **371 aset** yang sebenarnya butuh tindakan. Subtraksi naive bikin
-  ~356 aset bermasalah jadi tidak kelihatan. **Keputusan final**: tampilkan
-  Kondisi 2 dan Kondisi 4 sebagai 2 angka terpisah, JANGAN pernah
-  digabung/dikurangi jadi 1 angka "selisih"
-- **Deep-link Dashboard → Reconciliation**: angka "Belum Mutasi Oracle"/
-  "Belum Mutasi WT" adalah `<Link>` ke `/reconciliation?kondisi=2&cga=CGA1`
-  (atau `kondisi=4`). Halaman `/reconciliation` baca query param via
-  `useSearchParams` (di `useEffect`, sekali saat mount) dan pre-apply
-  filter kondisi+CGA. Karena `useSearchParams` butuh `Suspense` boundary,
-  komponen di-rename jadi `ReconciliationPageContent` dibungkus
-  `<Suspense>` di default export — pattern yang sama dengan `sj/buat/page.tsx`
+## Features Planned
 
-**Yang belum dikerjakan:**
-- **Integrasi Mutasi WT otomatis** — sengaja ditunda
-- Kondisi 3 "Aset Intransit" — **tidak diimplementasi dalam TA ini**,
-  dijadikan **saran penelitian lanjutan** (butuh file Report Intransit
-  yang belum diperoleh + di luar boundary penelitian ini)
-- **Export Excel hasil Reconciliation** — belum ada, ini yang paling
-  actionable untuk dilengkapi (bisa reuse pattern export dari Monitoring)
-- Drill-down dari tabel `/reconciliation` ke aksi langsung (Buat SJ WT, dst)
-- Semua gap teknis dari audit 18 Juni sudah resolved/skipped (lihat Known Limitations)
-  **prioritas sesi berikutnya** (konfirmasi user, 18 Juni)
-
-### ✅ DAT Closing Snapshot (25 Juni 2026)
-Status: ✅ Completed (DAT Closing only — LPP Closing tidak direncanakan)
-
-Strategi: **hanya simpan aggregate metrics per CGA per bulan**, bukan raw rows.
-4666 baris DAT → 3 rows di DB (1 per CGA). Sangat ringan.
-
-**Schema `dat_closing`:**
-```sql
-dat_closing (
-  id uuid PK,
-  bulan TEXT,          -- format YYYY-MM (e.g. "2026-06")
-  cga TEXT,            -- 'CGA1'|'CGA2'|'CGA3'
-  total_items INTEGER, -- count kode_asset
-  total_qty NUMERIC,   -- sum kuantitas
-  total_nilai NUMERIC, -- sum biaya_perolehan
-  total_tercatat NUMERIC, -- sum jumlah_tercatat
-  uploaded_at TIMESTAMPTZ,
-  UNIQUE(bulan, cga)   -- upsert-friendly
-)
-```
-
-**Mekanisme upload (`UploadClosingSection`):**
-- User pilih bulan (month picker, default = bulan lalu)
-- Upload file DAT (.txt) — format identik dengan DAT monitoring
-- Parser hitung aggregate per CGA client-side (ekstrak CGA dari field `toko`)
-- Preview stats (total item, qty, nilai, tercatat) sebelum submit
-- POST ke `/api/closing` — upsert by bulan+cga (upload ulang = timpa)
-- Raw data di-discard, hanya 3 rows yang tersimpan di DB
-
-**Dashboard Baris 3 — Trend CGA (`TrendCGACards`):**
-- Line chart 3 garis (CGA1 emerald, CGA2 amber, CGA3 rose) dari `recharts`
-- Toggle 4 metric: Item / Qty / Nilai Perolehan / Tercatat (default: Item)
-- Export Excel 1 sheet semua metric (12 kolom: 3 CGA × 4 metric)
-- Empty state dengan link ke `/upload` kalau belum ada data closing
-
-### Reporting Module — Excel Export & PDF
-Status: ✅ Sebagian besar selesai (SJ Rekap Alokasi, Monitoring 3-tabel per CGA, DAT Summary PDF)
-- Monitoring Excel: 3 tabel side-by-side per CGA dengan grouping Kategori→Jenis
-  (tanpa warna — limitasi SheetJS community edition)
-- DAT Summary PDF: page-break + warna per CGA, trigger dari tombol di Monitoring
-- ✅ Export Excel untuk hasil reconciliation — `src/lib/reconciliationExporter.ts` (3 sheet: Ringkasan, Detail, Perlu Tindakan)
-- Kondisi 3 "Aset Intransit" — **tidak diimplementasi dalam TA ini** (saran penelitian lanjutan)
-
-### ✅ Authentication & Role Management (27 Juni 2026)
-Status: ✅ Completed
-
-**Stack:** Supabase Auth (email+password) + `@supabase/ssr` untuk SSR-safe session.
-**Role:** Super Admin dan Admin (Viewer dihapus dari scope).
-**Registration:** Terbuka, tapi status default `pending` — perlu approval Super Admin.
-
-**Tabel `profiles`** (extend `auth.users`):
-- `username`, `nik`, `email`, `role` ('super_admin'|'admin'), `status` ('pending'|'active'|'rejected')
-- Trigger `handle_new_user` — auto-create profile saat user register
-- RLS: `authenticated_read_own` — user hanya bisa baca profile sendiri
-- CRUD oleh Super Admin via service_role key (bypass RLS)
-
-**File-file baru:**
-- `src/lib/supabase-client/client.ts` — browser client (`createBrowserClient`)
-- `src/lib/supabase-client/server.ts` — server client (`createServerClient`)
-- `src/lib/supabase-client/middleware.ts` — session refresh helper
-- `src/proxy.ts` — route protection (Next.js 16 convention, ganti `middleware.ts`)
-- `src/components/SessionContext.tsx` — provider + `useSession` hook (user, profile, role)
-- `src/app/login/page.tsx` — form email + password, cek status pending/active
-- `src/app/register/page.tsx` — form username/NIK/email/password → status pending
-- `src/app/forgot-password/page.tsx` — kirim magic link reset via Supabase
-- `src/app/auth/callback/route.ts` — exchange code untuk session
-- `src/app/auth/reset-password/page.tsx` — set password baru setelah klik link
-- `src/app/admin/users/page.tsx` — halaman Manajemen User (Super Admin only)
-- `src/app/api/admin/users/route.ts` — GET/POST/PATCH/DELETE via `SUPABASE_SERVICE_ROLE_KEY`
-- `src/app/layout.tsx` — wrap dengan `SessionProvider`
-- `src/components/Topbar.tsx` — nama + role dinamis dari session
-- `src/components/Sidebar.tsx` — menu Manajemen User (Super Admin only) + tombol logout
-
-**Fitur Manajemen User (Super Admin):**
-- Lihat semua user + status (pending/active/rejected)
-- Approve / reject / nonaktifkan / aktifkan user
-- Naik/turun role (admin ↔ super_admin)
-- **Tambah User** — modal form, langsung active tanpa email confirmation (bypass rate limit Supabase)
-- **Hapus User** — permanent delete dari auth.users + profiles (cascade)
-
-**Fitur role enforcement:**
-- Tombol hapus SJ di Daftar Surat Jalan — hanya tampil untuk Super Admin
-- Halaman `/admin/users` — auto-redirect ke `/` kalau bukan Super Admin
-
-**Catatan implementasi:**
-- `src/proxy.ts` bukan `middleware.ts` — Next.js 16.2.4 sudah rename konvensi ini
-- Folder `src/lib/supabase-client/` (bukan `supabase/`) — Turbopack error karena nama folder conflict dengan resolusi modul
-- RLS policy rekursif (`super_admin_read_all` yang query profiles dari dalam profiles) menyebabkan semua login gagal — dihindari dengan service_role di API route
-- `SUPABASE_SERVICE_ROLE_KEY` perlu diset di Codespace secrets DAN Vercel environment variables
+### 🎯 Next (Updated 19 Juli 2026)
+- **Live Stock / Budget Stok** — aktual vs budget per jenis per CGA, flag over/under. Budget diinput manual dulu, formula dinamis CGA1/CGA2 dikonfirmasi ke stakeholder
+- **Laporan TA (Bab 3 & 4)** — semua fitur core sudah selesai, saatnya nulis
+- **Integrasi Mutasi WT otomatis** dari LPP — sengaja ditunda
+- **UI minor: tombol "Pakai Template"** dipindah ke sebelahan "Tambah Baris"
+- Kondisi 3 "Aset Intransit" — tidak diimplementasi dalam TA, saran penelitian lanjutan
+- Dark/light mode — ditunda sampai semua fitur core selesai
 
 ### DB Optimization (Deferred)
 Status: 📌 Deferred — sampai semua fitur selesai
@@ -1408,6 +1400,17 @@ Proyeksi: ~117 KB/bulan dari tabel SJ (estimasi 50 SJ × 8 item). Butuh **ratusa
 
 # 10. Recent Major Changes Log
 
+
+## 19 Juli 2026 (lanjutan) — Perbaikan Alur Mutasi Masuk & Review Mutasi
+- kode_asset Penerimaan disimpan ke surat_jalan_items → muncul di Rekap Alokasi + PDF
+- PDF Surat Penerimaan kode_asset fix (mapping di sj/masuk & sj/list drop kode_asset)
+- Logika mutasi masuk terbalik: lock "✓ Dimutasi" kalau kode ADA di DAT (barang kembali).
+  Barang keluar TIDAK diubah (kode HILANG dari DAT = mutasi keluar)
+- Hapus auto-checklist mutasi Oracle saat isi kode_asset di Rekap Alokasi
+- Filter "Review Mutasi" di Rekap Alokasi (Belum Oracle/WT/Keduanya)
+- Staging: AT Lebih bisa diisi kode_asset via tombol "+"
+- Staging: edit catatan update lokal (tidak refresh seluruh list)
+- Staging: item terhapus otomatis saat SJ induknya dihapus
 
 ## 19 Juli 2026 — Staging Area (DAT Masuk dari Luar CGA)
 - Tabel staging_area (kode_asset nullable, is_at_lebih flag, ref SJ masuk)

@@ -68,24 +68,8 @@ export async function GET() {
     //   K1. kode_asset diinput DAN tidak ada di DAT (mutasi confirmed by system)
     //   K2. mutasi_oracle_status = true DAN kode_asset kosong
     //       (user konfirmasi manual tanpa kode aset — admin Oracle pakai Excel sendiri)
-    //
-    // BARANG MASUK — logika TERBALIK dari keluar:
-    //   Barang keluar: kode HILANG dari DAT = mutasi confirmed (barang sudah keluar).
-    //   Barang masuk:  kode ADA di DAT     = mutasi confirmed (barang sudah kembali
-    //                  ke CGA, muncul di DAT setelah user mutasi oracle & re-upload).
-    function computeIsMutated(kode: string, mutasi: boolean, jenisSJ: string): boolean {
+    function computeIsMutated(kode: string, mutasi: boolean): boolean {
       const k = (kode ?? '').trim()
-
-      if (jenisSJ === 'masuk') {
-        // Reversed K1 — barang masuk terkonfirmasi kalau kode ADA di DAT terbaru
-        if (k) {
-          return activeKodeSet !== null && activeKodeSet.has(k)
-        }
-        // K2 — kode kosong tapi user konfirmasi manual
-        return !!mutasi
-      }
-
-      // Barang keluar (default — JANGAN diubah):
       if (k) {
         // K1 — hanya berlaku kalau DAT sudah ada (hasDAT)
         return activeKodeSet !== null && !activeKodeSet.has(k)
@@ -115,7 +99,7 @@ export async function GET() {
         keterangan:      it.keterangan ?? '',
         mutasi_oracle:   !!it.mutasi_oracle_status,
         kode_asset:      it.kode_asset ?? '',
-        is_mutated:      computeIsMutated(it.kode_asset, !!it.mutasi_oracle_status, sj?.jenis === 'masuk' ? 'masuk' : 'keluar'),
+        is_mutated:      computeIsMutated(it.kode_asset, !!it.mutasi_oracle_status),
         mutasi_wt:       !!it.mutasi_wt_status,
         // SJ info
         sj_id:           sj?.id,
@@ -179,31 +163,25 @@ export async function PATCH(req: Request) {
     const newKode = (kode_asset ?? '').trim()
 
     // ── 1. Ambil state lama untuk deteksi perubahan + lock guard ────────────
-    // Join ke surat_jalan untuk tau jenis (masuk/keluar) — barang masuk tidak
-    // kena lock by DAT (logika terbalik).
     const { data: oldItem, error: fetchErr } = await supabase
       .from('surat_jalan_items')
-      .select('kode_asset, sj:surat_jalan!inner(jenis)')
+      .select('kode_asset')
       .eq('id', item_id)
       .single()
 
     if (fetchErr) throw new Error(fetchErr.message)
     const oldKode = (oldItem?.kode_asset ?? '').trim()
-    const oldSJ = Array.isArray((oldItem as any)?.sj) ? (oldItem as any).sj[0] : (oldItem as any)?.sj
-    const isJenisMasuk = oldSJ?.jenis === 'masuk'
 
     // ── Lock guard (server-side) ────────────────────────────────────────────
     // UI sudah disable input untuk item terkunci, tapi guard ini mencegah
     // bypass via request langsung. Evaluasi pakai state LAMA (sebelum update).
     //
-    // Lock by DAT — arah tergantung jenis SJ:
-    //   Keluar (K1): oldKode ada DAN TIDAK ada di assets_raw → mutasi keluar
-    //     confirmed → TOLAK perubahan.
-    //   Masuk (reversed K1): oldKode ada DAN ADA di assets_raw → mutasi masuk
-    //     confirmed (barang sudah kembali ke CGA) → TOLAK perubahan.
+    // Lock by DAT (K1): oldKode ada DAN tidak ada di assets_raw → mutasi
+    //   confirmed by system → TOLAK perubahan.
     //
     //   PENGECUALIAN: kalau user mau RESET (newKode kosong + mutasi false),
     //   selalu izinkan. Ini recovery path — user typo kode lalu hapus.
+    //   Tanpa pengecualian ini, typo jadi lock permanen yang tidak bisa dibuka.
     //
     // Lock by manual (K2): izinkan lewat — escape hatch "batalkan" di UI.
     const isReset = !newKode && !mutasi_oracle_status
@@ -219,18 +197,11 @@ export async function PATCH(req: Request) {
         .select('*', { count: 'exact', head: true })
 
       const hasDAT = (datCount ?? 0) > 0
-      // Keluar: terkunci kalau kode HILANG dari DAT.
-      // Masuk:  terkunci kalau kode ADA di DAT (logika terbalik).
-      const lockedByDAT = isJenisMasuk
-        ? hasDAT && !!rawExists?.id
-        : hasDAT && !rawExists?.id
+      const lockedByDAT = hasDAT && !rawExists?.id
 
       if (lockedByDAT) {
-        const msg = isJenisMasuk
-          ? 'Item sudah dimutasi masuk (kode sudah ada di DAT) dan terkunci permanen.'
-          : 'Item sudah dimutasi (kode hilang dari DAT) dan terkunci permanen.'
         return NextResponse.json(
-          { error: msg, locked: true },
+          { error: 'Item sudah dimutasi (kode hilang dari DAT) dan terkunci permanen.', locked: true },
           { status: 409 }
         )
       }

@@ -289,7 +289,6 @@ const PreviewWrapper = memo(({ sjId, title, onClose }: PreviewWrapperProps) => {
       is_baru:       !!it.is_baru,
       is_aktiva:     !!it.is_aktiva,
       keterangan:    it.keterangan ?? "",
-      kode_asset:    it.kode_asset ?? "",
     })),
   };
 
