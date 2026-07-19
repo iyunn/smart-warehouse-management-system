@@ -3,7 +3,7 @@
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **19 Juli 2026** (Staging Area — DAT masuk dari luar CGA)
+> Terakhir diupdate: **27 Juni 2026** (Sistem Autentikasi Supabase Auth + CRUD User)
 
 ## Project Identity
 
@@ -446,48 +446,9 @@ tidak ada fitur yang sedang dikerjakan saat ini
 
 ---
 
-### ✅ Staging Area — DAT Masuk dari Luar CGA (19 Juli 2026)
-Status: ✅ Completed (Tahap 1-3)
-
-**Tujuan:** Menampung DAT dari luar CGA yang fisiknya dikembalikan ke CGA
-(via Penerimaan Barang / SJ jenis 'masuk'). User bisa menambahkan catatan pada
-DAT tersebut SEBELUM DAT terbaru di-upload — karena kalau belum di-reupload,
-DAT itu belum muncul di Monitoring sehingga catatan tidak bisa langsung ditambahkan.
-
-**Alur lengkap:**
-1. User buat SJ Penerimaan Barang (jenis masuk) → tiap item otomatis masuk `staging_area`
-2. Ada kode_asset → item normal. Kosong → flag `is_at_lebih` ("AT Lebih" = aktiva tidak beridentitas)
-3. Tab "Staging" di Monitoring → user lihat & tambah catatan pada item staging
-4. Saat upload DAT baru → sistem cek: kalau kode_asset staging ADA di DAT baru
-   DAN toko-nya CGA1/2/3 → catatan pindah ke `asset_notes` (Monitoring) + item dihapus dari staging
-5. Tombol "Sinkronkan Sekarang" manual di tab staging untuk trigger sync yang sama
-
-**Match criteria (untuk trigger pindah catatan):** kode_asset ADA di `assets_raw` (DAT terbaru)
-DAN toko mengandung CGA1/2/3. AT Lebih (tanpa kode_asset) tidak pernah ikut sync.
-
-**File-file:**
-- `src/app/api/staging/route.ts` — GET (list), PATCH (edit catatan), DELETE (hapus manual), POST action=sync
-- `src/hooks/useStaging.ts` — hook fetch staging + type `StagingItem`
-- `src/components/StagingTab.tsx` — tab Staging (tabel, catatan editable on-blur, tombol sync, info panel)
-- `src/components/sj/SJItemsTableMasuk.tsx` — tabel Penerimaan Barang dengan kolom Kode Aset + AT
-  (grid pakai inline `gridTemplateColumns`, bukan Tailwind arbitrary class — v4 JIT tidak generate untuk komponen baru)
-- `src/app/api/sj/route.ts` — POST auto-insert ke staging saat jenis masuk (asal_toko dari sj_tujuan)
-- `src/app/api/process/route.ts` — auto-sync staging → asset_notes saat upload DAT (di blok isLastBatch)
-- `src/app/sj/masuk/page.tsx` — pakai SJItemsTableMasuk (ganti SJItemsTable)
-
-**Catatan teknis:**
-- Auto-sync di process route best-effort (try/catch) — kalau gagal, upload DAT tetap sukses
-- `fetchKodeAssetCGASet()` helper terpisah (tidak modif `fetchAllKodeAsset` yang dipakai cleanup asset_notes)
-- Pagination loop untuk scan assets_raw (bisa >1000 baris)
-
-**Known issue:** kode_asset yang diinput di Penerimaan Barang belum tampil di PDF Surat Penerimaan
-(dibenerin nanti — kemungkinan SuratPenerimaanPDF/sjPdfHelpers tidak pass kode_asset).
-
----
-
 ## Features Planned
 
-### 🎯 Next (Updated 19 Juli 2026)
+### 🎯 Next (Updated 27 Juni 2026)
 - **Live Stock / Budget Stok** — aktual vs budget per jenis per CGA, flag over/under. Budget diinput manual dulu, formula dinamis CGA1/CGA2 dikonfirmasi ke stakeholder
 - **Laporan TA (Bab 3 & 4)** — semua fitur core sudah selesai, saatnya nulis
 - **Integrasi Mutasi WT otomatis** dari LPP — sengaja ditunda
@@ -1059,28 +1020,6 @@ Super Admin operasi via service_role key di API route (bypass RLS).
 
 ---
 
-## staging_area
-
-Menampung DAT dari luar CGA yang fisiknya dikembalikan ke CGA (via Penerimaan
-Barang / SJ jenis 'masuk'). User bisa menambahkan catatan pada item di sini
-sebelum DAT terbaru di-upload. Saat upload DAT baru, kalau kode_asset staging
-muncul di DAT + lokasi CGA → catatan pindah ke `asset_notes`, item dihapus dari staging.
-
-Field utama:
-- `id` (uuid, PK)
-- `kode_asset` (text, NULLABLE) — kosong = "AT Lebih" (aktiva tidak beridentitas)
-- `jenis`, `merk`, `deskripsi` (text) — info barang dari SJ item
-- `catatan` (text) — catatan yang diinput user di tab Staging
-- `asal_toko` (text) — toko asal (dari sj_tujuan SJ masuk)
-- `is_at_lebih` (boolean) — true kalau tidak ada kode_asset
-- `sj_id` (uuid, FK → surat_jalan ON DELETE SET NULL) — referensi SJ masuk
-- `tanggal_masuk` (date), `created_at`, `updated_at` (timestamptz)
-
-RLS: `allow_all_staging` (PERMISSIVE, ALL, true/true).
-Growth: hanya bertambah saat Penerimaan Barang, berkurang saat sync. Tidak jadi masalah storage.
-
----
-
 ## sj_item_templates
 
 Template kombinasi item SJ yang sering berulang (mis. paket "SDN") — bisa
@@ -1192,7 +1131,6 @@ src/
 │       ├── closing/route.ts            GET/POST dat_closing (upsert aggregate per CGA per bulan)
 │       ├── reconciliation/route.ts   Engine 4 kondisi (set ops by kode_asset, extractCGACode untuk badge)
 │       └── admin/users/route.ts        GET/POST/PATCH/DELETE profiles via service_role (bypass RLS)
-│       └── staging/route.ts            GET/PATCH/DELETE/POST(sync) staging_area
 │       ├── lpp/
 │       │   ├── clear/route.ts        DELETE semua lpp_raw (full replace)
 │       │   ├── process/route.ts      Batch insert lpp_raw
@@ -1235,11 +1173,9 @@ src/
 │   │   ├── TrendCGACards.tsx         Baris 3 (live sejak 25 Juni, line chart dari dat_closing, toggle 4 metric + export Excel)
 │   │   └── PlaceholderCards.tsx      Baris 5 (Baris 2 & 3 sudah live)
 │   │
-│   ├── StagingTab.tsx                Tab Staging di Monitoring (catatan editable, tombol sync, info panel)
 │   ├── sj/
 │   │   ├── SearchableDropdown.tsx    Portal-based
-│   │   ├── SJItemsTable.tsx          + SatuanSelect inline, dipakai juga di editor Template Item
-│   │   └── SJItemsTableMasuk.tsx     Tabel Penerimaan Barang (kolom Kode Aset + AT, grid inline style)
+│   │   └── SJItemsTable.tsx          + SatuanSelect inline, dipakai juga di editor Template Item
 │   │
 │   └── reports/
 │       ├── DATSummaryDocument.tsx    Page-break per CGA, styling warna per CGA
@@ -1255,8 +1191,7 @@ src/
 │   ├── useReconciliation.ts          Fetch hasil reconciliation 5 kondisi (incl. K6 Mismatch CGA)
 │   ├── useSJList.ts                  + is_archived, jenis
 │   ├── useSJReport.ts                + mutasi_wt, is_mutated, jenis_sj
-│   ├── useSJMaster.ts                4 hooks: jenis/merk/tujuan/templates
-│   └── useStaging.ts                 Fetch staging_area + type StagingItem
+│   └── useSJMaster.ts                4 hooks: jenis/merk/tujuan/templates
 │
 └── lib/
     ├── classifier.ts                 Word boundary matching
@@ -1408,19 +1343,6 @@ Proyeksi: ~117 KB/bulan dari tabel SJ (estimasi 50 SJ × 8 item). Butuh **ratusa
 
 # 10. Recent Major Changes Log
 
-
-## 19 Juli 2026 — Staging Area (DAT Masuk dari Luar CGA)
-- Tabel staging_area (kode_asset nullable, is_at_lebih flag, ref SJ masuk)
-- API /api/staging: GET, PATCH catatan, DELETE, POST action=sync
-- Hook useStaging + type StagingItem
-- SJItemsTableMasuk: tabel Penerimaan Barang dengan kolom Kode Aset + AT
-  (grid inline gridTemplateColumns, bukan Tailwind arbitrary class)
-- SJ POST auto-insert ke staging saat jenis masuk (asal_toko dari sj_tujuan)
-- StagingTab: tab baru di Monitoring, catatan editable on-blur, tombol Sinkronkan
-- Auto-sync di /api/process saat upload DAT (isLastBatch) — catatan pindah ke
-  asset_notes untuk item yang kode_asset-nya ada di DAT + toko CGA1/2/3, best-effort
-- Match: kode_asset ADA di assets_raw + toko CGA. AT Lebih tidak ikut sync
-- Known issue: kode_asset belum tampil di PDF Surat Penerimaan (dibenerin nanti)
 
 ## 27 Juni 2026 — Sistem Autentikasi Supabase Auth + CRUD User
 - Supabase Auth (email+password) + @supabase/ssr untuk SSR-safe session
