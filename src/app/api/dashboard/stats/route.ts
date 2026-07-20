@@ -7,6 +7,108 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+// Ambil SEMUA item AT (is_aktiva) dari SJ keluar submitted+completed untuk
+// Card 1 (Progres Mutasi). Pakai pagination range loop — PostgREST diam-diam
+// truncate 1000 baris meski .limit() diset lebih besar, terutama saat ada
+// join !inner. Tanpa loop ini, progres mutasi cuma menghitung 1000 item
+// pertama (bug: total AT mentok di 1.000 padahal aslinya lebih).
+async function fetchAllATItems(): Promise<{ mutasi_oracle_status: boolean; tanggal: string | null }[]> {
+  const all: { mutasi_oracle_status: boolean; tanggal: string | null }[] = []
+  let from = 0
+  const FETCH_SIZE = 1000
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('surat_jalan_items')
+      .select(`mutasi_oracle_status, sj:surat_jalan!inner(tanggal, status, jenis)`)
+      .eq('is_aktiva', true)
+      .range(from, from + FETCH_SIZE - 1)
+
+    if (error) throw new Error(error.message)
+    const batch = data ?? []
+
+    for (const it of batch) {
+      const sj = Array.isArray((it as any).sj) ? (it as any).sj[0] : (it as any).sj
+      // Hanya SJ keluar submitted/completed (barang benar-benar keluar CGA).
+      // SJ masuk & draft tidak dihitung dalam progres mutasi keluar.
+      if (!sj) continue
+      if (sj.jenis === 'masuk') continue
+      if (sj.status !== 'submitted' && sj.status !== 'completed') continue
+      all.push({
+        mutasi_oracle_status: !!(it as any).mutasi_oracle_status,
+        tanggal: sj.tanggal ?? null,
+      })
+    }
+
+    if (batch.length < FETCH_SIZE) break
+    from += FETCH_SIZE
+    if (from > 200000) break // safety guard
+  }
+
+  return all
+}
+
+// Ekstrak kode CGA dari toko pakai regex — SAMA seperti monitoring
+// (extractCGACode). Sebelumnya dashboard pakai toko.split(' - ')[0] yang
+// fragile (tergantung format persis), bikin angka beda dengan monitoring.
+function extractCGACode(toko: string): string {
+  const match = (toko ?? '').match(/CGA\d/i)
+  return match ? match[0].toUpperCase() : (toko ?? 'Unknown')
+}
+
+interface CGABreakdown {
+  code: string
+  label: string
+  items: number
+  qty: number
+  perolehan: number
+  tercatat: number
+}
+
+// Breakdown aset per CGA — pagination range loop (assets_raw bisa >1000 baris,
+// .limit(10000) polos bisa kena truncate senyap 1000 dari PostgREST). Angka
+// harus SAMA dengan halaman Monitoring, jadi hitung dari sumber yang SAMA:
+// assets_clean join assets_raw!inner (monitoring pakai ini, bukan assets_raw polos).
+async function fetchBreakdownPerCGA(): Promise<CGABreakdown[]> {
+  const map = new Map<string, CGABreakdown>()
+  let from = 0
+  const FETCH_SIZE = 1000
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('assets_clean')
+      .select(`id, raw:assets_raw!inner(toko, kuantitas, biaya_perolehan, jumlah_tercatat)`)
+      .range(from, from + FETCH_SIZE - 1)
+
+    if (error) throw new Error(error.message)
+    const batch = data ?? []
+
+    for (const row of batch) {
+      const raw = Array.isArray((row as any).raw) ? (row as any).raw[0] : (row as any).raw
+      if (!raw) continue
+      const code = extractCGACode(raw.toko)
+      if (!map.has(code)) {
+        map.set(code, {
+          code,
+          label: (WAREHOUSE_LABELS as any)[code] ?? code,
+          items: 0, qty: 0, perolehan: 0, tercatat: 0,
+        })
+      }
+      const b = map.get(code)!
+      b.items += 1
+      b.qty += raw.kuantitas ?? 0
+      b.perolehan += raw.biaya_perolehan ?? 0
+      b.tercatat += raw.jumlah_tercatat ?? 0
+    }
+
+    if (batch.length < FETCH_SIZE) break
+    from += FETCH_SIZE
+    if (from > 200000) break
+  }
+
+  return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code))
+}
+
 export async function GET() {
   try {
     // ── Hitung rentang bulan berjalan untuk Card 3 (daily shipment) ─────────
@@ -31,8 +133,6 @@ export async function GET() {
       // Barang AT yang belum dicentang mutasi WT
       belumMutasiWTResult,
       // ── Rekap Pengiriman ──────────────────────────────────────────────────
-      // Card 1: semua AT items (tanpa filter tanggal) untuk mutasi progress
-      atItemsResult,
       // Card 2: SJ IDs bulan berjalan untuk top jenis
       assetsCleanJenisResult,
       // Card 3: SJ bulan berjalan berbasis WIB untuk daily shipment
@@ -50,10 +150,9 @@ export async function GET() {
         .limit(1)
         .single(),
 
-      // Ambil minimal field untuk breakdown per CGA
-      supabase.from('assets_raw')
-        .select('toko, kuantitas, biaya_perolehan, jumlah_tercatat')
-        .limit(10000),
+      // Breakdown per CGA dipindah ke fetchBreakdownPerCGA() (pagination loop).
+      // Placeholder null agar posisi destructuring Promise.all tetap.
+      Promise.resolve({ data: null }),
 
       // Belum input kode aset: item AT, kode_asset NULL
       supabase.from('surat_jalan_items')
@@ -73,23 +172,8 @@ export async function GET() {
         .eq('is_aktiva', true)
         .eq('mutasi_wt_status', false),
 
-      // AT items dari SJ status submitted+completed — ALL time untuk Card 1 (mutasi progress).
-      // Ambil semua item tanpa filter tanggal karena mutasi progress perlu data keseluruhan.
-      supabase.from('surat_jalan_items')
-        .select(`
-          mutasi_oracle_status,
-          sj:surat_jalan!inner (tanggal, status)
-        `)
-        .eq('is_aktiva', true)
-        .limit(50000),
-
-      // SJ bulan berjalan untuk Card 3 (daily shipment) — filter tanggal di DB langsung
-      // menggunakan todayIso berbasis WIB agar tidak off-by-one saat tengah malam.
-      supabase.from('surat_jalan')
-        .select('id, tanggal')
-        .in('status', ['submitted', 'completed'])
-        .gte('tanggal', monthStartIso)
-        .lte('tanggal', todayIso),
+      // (Card 1 mutasi progress dipindah ke fetchAllATItems() dengan pagination
+      //  loop — tidak lagi di Promise.all karena butuh range loop, bukan 1 query.)
 
       // Card 2 source: fetch SJ IDs bulan berjalan dulu (2-step) untuk filter
       // tanggal yang reliable — filter via join PostgREST tidak reliable.
@@ -100,38 +184,20 @@ export async function GET() {
         .in('status', ['submitted', 'completed'])
         .gte('tanggal', monthStartIso)
         .lte('tanggal', todayIso),
+
+      // SJ bulan berjalan untuk Card 3 (daily shipment) — filter tanggal di DB langsung
+      // menggunakan todayIso berbasis WIB agar tidak off-by-one saat tengah malam.
+      supabase.from('surat_jalan')
+        .select('id, tanggal')
+        .in('status', ['submitted', 'completed'])
+        .gte('tanggal', monthStartIso)
+        .lte('tanggal', todayIso),
     ])
 
     // ── Aggregate per cost center ───────────────────────────────────────────
-    type CGAStats = {
-      code: string
-      label: string
-      items: number
-      qty: number
-      perolehan: number
-      tercatat: number
-    }
-    const breakdownMap = new Map<string, CGAStats>()
-
-    for (const row of (assetsForBreakdownResult.data ?? [])) {
-      const toko = row.toko ?? 'Unknown'
-      const code = toko.split(' - ')[0]?.trim() ?? toko
-
-      if (!breakdownMap.has(code)) {
-        breakdownMap.set(code, {
-          code,
-          label: (WAREHOUSE_LABELS as any)[code] ?? code,
-          items: 0, qty: 0, perolehan: 0, tercatat: 0,
-        })
-      }
-      const b = breakdownMap.get(code)!
-      b.items += 1
-      b.qty += row.kuantitas ?? 0
-      b.perolehan += row.biaya_perolehan ?? 0
-      b.tercatat += row.jumlah_tercatat ?? 0
-    }
-
-    const breakdown = Array.from(breakdownMap.values()).sort((a, b) => a.code.localeCompare(b.code))
+    // Pakai fetchBreakdownPerCGA() — pagination loop + extractCGACode regex,
+    // angka SAMA dengan halaman Monitoring.
+    const breakdown = await fetchBreakdownPerCGA()
 
     // ════════════════════════════════════════════════════════════════════════
     // Rekap Pengiriman processing
@@ -140,18 +206,19 @@ export async function GET() {
     // ── Card 1: Mutasi Progress ─────────────────────────────────────────────
     // Total AT yang keluar (SJ submitted+completed) vs yang sudah mutasi.
     // Terlama: cari item belum mutasi dengan tanggal SJ paling lama (hari).
+    // Data via fetchAllATItems() — pagination loop, tidak mentok di 1000.
+    const atItems = await fetchAllATItems()
     let mutasiTotalAT = 0
     let mutasiSudah = 0
     let oldestUnmutatedDate: string | null = null
 
-    for (const it of (atItemsResult.data ?? [])) {
+    for (const it of atItems) {
       mutasiTotalAT += 1
       if (it.mutasi_oracle_status) {
         mutasiSudah += 1
       } else {
         // Item belum mutasi — track tanggal SJ-nya untuk cari yang terlama
-        const sj = Array.isArray(it.sj) ? it.sj[0] : it.sj
-        const tgl = sj?.tanggal as string | undefined
+        const tgl = it.tanggal ?? undefined
         if (tgl && (!oldestUnmutatedDate || tgl < oldestUnmutatedDate)) {
           oldestUnmutatedDate = tgl
         }
@@ -210,18 +277,33 @@ export async function GET() {
 
     const dailyMap = new Map<string, number>()
     if (sjBulanIds.length > 0) {
-      const BATCH = 500
+      const sjBulanIdSet = new Set(sjBulanIds)
+      // Range loop penuh pada surat_jalan_items — hitung item per SJ bulan ini.
+      // Pakai .in() per batch 300 sj_id DAN range loop di dalamnya, karena satu
+      // batch bisa menghasilkan >1000 item (PostgREST truncate senyap 1000).
+      const BATCH = 300
       for (let i = 0; i < sjBulanIds.length; i += BATCH) {
         const batchIds = sjBulanIds.slice(i, i + BATCH)
-        const { data: batchItems } = await supabase
-          .from('surat_jalan_items')
-          .select('sj_id')
-          .in('sj_id', batchIds)
+        let from = 0
+        const FETCH_SIZE = 1000
+        while (true) {
+          const { data: batchItems } = await supabase
+            .from('surat_jalan_items')
+            .select('sj_id')
+            .in('sj_id', batchIds)
+            .range(from, from + FETCH_SIZE - 1)
 
-        for (const row of (batchItems ?? [])) {
-          const tgl = sjTanggalMap.get(row.sj_id)
-          if (!tgl) continue
-          dailyMap.set(tgl, (dailyMap.get(tgl) ?? 0) + 1)
+          const rows = batchItems ?? []
+          for (const row of rows) {
+            if (!sjBulanIdSet.has((row as any).sj_id)) continue
+            const tgl = sjTanggalMap.get((row as any).sj_id)
+            if (!tgl) continue
+            dailyMap.set(tgl, (dailyMap.get(tgl) ?? 0) + 1)
+          }
+
+          if (rows.length < FETCH_SIZE) break
+          from += FETCH_SIZE
+          if (from > 200000) break
         }
       }
     }

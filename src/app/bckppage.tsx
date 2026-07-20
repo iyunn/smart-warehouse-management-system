@@ -7,6 +7,9 @@ import CGASummaryCards from "@/components/dashboard/CGASummaryCards";
 import RekapPengirimanCards from "@/components/dashboard/RekapPengirimanCards";
 import DATvsLPPCards from "@/components/dashboard/DATvsLPPCards";
 import TrendCGACards from "@/components/dashboard/TrendCGACards";
+import {
+  ClosingVsUpdatePlaceholder,
+} from "@/components/dashboard/PlaceholderCards";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 
 export default function DashboardPage() {
@@ -40,6 +43,9 @@ export default function DashboardPage() {
             <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-2">Ringkasan Aset per Gudang</p>
             <CGASummaryCards breakdown={data?.breakdown ?? []} loading={loading} />
           </div>
+
+          {/* Baris 5: Closing vs Update (placeholder) */}
+          <ClosingVsUpdatePlaceholder />
 
           {/* Baris 6: Rekap Pengiriman (LIVE) */}
           <div>

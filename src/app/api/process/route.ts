@@ -147,7 +147,12 @@ export async function POST(req: Request) {
     // DELETE sudah dilakukan sekali via POST /api/process/clear
     // sebelum batch pertama dikirim dari UploadSection.tsx.
     const BATCH_SIZE = 500
-    const rawRows = classifiedData.map(({ raw }: any) => raw)
+    // Set uploaded_at eksplisit dengan SATU timestamp untuk semua batch —
+    // samakan mekanisme dengan LPP (yang set new Date().toISOString() saat
+    // insert). Tanpa ini, DAT mengandalkan default DB now() yang beda per
+    // batch → timestamp freshness DAT tidak akurat/tidak sinkron dengan LPP.
+    const uploadedAt = new Date().toISOString()
+    const rawRows = classifiedData.map(({ raw }: any) => ({ ...raw, uploaded_at: uploadedAt }))
 
     let allInsertedRaw: { id: string; kode_asset: string }[] = []
 
@@ -211,21 +216,44 @@ export async function POST(req: Request) {
     // batch sebelumnya sudah commit ke DB — re-apply tag di tengah upload
     // tidak ada gunanya (sebagian besar assets_clean belum ada).
     if (isLastBatch) {
-      const { data: allocatedItems } = await supabase
+      // Ambil kode_asset + jenis + tanggal via join ke surat_jalan.
+      // Satu kode_asset bisa muncul berkali-kali (keluar → masuk → keluar lagi).
+      // Yang menentukan tag adalah transaksi TERAKHIR (tanggal terbaru):
+      //   - terakhir 'keluar' → barang sedang keluar CGA → tag Allocated
+      //   - terakhir 'masuk'  → barang sudah balik ke CGA → JANGAN tag
+      // Tanpa ini, barang yang keluar-lalu-balik akan salah ter-tag Allocated
+      // padahal fisiknya sudah kembali (bug konflik keluar/masuk).
+      const { data: allocRows } = await supabase
         .from('surat_jalan_items')
-        .select('kode_asset')
+        .select('kode_asset, sj:surat_jalan!inner(tanggal, jenis, created_at)')
         .not('kode_asset', 'is', null)
 
-      if (allocatedItems && allocatedItems.length > 0) {
-        // Query ulang SEMUA raw_id dari DB (bukan rawIdMap lokal yang cuma
-        // berisi kode_asset dari batch ini) — karena di titik ini semua
-        // batch sudah commit, assets_raw berisi data lengkap.
-        //
-        // Query di-chunk per 200 kode_asset (bukan 1 query .in() besar) —
-        // kalau allocatedKodes banyak, hasil match per query tetap jauh di
-        // bawah limit default Supabase (1000 baris/query), jadi tidak ada
-        // hasil yang diam-diam ke-truncate.
-        const allocatedKodes = [...new Set(allocatedItems.map((it: any) => it.kode_asset))]
+      if (allocRows && allocRows.length > 0) {
+        // Reduce ke transaksi terakhir per kode_asset.
+        // Tie-breaker kalau tanggal sama: created_at (biar deterministik).
+        const latestByKode = new Map<string, { tanggal: string; jenis: string; createdAt: string }>()
+        for (const row of (allocRows as any[])) {
+          const kode = row.kode_asset
+          const sj = Array.isArray(row.sj) ? row.sj[0] : row.sj
+          if (!kode || !sj) continue
+          const tanggal = sj.tanggal ?? ''
+          const jenis = sj.jenis ?? 'keluar'
+          const createdAt = sj.created_at ?? ''
+
+          const prev = latestByKode.get(kode)
+          const isNewer = !prev
+            || tanggal > prev.tanggal
+            || (tanggal === prev.tanggal && createdAt > prev.createdAt)
+          if (isNewer) {
+            latestByKode.set(kode, { tanggal, jenis, createdAt })
+          }
+        }
+
+        // Hanya kode_asset yang transaksi terakhirnya 'keluar' yang di-tag Allocated
+        const allocatedKodes = [...latestByKode.entries()]
+          .filter(([, v]) => v.jenis === 'keluar')
+          .map(([kode]) => kode)
+
         const MATCH_CHUNK = 200
         let rawIdsToTag: string[] = []
 

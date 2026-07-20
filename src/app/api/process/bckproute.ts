@@ -32,6 +32,82 @@ async function fetchAllKodeAsset(): Promise<Set<string>> {
   return new Set(allKodes)
 }
 
+// Ekstrak kode CGA dari field toko: "CGA1 – ..." → "CGA1"
+function extractCGA(toko: string): string {
+  const m = (toko ?? "").match(/CGA\d/i)
+  return m ? m[0].toUpperCase() : ""
+}
+
+// Ambil semua kode_asset yang berlokasi di CGA (toko mengandung CGA1/2/3).
+// Dipakai untuk auto-sync staging → asset_notes saat upload DAT.
+// Pakai pagination loop (assets_raw bisa >1000 baris, jangan pakai select polos).
+async function fetchKodeAssetCGASet(): Promise<Set<string>> {
+  const cgaKodes = new Set<string>()
+  let from = 0
+  const FETCH_SIZE = 1000
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('assets_raw')
+      .select('kode_asset, toko')
+      .range(from, from + FETCH_SIZE - 1)
+
+    if (error) throw new Error(error.message)
+
+    const batch = data ?? []
+    for (const r of batch) {
+      if ((r as any).kode_asset && extractCGA((r as any).toko)) {
+        cgaKodes.add((r as any).kode_asset)
+      }
+    }
+
+    if (batch.length < FETCH_SIZE) break
+    from += FETCH_SIZE
+    if (from > 200000) break
+  }
+
+  return cgaKodes
+}
+
+// Auto-sync staging_area → asset_notes.
+// Untuk tiap item staging yang punya kode_asset & ada di CGA (DAT terbaru):
+// pindahkan catatan ke asset_notes, lalu hapus item dari staging.
+async function syncStagingToNotes(): Promise<number> {
+  const { data: stagingItems } = await supabase
+    .from('staging_area')
+    .select('id, kode_asset, catatan')
+    .not('kode_asset', 'is', null)
+    .neq('kode_asset', '')
+
+  if (!stagingItems || stagingItems.length === 0) return 0
+
+  const cgaSet = await fetchKodeAssetCGASet()
+  const idsToDelete: string[] = []
+
+  for (const item of stagingItems) {
+    if (!cgaSet.has((item as any).kode_asset)) continue
+
+    if ((item as any).catatan && (item as any).catatan.trim()) {
+      await supabase
+        .from('asset_notes')
+        .upsert(
+          { kode_asset: (item as any).kode_asset, catatan: (item as any).catatan, updated_at: new Date().toISOString() },
+          { onConflict: 'kode_asset' }
+        )
+    }
+    idsToDelete.push((item as any).id)
+  }
+
+  if (idsToDelete.length > 0) {
+    for (let i = 0; i < idsToDelete.length; i += 500) {
+      const batch = idsToDelete.slice(i, i + 500)
+      await supabase.from('staging_area').delete().in('id', batch)
+    }
+  }
+
+  return idsToDelete.length
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -208,6 +284,17 @@ export async function POST(req: Request) {
               .in('kode_asset', batch)
           }
         }
+      }
+
+      // ── Auto-sync staging → asset_notes ──────────────────────────────────
+      // DAT terbaru sudah lengkap di titik ini. Kalau ada item staging yang
+      // kode_asset-nya sekarang muncul di DAT (lokasi CGA), pindahkan catatan
+      // ke asset_notes lalu hapus dari staging. Best-effort — kalau gagal,
+      // upload DAT tetap sukses (item staging tetap aman untuk sync manual).
+      try {
+        await syncStagingToNotes()
+      } catch (e) {
+        console.error('[route] auto-sync staging gagal:', e)
       }
     }
 

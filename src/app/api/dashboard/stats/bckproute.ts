@@ -216,7 +216,6 @@ export async function GET() {
         const { data: batchItems } = await supabase
           .from('surat_jalan_items')
           .select('sj_id')
-          .eq('is_aktiva', true)
           .in('sj_id', batchIds)
 
         for (const row of (batchItems ?? [])) {
@@ -228,17 +227,19 @@ export async function GET() {
     }
 
     // Fill semua tanggal di bulan berjalan (1 sampai hari ini WIB) dengan 0
+    // Pakai string arithmetic bukan Date object agar tidak ada UTC offset issue
     const dailyShipment: { tanggal: string; total: number }[] = []
-    const startDay = new Date(monthStartIso + 'T00:00:00+07:00')
-    const endDay   = new Date(todayIso   + 'T00:00:00+07:00')
-    const cursor   = new Date(startDay)
-    while (cursor <= endDay) {
-      const iso = cursor.toISOString().slice(0, 10)
-      dailyShipment.push({
-        tanggal: iso,
-        total: dailyMap.get(iso) ?? 0,
-      })
-      cursor.setDate(cursor.getDate() + 1)
+    {
+      const [y, m] = monthStartIso.split('-').map(Number)
+      const [ey, em, ed] = todayIso.split('-').map(Number)
+      let cy = y, cm = m, cd = 1
+      while (cy < ey || (cy === ey && cm < em) || (cy === ey && cm === em && cd <= ed)) {
+        const iso = `${cy}-${String(cm).padStart(2,'0')}-${String(cd).padStart(2,'0')}`
+        dailyShipment.push({ tanggal: iso, total: dailyMap.get(iso) ?? 0 })
+        cd++
+        const daysInMonth = new Date(cy, cm, 0).getDate()
+        if (cd > daysInMonth) { cd = 1; cm++; if (cm > 12) { cm = 1; cy++ } }
+      }
     }
 
     const totalAsset      = totalAssetsResult.count ?? 0
