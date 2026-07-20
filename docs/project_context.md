@@ -3,7 +3,7 @@
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **19 Juli 2026** (Staging Area + perbaikan alur mutasi masuk & review mutasi)
+> Terakhir diupdate: **20 Juli 2026** (Fix tag Allocated transaksi terakhir + perbaikan Dashboard)
 
 ## Project Identity
 
@@ -103,15 +103,16 @@ Layout final dashboard:
 
 | Baris | Konten | Status |
 |---|---|---|
-| 1 | Status Data: DAT Update, DAT Closing, LPP Update, LPP Closing | DAT Update LIVE, DAT Closing LIVE (Trend CGA), lainnya placeholder |
-| 2 | DAT vs LPP Comparison (per CGA1/2/3) | Placeholder — menunggu LPP reconciliation |
-| 3 | Trend Closing Bulanan (chart 12 bulan) | Placeholder — menunggu Closing Snapshot |
-| 4 | CGA Summary 3 cards: hijau/kuning/merah | LIVE |
-| 5 | Closing vs Update (naik/turun per CGA) | Placeholder — menunggu Closing Snapshot |
+| 1 | Status Data: DAT Update, LPP Update (Sidebar) | LIVE — timestamp DAT & LPP sinkron (uploaded_at eksplisit) |
+| 2 | DAT vs LPP Comparison (per CGA1/2/3) | **LIVE** |
+| 3 | Trend Closing Bulanan (chart) | **LIVE** (Trend CGA dari closing) |
+| 4 | CGA Summary / Ringkasan Aset per Gudang | **LIVE** — angka sama dengan Monitoring |
+| 5 | ~~Closing vs Update~~ | Dihapus 20 Juli 2026 |
 | 6 | Rekap Pengiriman (3 card: Progres Mutasi Oracle, Top 5 Jenis Keluar bulan berjalan, Trend harian) | **LIVE** |
 
 Plus:
-- Dashboard warning cards (3 card: Belum Input Kode Aset, Belum Mutasi Oracle, Belum Mutasi Web Tracking) — semua LIVE, menggantikan welcome banner
+- Dashboard warning cards (2 card: Belum Mutasi Oracle, Belum Mutasi Web Tracking) —
+  LIVE. Card "Belum Input Kode Aset" dihapus 20 Juli 2026
 - DAT Update terakhir dari `MAX(uploaded_at)` di `assets_raw`
 
 ### Halaman /upload — Upload Data
@@ -693,13 +694,54 @@ ke `main` dengan `--ff-only`, branch lokal & remote sudah dihapus.
 
 ## Features Planned
 
-### 🎯 Next (Updated 19 Juli 2026)
-- **Live Stock / Budget Stok** — aktual vs budget per jenis per CGA, flag over/under. Budget diinput manual dulu, formula dinamis CGA1/CGA2 dikonfirmasi ke stakeholder
+### 🎯 Next (Updated 20 Juli 2026)
 - **Laporan TA (Bab 3 & 4)** — semua fitur core sudah selesai, saatnya nulis
 - **Integrasi Mutasi WT otomatis** dari LPP — sengaja ditunda
 - **UI minor: tombol "Pakai Template"** dipindah ke sebelahan "Tambah Baris"
 - Kondisi 3 "Aset Intransit" — tidak diimplementasi dalam TA, saran penelitian lanjutan
-- Dark/light mode — ditunda sampai semua fitur core selesai
+
+### 🚀 Fitur Utama Direncanakan
+
+#### 1. Live Stock (Publik) + Budget Stok (Internal)
+Status: 📋 Planned — fitur utama berikutnya
+
+Dua bagian terpisah dengan level akses berbeda:
+
+**A. Live Stock — halaman PUBLIK (tanpa login)**
+- Menampilkan stock aktual per jenis/CGA secara real-time, satu arah (view-only)
+  ke penonton — analog dengan layar live kurs di bank, atau papan jadwal
+  keberangkatan di stasiun kereta/bandara.
+- Didesain sebagai mode idle/screensaver: tampilan diam yang menayangkan informasi
+  terus-menerus tanpa interaksi. Cocok dipasang di layar/monitor kantor GA.
+- Bisa diakses umum TANPA autentikasi (route publik, di luar proteksi proxy.ts).
+- Auto-refresh berkala agar angka selalu terkini. Layout besar & terbaca dari jarak.
+- Sumber data: stock aktual dari assets_raw/assets_clean (sama seperti Monitoring/
+  Ringkasan per Gudang).
+
+**B. Budget Stok — INTERNAL (user login saja)**
+- Isinya sama seperti stock, TAPI dengan tambahan indikator **under / over**
+  berdasarkan kondisi/target yang diinput user.
+- Kondisi input contoh: jumlah target toko baru bulan ini + jumlah keseluruhan toko.
+  Budget menyesuaikan kondisi yang diinput — user bisa mengubah input KAPAN SAJA,
+  dan flag under/over ikut menyesuaikan.
+- Formula budget dinamis (per jenis/CGA) dikonfirmasi ke stakeholder. Untuk awal,
+  target/budget diinput manual oleh user.
+
+Catatan implementasi:
+- Live Stock harus di luar middleware auth (proxy.ts) — perlu whitelist route publik.
+- Budget tetap di dalam proteksi auth (role-based seperti fitur lain).
+- Perlu tabel baru untuk simpan kondisi/target budget yang diinput user (mis.
+  budget_config: target_toko_baru, total_toko, per periode).
+
+#### 2. Light Mode (semua halaman/UI)
+Status: 📋 Planned
+
+- Tema terang untuk SELURUH halaman/UI (saat ini dark-only: #060d19 / #38bdf8).
+- Toggle dark/light, preferensi tersimpan (mis. localStorage atau profil user).
+- Perlu audit semua warna hardcoded → pindah ke CSS variable/token tema agar
+  konsisten saat switch. Tailwind v4: manfaatkan class strategy untuk theming.
+- Cakupan: semua halaman (Dashboard, Monitoring, SJ, Rekap Alokasi, Staging,
+  Reconciliation, Auth, dll) + komponen PDF tetap sesuai kebutuhan cetak.
 
 ### DB Optimization (Deferred)
 Status: 📌 Deferred — sampai semua fitur selesai
@@ -1400,6 +1442,25 @@ Proyeksi: ~117 KB/bulan dari tabel SJ (estimasi 50 SJ × 8 item). Butuh **ratusa
 
 # 10. Recent Major Changes Log
 
+
+## 20 Juli 2026 — Fix Tag Allocated (Transaksi Terakhir) + Perbaikan Dashboard
+
+**Tag Allocated (process route):**
+- Fix konflik keluar/masuk: tag "Allocated" ditentukan oleh transaksi TERAKHIR
+  per kode_asset (by tanggal, tie-breaker created_at), bukan sekadar "ada di
+  surat_jalan_items". Barang keluar→masuk→keluar sekarang benar (terakhir keluar
+  = Allocated; terakhir masuk = tidak di-tag)
+- uploaded_at DAT di-set eksplisit (samakan dengan LPP) agar timestamp freshness
+  sinkron
+
+**Dashboard:**
+- Hapus card "Belum Input Kode Aset" dan "Perbandingan Closing vs Update"
+- Progres Mutasi Oracle: fix mentok 1.000 (pagination range loop, bukan .limit).
+  Hanya hitung SJ keluar submitted/completed
+- Chart Pengiriman Harian: fix 0 semua — bug alignment Promise.all (query ketukar
+  saat hapus atItemsResult) + pagination item per SJ
+- Ringkasan Aset per Gudang: fix angka tidak akurat — pakai extractCGACode regex
+  + sumber assets_clean join assets_raw + pagination (SAMA dengan Monitoring)
 
 ## 19 Juli 2026 (lanjutan) — Perbaikan Alur Mutasi Masuk & Review Mutasi
 - kode_asset Penerimaan disimpan ke surat_jalan_items → muncul di Rekap Alokasi + PDF

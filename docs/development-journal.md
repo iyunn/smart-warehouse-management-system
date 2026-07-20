@@ -2716,3 +2716,63 @@ surat_jalan_items CASCADE tapi item staging cuma di-set sj_id NULL → nyangkut.
 Fix: DELETE /api/sj hapus item staging (WHERE sj_id = id) SEBELUM hapus SJ (setelah
 SJ dihapus, link sj_id hilang). Item staging yang sudah ke-sync tidak terpengaruh
 (sudah tidak ada di tabel) — catatan di Monitoring tetap aman, memang itu tujuannya.
+
+---
+
+## 20 Juli 2026 — Fix Tag Allocated (Transaksi Terakhir) + Perbaikan Dashboard
+
+### Tag Allocated: konflik keluar/masuk
+
+Skenario tabrakan: Barang A keluar dari CGA1 (20 Juli, tag Allocated) → balik ke
+CGA2 via penerimaan (29 Juli, tag hilang) → keluar lagi dari CGA2 (2 Agustus,
+Allocated lagi).
+
+Root cause: step 6 process route (re-apply Allocated saat upload DAT) ambil SEMUA
+kode_asset dari surat_jalan_items tanpa lihat jenis. Kode A muncul 3x (keluar-
+masuk-keluar) → selalu ke-tag Allocated, meski fisiknya sudah balik ke CGA.
+
+Fix: query join ke surat_jalan ambil tanggal + jenis. Reduce ke transaksi TERAKHIR
+per kode_asset (by tanggal, tie-breaker created_at). Tag Allocated HANYA kalau
+transaksi terakhir = 'keluar'. Kalau terakhir 'masuk', tidak di-tag (barang balik).
+Diverifikasi via simulasi node: A (terakhir keluar) → Allocated, C (terakhir masuk)
+→ tidak di-tag.
+
+### Dashboard — 5 perbaikan + 1 lanjutan
+
+**#1 Hapus card "Belum Input Kode Aset"** dari DashboardWarningCards (grid jadi 2 kolom).
+
+**#2 Hapus card "Perbandingan Closing vs Update"** (ClosingVsUpdatePlaceholder) dari
+page.tsx + import-nya.
+
+**#3 Progres Mutasi Oracle mentok 1.000** — root cause: query .limit(50000) dengan
+join !inner tetap kena truncate senyap 1000 dari PostgREST. Fix: helper
+fetchAllATItems() dengan pagination range loop. Sekalian filter benar: hanya SJ
+keluar submitted/completed (SJ masuk & draft tidak masuk progres mutasi keluar —
+dikonfirmasi Fillian: hitung yang keluar saja).
+
+**#4 Chart Pengiriman Harian 0 semua** — root cause: bug alignment Promise.all yang
+AKU buat sendiri saat fix #3. Waktu hapus atItemsResult dari Promise.all, urutan
+query vs destructuring jadi ketukar: assetsCleanJenisResult (Card 2) dapat query
+Card 3 (id,tanggal), dan sjBulanResult (Card 3) dapat query Card 2 (id saja, tanpa
+tanggal) → sjTanggalMap kosong → dailyMap tidak keisi → semua 0. Fix: tukar urutan
+2 query surat_jalan di Promise.all agar match destructuring. Plus pagination item
+per SJ. Pelajaran: kalau hapus item dari Promise.all, cek ulang alignment.
+
+**#5 Timestamp DAT tidak sinkron LPP** — root cause: LPP set uploaded_at
+new Date().toISOString() eksplisit saat insert, DAT andalkan default DB now() yang
+beda per batch. Fix di process route: DAT set uploadedAt eksplisit satu timestamp
+untuk semua batch (samakan mekanisme dengan LPP).
+
+**Ringkasan Aset per Gudang tidak akurat** (lanjutan) — 3 root cause: (1) .limit(10000)
+tanpa pagination, (2) extract CGA pakai toko.split(' - ')[0] yang fragile (gagal
+untuk en-dash/lowercase/CGA-di-tengah) vs monitoring pakai regex match(/CGA\d/i),
+(3) sumber assets_raw polos vs monitoring assets_clean join assets_raw!inner. Fix:
+helper fetchBreakdownPerCGA() dengan pagination + extractCGACode regex + sumber
+assets_clean join assets_raw (SAMA dengan monitoring). Query lama di Promise.all
+diganti Promise.resolve({data:null}) placeholder agar posisi destructuring tetap.
+Diverifikasi via simulasi: regex benar untuk semua format toko.
+
+Catatan: process-route.ts sudah termasuk fix tag Allocated + uploaded_at eksplisit.
+Rencana ke depan (disebut Fillian): pertimbangkan menghilangkan mekanisme
+draft/submitted pada Surat Jalan karena sepertinya tidak kepakai — perlu petakan
+dampak dulu (halaman buat SJ, filter status, query dashboard submitted/completed).
