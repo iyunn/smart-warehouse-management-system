@@ -1,4 +1,4 @@
-# PROJECT_CONTEXT.md
+git # PROJECT_CONTEXT.md
 
 # Smart Asset Monitoring and Reconciliation System
 

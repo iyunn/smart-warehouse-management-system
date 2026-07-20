@@ -56,3 +56,50 @@ input[type="number"]::-webkit-outer-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THEME TOKENS — dark/light
+   Dipakai oleh halaman Stock (Live Stock & Budget) dan komponen theme-aware.
+   Akses via var(--nama) di className arbitrary Tailwind: bg-[var(--surface)] dll.
+   Nanti bisa diperluas ke seluruh app untuk fitur Light Mode penuh.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Default (dark) — juga saat class .dark aktif */
+:root,
+.dark {
+  --bg:          #080e18;
+  --surface:     #0d1524;
+  --surface-2:   rgba(255, 255, 255, 0.03);
+  --surface-3:   rgba(255, 255, 255, 0.06);
+  --border:      rgba(255, 255, 255, 0.08);
+  --text:        #e2e8f0;
+  --text-muted:  #94a3b8;
+  --text-dim:    #64748b;
+  --accent:      #38bdf8;
+  --accent-soft: rgba(56, 189, 248, 0.12);
+  --cga1:        #34d399;
+  --cga2:        #fbbf24;
+  --cga3:        #fb7185;
+}
+
+.light {
+  --bg:          #f1f5f9;
+  --surface:     #ffffff;
+  --surface-2:   rgba(15, 23, 42, 0.02);
+  --surface-3:   rgba(15, 23, 42, 0.05);
+  --border:      rgba(15, 23, 42, 0.10);
+  --text:        #0f172a;
+  --text-muted:  #475569;
+  --text-dim:    #94a3b8;
+  --accent:      #0284c7;
+  --accent-soft: rgba(2, 132, 199, 0.10);
+  --cga1:        #059669;
+  --cga2:        #d97706;
+  --cga3:        #e11d48;
+}
+
+/* Halaman theme-aware: bg & text ikut token */
+.theme-surface {
+  background-color: var(--bg);
+  color: var(--text);
+}

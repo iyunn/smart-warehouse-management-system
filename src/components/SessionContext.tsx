@@ -19,6 +19,7 @@ export interface UserProfile {
   email: string;
   role: "super_admin" | "admin";
   status: "pending" | "active" | "rejected";
+  theme?: "dark" | "light";
 }
 
 interface SessionContextValue {
@@ -45,7 +46,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const fetchProfile = useCallback(async (userId: string) => {
     const { data } = await supabase
       .from("profiles")
-      .select("id, username, nik, email, role, status")
+      .select("id, username, nik, email, role, status, theme")
       .eq("id", userId)
       .maybeSingle();
     setProfile(data as UserProfile | null);
