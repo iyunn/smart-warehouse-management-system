@@ -25,6 +25,7 @@ import {
 } from "recharts";
 
 interface MerkCount { merk: string; count: number }
+interface SubCoceCount { subCoce: string; count: number }
 interface JenisStock {
   jenis: string;
   kategori: string;
@@ -32,6 +33,13 @@ interface JenisStock {
   cga1: number;
   cga2: number;
   merkBreakdown: MerkCount[];
+  nonProdsus: number;
+  nonProdsusCga1: number;
+  nonProdsusCga2: number;
+  prodsus: number;
+  prodsusCga1: number;
+  prodsusCga2: number;
+  prodsusBreakdown: SubCoceCount[];
 }
 interface LiveStockData {
   jenisList: JenisStock[];
@@ -220,35 +228,23 @@ function LiveStockPage() {
       {!fullscreen && <Sidebar />}
       <div className="flex flex-1 flex-col overflow-hidden">
         {!fullscreen && <Topbar title="Live Stock" />}
-        <main className="flex-1 overflow-hidden px-6 py-5">
+        <main className="flex-1 min-h-0 overflow-hidden px-6 py-5 flex flex-col">
 
-          {/* Header bar */}
-          <div className="mb-4 flex items-center justify-between gap-4">
-            {fullscreen ? (
-              /* Mode idle: jam besar + tanggal + status DAT (ala papan bandara) */
-              <div className="flex items-baseline gap-5">
-                <span className="font-mono font-bold tabular-nums leading-none" style={{ color: "var(--text)", fontSize: "2rem" }}>
-                  {now ? now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "--:--:--"}
+          {/* Header bar — info bar ala papan bandara (selalu tampil) */}
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-baseline gap-4">
+                <span className="font-mono font-bold tabular-nums leading-none" style={{ color: "var(--text)", fontSize: "clamp(1.8rem, 3vw, 2.5rem)" }}>
+                  {now ? now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).replace(/\./g, ".") : "--.--.--"}
                 </span>
-                <div className="flex flex-col">
-                  <span className="text-[13px] font-medium" style={{ color: "var(--text)" }}>
-                    {now ? now.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : ""}
-                  </span>
-                  <span className="text-[11px]" style={{ color: "var(--text-dim)" }}>
-                    Live Stock — CGA1 + CGA2 · DAT update: {formatUpdatedAt(data?.updatedAt ?? null)}
-                  </span>
-                </div>
+                <span className="font-semibold tracking-tight" style={{ color: "var(--text)", fontSize: "clamp(1.4rem, 2.4vw, 2rem)" }}>
+                  {now ? now.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).toUpperCase() : ""}
+                </span>
               </div>
-            ) : (
-              <div>
-                <h1 className="text-lg font-semibold tracking-tight" style={{ color: "var(--text)" }}>
-                  Live Stock
-                </h1>
-                <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                  Stock per jenis barang — akumulasi CGA1 + CGA2 (CGA3 dikecualikan)
-                </p>
-              </div>
-            )}
+              <span className="text-[15px]" style={{ color: "var(--text-muted)" }}>
+                Live Stock — CGA1 + CGA2 · DAT update: {formatUpdatedAt(data?.updatedAt ?? null)}
+              </span>
+            </div>
             <div className="flex items-center gap-3">
               {/* Toggle auto-cycle */}
               <button
@@ -261,7 +257,7 @@ function LiveStockPage() {
                 }}
                 title={autoCycle ? "Auto-cycle aktif — klik untuk pause" : "Auto-cycle pause — klik untuk aktifkan"}
               >
-                {autoCycle ? <PlayIcon /> : <PauseIcon />}
+                {autoCycle ? <PauseIcon /> : <PlayIcon />}
                 {autoCycle ? "Auto" : "Manual"}
               </button>
               {/* Tombol Fullscreen (mode idle/screensaver) */}
@@ -279,15 +275,15 @@ function LiveStockPage() {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center h-[70vh]" style={{ color: "var(--text-dim)" }}>
+            <div className="flex items-center justify-center flex-1 min-h-0" style={{ color: "var(--text-dim)" }}>
               Memuat data stock...
             </div>
           ) : jenisList.length === 0 ? (
-            <div className="flex items-center justify-center h-[70vh]" style={{ color: "var(--text-dim)" }}>
+            <div className="flex items-center justify-center flex-1 min-h-0" style={{ color: "var(--text-dim)" }}>
               Belum ada data stock. Upload DAT terlebih dahulu.
             </div>
           ) : (
-            <div className="grid grid-cols-[minmax(280px,340px)_1fr] gap-5" style={{ height: fullscreen ? "calc(100vh - 90px)" : "calc(100vh - 140px)" }}>
+            <div className="grid grid-cols-[minmax(280px,340px)_1fr] gap-5 flex-1 min-h-0">
 
               {/* ── KIRI: Tabel Jenis ─────────────────────────────────────── */}
               <div className="rounded-2xl border overflow-hidden flex flex-col"
@@ -352,79 +348,126 @@ function LiveStockPage() {
 
               {/* ── KANAN: Detail jenis terpilih ──────────────────────────── */}
               {selected && (
-                <div className="rounded-2xl border overflow-hidden grid grid-cols-[1fr_minmax(220px,300px)]"
+                <div className="rounded-2xl border overflow-hidden grid grid-cols-[1fr_minmax(240px,300px)]"
                   style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
 
-                  {/* Kolom utama: hero (angka+jenis+pie) + stat cards */}
+                  {/* Kolom utama */}
                   <div className="flex flex-col p-8 overflow-y-auto">
-                    {/* Hero: angka besar + pie berdampingan */}
-                    <div className="flex items-center gap-10 flex-1">
-                      {/* Angka besar */}
+                    {/* ── ATAS: Total stock + (LIVE STOCK label + pie) ── */}
+                    <div className="flex items-start gap-10">
                       <div className="flex-1">
-                        <p className="text-[12px] uppercase tracking-widest mb-3" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-[15px] uppercase tracking-widest mb-2" style={{ color: "var(--text-muted)" }}>
                           Total Stock
                         </p>
-                        <div className="flex items-baseline gap-3">
+                        <div className="flex items-baseline gap-4">
                           <span className="font-mono font-bold leading-none tabular-nums"
-                            style={{ color: "var(--accent)", fontSize: "clamp(4rem, 11vw, 9rem)" }}>
+                            style={{ color: "var(--accent)", fontSize: "clamp(6rem, 14vw, 12rem)" }}>
                             {selected.total.toLocaleString()}
                           </span>
-                          <span className="text-[18px]" style={{ color: "var(--text-dim)" }}>item</span>
+                          <span className="text-[22px]" style={{ color: "var(--text-dim)" }}>item</span>
                         </div>
-                        <h2 className="mt-3 text-[28px] font-bold leading-tight" style={{ color: "var(--text)" }}>
+                        <h2 className="mt-5 font-bold leading-tight" style={{ color: "var(--text)", fontSize: "clamp(2rem, 3.5vw, 3rem)" }}>
                           {selected.jenis}
                         </h2>
-                        <p className="text-[13px] mt-1" style={{ color: "var(--text-dim)" }}>
+                        <p className="text-[16px] mt-1.5" style={{ color: "var(--text-dim)" }}>
                           {selected.kategori}
                         </p>
                       </div>
 
-                      {/* Pie chart besar dengan persen di tengah */}
-                      <div className="relative w-[220px] h-[220px] shrink-0">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={pieData}
-                              dataKey="value" nameKey="name"
-                              cx="50%" cy="50%"
-                              innerRadius={72} outerRadius={104}
-                              startAngle={90} endAngle={-270}
-                              stroke="none"
-                            >
-                              <Cell fill="var(--accent)" />
-                              <Cell fill="var(--surface-3)" />
-                            </Pie>
-                          </PieChart>
-                        </ResponsiveContainer>
-                        {/* Persen di tengah donut */}
-                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                          <span className="font-mono font-bold text-[30px] leading-none" style={{ color: "var(--accent)" }}>{pct}%</span>
-                          <span className="text-[10px] mt-1" style={{ color: "var(--text-dim)" }}>dari total</span>
+                      {/* Kolom kanan: LIVE STOCK label di ATAS, pie di bawahnya */}
+                      <div className="flex flex-col items-center shrink-0">
+                        <span className="font-bold tracking-tight mb-3" style={{ color: "var(--text)", fontSize: "clamp(1.6rem, 2.6vw, 2.2rem)" }}>
+                          LIVE STOCK
+                        </span>
+                        <div className="relative w-[300px] h-[300px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={pieData} dataKey="value" nameKey="name"
+                                cx="50%" cy="50%" innerRadius={104} outerRadius={146}
+                                startAngle={90} endAngle={-270} stroke="none"
+                              >
+                                <Cell fill="var(--accent)" />
+                                <Cell fill="var(--surface-3)" />
+                              </Pie>
+                            </PieChart>
+                          </ResponsiveContainer>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span className="font-mono font-bold leading-none" style={{ color: "var(--accent)", fontSize: "clamp(2.5rem, 4vw, 3.5rem)" }}>{pct}%</span>
+                            <span className="text-[13px] mt-2 text-center leading-tight tracking-wide" style={{ color: "var(--text-dim)" }}>DARI TOTAL<br/>CGA</span>
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Stat cards: CGA1, CGA2, Total keseluruhan */}
-                    <div className="grid grid-cols-3 gap-4 mt-8">
-                      <StatCard label="CGA1" value={selected.cga1} dot="var(--cga1)" />
-                      <StatCard label="CGA2" value={selected.cga2} dot="var(--cga2)" />
-                      <StatCard label="Total Stock (CGA1+2)" value={totalCGADisplay} dot="var(--accent)" muted />
+                    {/* Divider */}
+                    <div className="h-px w-full my-7" style={{ background: "var(--border)" }} />
+
+                    {/* ── BAWAH: Non-prodsus + Prodsus + List Prodsus ── */}
+                    <div className="grid grid-cols-[1fr_1fr_minmax(200px,240px)] gap-6">
+                      {/* NON-PRODSUS */}
+                      <ProdsusBlock
+                        label="NON-PRODSUS"
+                        value={selected.nonProdsus}
+                        cga1={selected.nonProdsusCga1}
+                        cga2={selected.nonProdsusCga2}
+                      />
+                      {/* PRODSUS */}
+                      <ProdsusBlock
+                        label="PRODSUS"
+                        value={selected.prodsus}
+                        cga1={selected.prodsusCga1}
+                        cga2={selected.prodsusCga2}
+                      />
+                      {/* LIST PRODSUS */}
+                      <div className="rounded-xl border flex flex-col overflow-hidden"
+                        style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                        <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+                          <p className="text-[12px] font-semibold uppercase tracking-widest" style={{ color: "var(--text)" }}>
+                            List Prodsus
+                          </p>
+                          <p className="text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>
+                            {selected.prodsusBreakdown.length} produk khusus
+                          </p>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-3 max-h-[220px]">
+                          {selected.prodsusBreakdown.length === 0 ? (
+                            <p className="text-[12px] text-center py-4" style={{ color: "var(--text-dim)" }}>
+                              Tidak ada prodsus
+                            </p>
+                          ) : selected.prodsusBreakdown.map((p) => {
+                            const pPct = selected.prodsus > 0 ? (p.count / selected.prodsus) * 100 : 0;
+                            return (
+                              <div key={p.subCoce} className="px-1 py-1.5">
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                  <span className="text-[12px] truncate" style={{ color: "var(--text)" }} title={p.subCoce}>{p.subCoce}</span>
+                                  <span className="text-[12px] font-mono font-semibold shrink-0" style={{ color: "var(--accent)" }}>{p.count.toLocaleString()}</span>
+                                </div>
+                                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--surface-3)" }}>
+                                  <div className="h-full rounded-full" style={{ width: `${pPct}%`, background: "var(--accent)" }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
 
                     {/* Legend proporsi */}
-                    <div className="flex items-center gap-5 mt-5 text-[11px]" style={{ color: "var(--text-muted)" }}>
-                      <span>
-                        <span className="font-mono font-semibold" style={{ color: "var(--text)" }}>{selected.total.toLocaleString()}</span> item{" "}
-                        <span style={{ color: "var(--accent)" }}>{selected.jenis}</span>
-                      </span>
-                      <span>dari total <span className="font-mono font-semibold" style={{ color: "var(--text)" }}>{totalCGADisplay.toLocaleString()}</span> item seluruh jenis</span>
+                    <div className="flex items-center gap-2 mt-7 text-[15px]" style={{ color: "var(--text-muted)" }}>
+                      <span className="font-mono font-semibold" style={{ color: "var(--accent)" }}>{selected.total.toLocaleString()}</span>
+                      <span>item</span>
+                      <span className="font-medium" style={{ color: "var(--accent)" }}>{selected.jenis}</span>
+                      <span>dari total</span>
+                      <span className="font-mono font-semibold" style={{ color: "var(--text)" }}>{totalCGADisplay.toLocaleString()}</span>
+                      <span>item seluruh jenis</span>
                     </div>
                   </div>
 
                   {/* Kolom kanan: List Merk (full height) */}
                   <div className="border-l flex flex-col" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
                     <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
-                      <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
+                      <p className="text-[12px] font-semibold uppercase tracking-widest" style={{ color: "var(--text)" }}>
                         List Merk
                       </p>
                       <p className="text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>
@@ -435,12 +478,11 @@ function LiveStockPage() {
                       {selected.merkBreakdown.map((m) => {
                         const merkPct = selected.total > 0 ? (m.count / selected.total) * 100 : 0;
                         return (
-                          <div key={m.merk} className="px-2 py-2 rounded-lg" style={{ background: "transparent" }}>
+                          <div key={m.merk} className="px-2 py-2 rounded-lg">
                             <div className="flex items-center justify-between gap-2 mb-1">
                               <span className="text-[13px] truncate" style={{ color: "var(--text)" }} title={m.merk}>{m.merk}</span>
                               <span className="text-[13px] font-mono font-semibold shrink-0" style={{ color: "var(--accent)" }}>{m.count.toLocaleString()}</span>
                             </div>
-                            {/* Bar proporsi merk */}
                             <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--surface-3)" }}>
                               <div className="h-full rounded-full" style={{ width: `${merkPct}%`, background: "var(--accent)" }} />
                             </div>
@@ -459,16 +501,33 @@ function LiveStockPage() {
   );
 }
 
-const StatCard = ({ label, value, dot, muted }: { label: string; value: number; dot: string; muted?: boolean }) => (
-  <div className="rounded-xl border px-4 py-3"
-    style={{ borderColor: "var(--border)", background: muted ? "var(--accent-soft)" : "var(--surface-2)" }}>
-    <div className="flex items-center gap-2 mb-1.5">
-      <span className="w-2 h-2 rounded-full" style={{ background: dot }} />
-      <span className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>{label}</span>
+// Block angka besar NON-PRODSUS / PRODSUS dengan CGA1/CGA2 cards
+const ProdsusBlock = ({ label, value, cga1, cga2 }: { label: string; value: number; cga1: number; cga2: number }) => (
+  <div className="flex flex-col">
+    <p className="font-bold tracking-tight mb-2" style={{ color: "var(--text)", fontSize: "clamp(1.3rem, 2vw, 1.75rem)" }}>{label}</p>
+    <div className="flex items-baseline gap-2 mb-4">
+      <span className="font-mono font-bold leading-none tabular-nums"
+        style={{ color: "var(--accent)", fontSize: "clamp(3.5rem, 7vw, 5.5rem)" }}>
+        {value.toLocaleString()}
+      </span>
+      <span className="text-[15px]" style={{ color: "var(--text-dim)" }}>item</span>
     </div>
-    <span className="font-mono font-bold text-[22px] tabular-nums" style={{ color: "var(--text)" }}>
-      {value.toLocaleString()}
-    </span>
+    <div className="flex flex-col gap-2.5">
+      <div className="rounded-lg border px-4 py-2.5" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--cga1)" }} />
+          <span className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>CGA1</span>
+        </div>
+        <span className="font-mono font-semibold text-[20px]" style={{ color: "var(--text)" }}>{cga1.toLocaleString()}</span>
+      </div>
+      <div className="rounded-lg border px-4 py-2.5" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--cga2)" }} />
+          <span className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>CGA2</span>
+        </div>
+        <span className="font-mono font-semibold text-[20px]" style={{ color: "var(--text)" }}>{cga2.toLocaleString()}</span>
+      </div>
+    </div>
   </div>
 );
 

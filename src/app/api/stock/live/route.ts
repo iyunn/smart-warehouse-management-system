@@ -17,6 +17,11 @@ export interface MerkCount {
   count: number
 }
 
+export interface SubCoceCount {
+  subCoce: string   // nilai sub_coce (prodsus), mis. "FRDCHICKEN", "SAYB"
+  count: number
+}
+
 export interface JenisStock {
   jenis: string
   kategori: string       // kategori_oracle mentah, mis. "C - PERALATAN KOMPUTER"
@@ -24,6 +29,14 @@ export interface JenisStock {
   cga1: number           // jumlah di CGA1
   cga2: number           // jumlah di CGA2
   merkBreakdown: MerkCount[]  // per merk, urut desc
+  // ── Prodsus / Non-prodsus (dari kolom sub_coce) ──
+  nonProdsus: number         // sub_coce == '0'
+  nonProdsusCga1: number
+  nonProdsusCga2: number
+  prodsus: number            // sub_coce != '0'
+  prodsusCga1: number
+  prodsusCga2: number
+  prodsusBreakdown: SubCoceCount[]  // per nilai sub_coce (prodsus), urut desc
 }
 
 export interface LiveStockResponse {
@@ -46,13 +59,20 @@ export interface LiveStockResponse {
  */
 export async function GET() {
   try {
-    // Map jenis → { total, cga1, cga2, kategori, merk: Map<merk, count> }
+    // Map jenis → agregasi termasuk prodsus/non-prodsus + breakdown sub_coce
     const jenisMap = new Map<string, {
       total: number
       cga1: number
       cga2: number
       kategori: string
       merk: Map<string, number>
+      nonProdsus: number
+      nonProdsusCga1: number
+      nonProdsusCga2: number
+      prodsus: number
+      prodsusCga1: number
+      prodsusCga2: number
+      subCoce: Map<string, number>   // per nilai sub_coce (prodsus saja)
     }>()
 
     let totalCGA1 = 0
@@ -63,7 +83,7 @@ export async function GET() {
     while (true) {
       const { data, error } = await supabase
         .from('assets_clean')
-        .select(`jenis, merk, raw:assets_raw!inner(toko, kategori_oracle)`)
+        .select(`jenis, merk, raw:assets_raw!inner(toko, kategori_oracle, sub_coce, is_prodsus)`)
         .range(from, from + FETCH_SIZE - 1)
 
       if (error) throw new Error(error.message)
@@ -80,15 +100,34 @@ export async function GET() {
         const jenis = ((row as any).jenis ?? '').trim() || 'Unknown'
         const merk  = ((row as any).merk ?? '').trim() || 'Unknown'
         const kategori = (raw.kategori_oracle ?? '').trim() || 'Tanpa Kategori'
+        const subCoce = (raw.sub_coce ?? '0').toString().trim() || '0'
+        // Non-prodsus kalau sub_coce semua nol (0, 00000000, dst) atau kosong.
+        // Selain itu prodsus (FRDCHICKEN, SAYB, PCAFE, YCGOLD, dll).
+        const isProdsus = !/^0*$/.test(subCoce)
 
         if (!jenisMap.has(jenis)) {
-          jenisMap.set(jenis, { total: 0, cga1: 0, cga2: 0, kategori, merk: new Map() })
+          jenisMap.set(jenis, {
+            total: 0, cga1: 0, cga2: 0, kategori, merk: new Map(),
+            nonProdsus: 0, nonProdsusCga1: 0, nonProdsusCga2: 0,
+            prodsus: 0, prodsusCga1: 0, prodsusCga2: 0,
+            subCoce: new Map(),
+          })
         }
         const j = jenisMap.get(jenis)!
         j.total += 1
         if (cga === 'CGA1') { j.cga1 += 1; totalCGA1 += 1 }
         else                { j.cga2 += 1; totalCGA2 += 1 }
         j.merk.set(merk, (j.merk.get(merk) ?? 0) + 1)
+
+        // Prodsus vs non-prodsus (dengan CGA split masing-masing)
+        if (isProdsus) {
+          j.prodsus += 1
+          if (cga === 'CGA1') j.prodsusCga1 += 1; else j.prodsusCga2 += 1
+          j.subCoce.set(subCoce, (j.subCoce.get(subCoce) ?? 0) + 1)
+        } else {
+          j.nonProdsus += 1
+          if (cga === 'CGA1') j.nonProdsusCga1 += 1; else j.nonProdsusCga2 += 1
+        }
       }
 
       if (batch.length < FETCH_SIZE) break
@@ -96,8 +135,7 @@ export async function GET() {
       if (from > 200000) break // safety guard
     }
 
-    // Build response: sertakan kategori, merk urut desc.
-    // Urutan jenisList di sini tidak krusial (halaman akan group + sort sendiri).
+    // Build response: sertakan kategori, merk & prodsus breakdown urut desc.
     const jenisList: JenisStock[] = Array.from(jenisMap.entries())
       .map(([jenis, v]) => ({
         jenis,
@@ -107,6 +145,15 @@ export async function GET() {
         cga2: v.cga2,
         merkBreakdown: Array.from(v.merk.entries())
           .map(([merk, count]) => ({ merk, count }))
+          .sort((a, b) => b.count - a.count),
+        nonProdsus: v.nonProdsus,
+        nonProdsusCga1: v.nonProdsusCga1,
+        nonProdsusCga2: v.nonProdsusCga2,
+        prodsus: v.prodsus,
+        prodsusCga1: v.prodsusCga1,
+        prodsusCga2: v.prodsusCga2,
+        prodsusBreakdown: Array.from(v.subCoce.entries())
+          .map(([subCoce, count]) => ({ subCoce, count }))
           .sort((a, b) => b.count - a.count),
       }))
       .sort((a, b) => b.total - a.total)

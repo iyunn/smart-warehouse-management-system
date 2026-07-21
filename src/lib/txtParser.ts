@@ -145,6 +145,7 @@ function detectDelimiter(firstLine: string): string {
 
 const TXT_COLUMN_MAP: Record<string, keyof AssetRecord> = {
   "toko":             "toko",
+  "sub coce":         "sub_coce",
   "kategori":         "kategori_oracle",
   "no. seri":         "kode_asset",
   "keterangan":       "deskripsi",
@@ -220,6 +221,8 @@ export async function parseTxtFile(file: File): Promise<ParseResult> {
       jumlah_tercatat: 0,
       invoice_number:  "",
       tanggal_dokumen: "",
+      sub_coce:        "0",
+      is_prodsus:      false,
     };
 
     for (const [headerName, fieldName] of Object.entries(TXT_COLUMN_MAP)) {
@@ -238,6 +241,14 @@ export async function parseTxtFile(file: File): Promise<ParseResult> {
     }
 
     if (!record.kuantitas || record.kuantitas === 0) record.kuantitas = 1;
+
+    // Derive is_prodsus. Non-prodsus kalau sub_coce kosong ATAU semua nol
+    // (Oracle pakai "0", "00000000", dst untuk non-prodsus). Selain itu = prodsus
+    // (mis. FRDCHICKEN, SAYB, PCAFE, YCGOLD).
+    const scRaw = (record.sub_coce ?? "").trim();
+    const isZero = scRaw === "" || /^0+$/.test(scRaw);
+    record.sub_coce   = scRaw || "0";
+    record.is_prodsus = !isZero;
 
     if (!record.kode_asset && !record.deskripsi) {
       skippedRows++;

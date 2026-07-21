@@ -24,6 +24,8 @@ export interface AssetRecord {
   jumlah_tercatat:  number;
   invoice_number:   string;
   tanggal_dokumen:  string;
+  sub_coce:         string;   // kolom D DAT: '0' = non-prodsus, selain 0 = prodsus
+  is_prodsus:       boolean;  // turunan: sub_coce !== '0'
 }
 
 // ─── Column mapping (legacy, untuk reference) ─────────────────────────────────

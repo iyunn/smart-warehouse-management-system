@@ -139,6 +139,8 @@ export async function POST(req: Request) {
         jumlah_tercatat: item.jumlah_tercatat ?? 0,
         invoice_number:  item.invoice_number  ?? null,
         tanggal_dokumen: item.tanggal_dokumen ?? null,
+        sub_coce:        (item.sub_coce ?? '0').toString().trim() || '0',
+        is_prodsus:      !/^0*$/.test((item.sub_coce ?? '0').toString().trim() || '0'),
       },
       result: classifyAsset(item.deskripsi, keywordRules ?? []),
     }))
