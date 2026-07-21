@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useSession } from "@/components/SessionContext";
 
 export default function Topbar({ title }: { title: string }) {
-  const [search, setSearch] = useState("");
   const [dateStr, setDateStr] = useState("");
   const { profile, signOut } = useSession();
 
@@ -26,32 +25,7 @@ export default function Topbar({ title }: { title: string }) {
 
       {/* Right section */}
       <div className="flex items-center gap-3">
-        {/* Search */}
-        <div className="relative hidden sm:block">
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600"
-            width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-          >
-            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search asset..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="bg-white/[0.04] border border-white/[0.08] text-slate-300 text-xs placeholder:text-slate-600 rounded-xl pl-9 pr-4 py-1.5 w-48 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06] transition-all"
-          />
-        </div>
-
-        {/* Notif */}
-        <button className="relative w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-slate-500 hover:text-white hover:border-white/20 transition-all">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
-          </svg>
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-cyan-400 rounded-full border-2 border-[#0d1117]" />
-        </button>
-
-        {/* Avatar + nama user */}
+        {/* Nama user + role + logout */}
         <div className="flex items-center gap-2 pl-1 cursor-pointer group" onClick={signOut} title="Klik untuk logout">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center text-white text-[13px] font-bold shadow-lg shadow-purple-500/20 group-hover:shadow-purple-500/40 transition-shadow">
             {profile?.username?.[0]?.toUpperCase() ?? "A"}
@@ -62,8 +36,11 @@ export default function Topbar({ title }: { title: string }) {
               {profile?.role === "super_admin" ? "Super Admin" : "Admin"}
             </p>
           </div>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-600 hidden md:block">
-            <polyline points="6 9 12 15 18 9" />
+          {/* Ikon logout */}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500 group-hover:text-white transition-colors ml-1">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
           </svg>
         </div>
       </div>
