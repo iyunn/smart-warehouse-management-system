@@ -85,6 +85,23 @@ function LiveStockPage() {
   const cycleRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const activeRowRef = useRef<HTMLButtonElement | null>(null);
+  const pieBoxRef = useRef<HTMLDivElement | null>(null);
+  const [pieSize, setPieSize] = useState(260);
+
+  // Ukur kontainer pie → skala pie responsif (andal, tanpa ResponsiveContainer
+  // yang bermasalah saat mount). ResizeObserver update saat viewport/zoom berubah.
+  useEffect(() => {
+    const el = pieBoxRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth;
+      if (w > 0) setPieSize(Math.max(140, Math.min(300, w)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [loading, selectedIdx]);
 
   // Auto-scroll tabel kiri ke item aktif (biar highlight selalu kelihatan saat cycle)
   useEffect(() => {
@@ -237,7 +254,7 @@ function LiveStockPage() {
         <main className="flex-1 min-h-0 overflow-hidden px-6 py-5 flex flex-col">
 
           {/* Header bar — info bar ala papan bandara (selalu tampil) */}
-          <div className="mb-5 flex items-start justify-between gap-4">
+          <div className="mb-5 flex items-start justify-between gap-4 flex-wrap">
             <div className="flex flex-col gap-1">
               <div className="flex items-baseline gap-4">
                 <span className="font-mono font-bold tabular-nums leading-none" style={{ color: "var(--text)", fontSize: "clamp(1.8rem, 3vw, 2.5rem)" }}>
@@ -289,7 +306,7 @@ function LiveStockPage() {
               Belum ada data stock. Upload DAT terlebih dahulu.
             </div>
           ) : (
-            <div className="grid grid-cols-[minmax(280px,340px)_1fr] gap-5 flex-1 min-h-0">
+            <div className="grid grid-cols-[minmax(200px,300px)_1fr] gap-4 flex-1 min-h-0">
 
               {/* ── KIRI: Tabel Jenis ─────────────────────────────────────── */}
               <div className="rounded-2xl border overflow-hidden flex flex-col"
@@ -354,14 +371,14 @@ function LiveStockPage() {
 
               {/* ── KANAN: Detail jenis terpilih ──────────────────────────── */}
               {selected && (
-                <div className="rounded-2xl border overflow-hidden grid grid-cols-[1fr_minmax(240px,300px)]"
+                <div className="rounded-2xl border overflow-hidden grid grid-cols-[1fr_minmax(180px,280px)] min-w-0"
                   style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
 
                   {/* Kolom utama */}
-                  <div className="flex flex-col p-8 overflow-y-auto">
+                  <div className="flex flex-col p-[clamp(1rem,2.5vw,2rem)] overflow-y-auto min-w-0">
                     {/* ── ATAS: Total stock + (LIVE STOCK label + pie) ── */}
-                    <div className="flex items-start gap-10">
-                      <div className="flex-1">
+                    <div className="flex items-start gap-[clamp(1rem,3vw,2.5rem)]">
+                      <div className="flex-1 min-w-0">
                         <p className="text-[15px] uppercase tracking-widest mb-2" style={{ color: "var(--text-muted)" }}>
                           Total Stock
                         </p>
@@ -372,7 +389,7 @@ function LiveStockPage() {
                           </span>
                           <span className="text-[22px]" style={{ color: "var(--text-dim)" }}>item</span>
                         </div>
-                        <h2 className="mt-5 font-bold leading-tight" style={{ color: "var(--text)", fontSize: "clamp(2rem, 3.5vw, 3rem)" }}>
+                        <h2 className="mt-5 font-bold leading-tight break-words" style={{ color: "var(--text)", fontSize: "clamp(1.5rem, 3.5vw, 3rem)" }}>
                           {selected.jenis}
                         </h2>
                         <p className="text-[16px] mt-1.5" style={{ color: "var(--text-dim)" }}>
@@ -381,15 +398,16 @@ function LiveStockPage() {
                       </div>
 
                       {/* Kolom kanan: LIVE STOCK label di ATAS, pie di bawahnya */}
-                      <div className="flex flex-col items-center shrink-0">
+                      <div className="flex flex-col items-center w-[clamp(140px,26vw,300px)] shrink-0">
                         <span className="font-bold tracking-tight mb-3" style={{ color: "var(--text)", fontSize: "clamp(1.6rem, 2.6vw, 2.2rem)" }}>
                           LIVE STOCK
                         </span>
-                        <div className="relative w-[300px] h-[300px]">
-                          <PieChart width={300} height={300}>
+                        <div ref={pieBoxRef} className="relative w-full max-w-[300px] aspect-square mx-auto">
+                          <PieChart width={pieSize} height={pieSize}>
                             <Pie
                               data={pieData} dataKey="value" nameKey="name"
-                              cx="50%" cy="50%" innerRadius={104} outerRadius={146}
+                              cx="50%" cy="50%"
+                              innerRadius={pieSize * 0.347} outerRadius={pieSize * 0.487}
                               startAngle={90} endAngle={-270} stroke="none"
                               isAnimationActive={false}
                             >
@@ -409,7 +427,7 @@ function LiveStockPage() {
                     <div className="h-px w-full my-7" style={{ background: "var(--border)" }} />
 
                     {/* ── BAWAH: Non-prodsus + Prodsus + List Prodsus ── */}
-                    <div className="grid grid-cols-[1fr_1fr_minmax(200px,240px)] gap-6">
+                    <div className="grid grid-cols-[1fr_1fr_minmax(160px,240px)] gap-4 min-w-0">
                       {/* NON-PRODSUS */}
                       <ProdsusBlock
                         label="NON-PRODSUS"
@@ -459,7 +477,7 @@ function LiveStockPage() {
                     </div>
 
                     {/* Legend proporsi */}
-                    <div className="flex items-center gap-2 mt-7 text-[15px]" style={{ color: "var(--text-muted)" }}>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-7 text-[clamp(12px,1.2vw,15px)]" style={{ color: "var(--text-muted)" }}>
                       <span className="font-mono font-semibold" style={{ color: "var(--accent)" }}>{selected.total.toLocaleString()}</span>
                       <span>item</span>
                       <span className="font-medium" style={{ color: "var(--accent)" }}>{selected.jenis}</span>
