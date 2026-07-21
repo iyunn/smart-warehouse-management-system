@@ -2830,3 +2830,76 @@ baru merge ke main. Budget ditunda menunggu Excel dari Fillian.
 ### Catatan
 - migration_theme.sql harus dijalankan di Supabase sebelum test.
 - Semua file di-syntax-check via esbuild + logika diverifikasi via simulasi node.
+
+---
+
+## 21 Juli 2026 (lanjutan) — Prodsus/Non-Prodsus, Redesign UI, Top 10 + MERGE ke main
+
+Lanjutan fitur Live Stock di branch `stock`, lalu di-MERGE ke main (fast-forward).
+Live Stock kini live di production. Budget masih ditunda (menunggu Excel).
+
+### Mekanisme Prodsus / Non-Prodsus (kolom "Sub Coce" / kolom D DAT)
+Kebutuhan: Live Stock menampilkan pembagian tiap jenis jadi NON-PRODSUS dan PRODSUS
+berdasarkan kolom "Sub Coce" di DAT.txt Oracle.
+- Keputusan Fillian: sub_coce '0' (atau semua nol) = non-prodsus; selain itu = prodsus
+  (produk khusus, mis. FRDCHICKEN, SAYB, PCAFE, YCGOLD). Simpan dua-duanya: nilai
+  asli sub_coce + flag is_prodsus.
+- List Prodsus = breakdown per nilai sub_coce (prodsus saja). Prodsus/non-prodsus
+  dihitung PER JENIS TERPILIH (ikut cycle/klik).
+
+Perubahan data layer:
+- migration_sub_coce.sql: kolom sub_coce (TEXT default '0') + is_prodsus (BOOLEAN)
+  + index idx_assets_raw_is_prodsus di assets_raw.
+- types.ts: AssetRecord tambah sub_coce + is_prodsus.
+- txtParser.ts: mapping header "Sub Coce" → sub_coce (nama header persis dari DAT
+  Fillian: Cabang, Kelompok Status, Toko, Sub Coce, Kategori, No. Seri, ...).
+  Derive is_prodsus.
+- process/route.ts: raw object insert tambah sub_coce + is_prodsus.
+
+[CRITICAL FIX] Non-prodsus di DAT Fillian ternyata nilainya "00000000" (8 nol),
+BUKAN "0". Cek awal `sub_coce !== '0'` salah menganggap "00000000" sebagai prodsus,
+akibatnya semua item lari ke PRODSUS. Fix di 3 tempat (parser, process route, API):
+pakai regex `/^0*$/` — semua-nol atau kosong = non-prodsus. Verified via simulasi
+node (0, 00000000, 000, "" → non-prodsus; FRDCHICKEN dll → prodsus).
+
+API /api/stock/live:
+- Per jenis tambah: nonProdsus (+CGA1/CGA2), prodsus (+CGA1/CGA2), prodsusBreakdown
+  (per nilai sub_coce, urut desc). Select tambah sub_coce + is_prodsus.
+- Verified via simulasi: Chest Freezer 500 (290) = 200 non-prodsus + 90 prodsus,
+  List Prodsus FRDCHICKEN 50 / SAYB 30 / PCAFE 10.
+
+### Redesign UI Live Stock (padat, sesuai mockup Fillian)
+Beberapa iterasi dari feedback screenshot Fillian:
+- Info bar besar (jam + tanggal UPPERCASE + "DAT update: ...") SELALU tampil (dulu
+  cuma saat fullscreen — makanya di screenshot fullscreen headernya kecil).
+- Angka Total Stock diperbesar (clamp s/d 12rem), pie 300px dengan persen di tengah.
+- "LIVE STOCK" jadi label di ATAS pie (dulu absolute → menumpuk pie; fix jadi in-flow).
+- Bawah: dua blok besar NON-PRODSUS & PRODSUS (komponen ProdsusBlock, angka besar +
+  card CGA1/CGA2 masing-masing) + LIST PRODSUS (bar proporsi per sub_coce prodsus).
+- Kolom kanan dibagi 2: List Merk (atas) + Top 10 Stock (bawah). Top 10 = 10 jenis
+  total terbanyak, clickable (lompat ke jenis + pause), highlight jenis terpilih.
+  Verified sort desc via simulasi.
+
+### Fix-fix
+- [FIX] Tombol play/pause kebalik: autoCycle jalan → PauseIcon (klik untuk pause),
+  berhenti → PlayIcon. (Sebelumnya terbalik.)
+- [FIX] Pie tidak muncul di awal (cuma angka), baru muncul setelah klik jenis.
+  Root cause: ResponsiveContainer butuh ukur parent saat mount; parent belum stabil.
+  Fix: ganti dengan PieChart ukuran fixed 300×300 + isAnimationActive=false → render
+  sejak awal tanpa perlu klik.
+- [FIX] Layout shift (konten "naik/kepotong" saat load, normal setelah refresh).
+  Root cause: grid pakai height calc(100vh - Npx) dengan angka tebakan tinggi header;
+  header info bar tingginya berubah saat font/data belum load. Fix: main jadi flex
+  flex-col, grid pakai flex-1 min-h-0 (isi sisa otomatis, tanpa calc).
+
+### Housekeeping
+- File backup lama (bckp*/bckup*) ikut kehapus dari main saat merge (sudah di-git rm
+  di branch stock sebelumnya). Disarankan .gitignore pola backup ke depan.
+- [FIX build] xlsxParser.ts membuat objek AssetRecord tapi belum punya sub_coce +
+  is_prodsus → type error saat deploy Vercel. Fix: tambah dua field + derive
+  is_prodsus (konsisten txtParser). batchProcessor.ts aman (hanya pakai tipe param).
+
+### Status
+- MERGE ke main SUKSES (fast-forward), deploy Vercel hijau. Live Stock live.
+- WAJIB sebelum tampil di TV: jalankan migration_theme.sql + migration_sub_coce.sql
+  di Supabase PRODUCTION, lalu re-upload DAT (biar sub_coce/is_prodsus keisi).

@@ -3,7 +3,7 @@ git # PROJECT_CONTEXT.md
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **21 Juli 2026** (branch `stock` — fitur Live Stock + fondasi Theme, WIP)
+> Terakhir diupdate: **21 Juli 2026** (Live Stock + Theme System — MERGE ke main, live di production)
 
 ## Project Identity
 
@@ -692,12 +692,10 @@ ke `main` dengan `--ff-only`, branch lokal & remote sudah dihapus.
 
 ---
 
-### 🚧 Live Stock + Theme System (WIP — branch `stock`, 21 Juli 2026)
-Status: 🚧 In Progress di branch `stock` (belum merge ke main)
+### ✅ Live Stock + Theme System (LIVE di production — 21 Juli 2026)
+Status: ✅ Selesai & MERGE ke main. Live Stock live di production. Budget menunggu Excel.
 
-Fitur ini dikembangkan di branch terpisah `stock` sampai stabil, baru merge ke main.
-
-**Fondasi Theme (Tahap 1 — DONE):**
+**Fondasi Theme:**
 - Kolom `theme` di profiles (dark/light, default dark) — preferensi ikut akun user
 - `ThemeContext.tsx` — sumber kebenaran DB profile + cache localStorage (anti-flash FOUC)
 - `ThemeToggle.tsx` — switch dark/light ala website konvensional
@@ -706,29 +704,45 @@ Fitur ini dikembangkan di branch terpisah `stock` sampai stabil, baru merge ke m
 - Untuk sekarang toggle dipasang di dalam halaman Stock saja (bukan sidebar global).
   App existing tetap dark-only sampai fitur Light Mode penuh dikerjakan.
 
-**Menu Sidebar (Tahap 2 — DONE):**
+**Menu Sidebar:**
 - Menu "Stock" dengan submenu "Live Stock" (/stock/live) & "Budget" (/stock/budget)
 
-**Live Stock (Tahap 3 — DONE):**
+**Live Stock (`/stock/live`):**
 - API `GET /api/stock/live` — stock per jenis (akumulasi CGA1 + CGA2, CGA3 DIKECUALIKAN
   karena barang musnah). Sumber assets_clean join assets_raw!inner + pagination
-  (sama Monitoring). Return per jenis: total, cga1, cga2, kategori, merkBreakdown.
-- Halaman `/stock/live`:
-  - Kiri: tabel jenis di-GROUP per kategori (kategori_oracle), urut A-Z (kategori & jenis)
-  - Kanan: angka besar total stock jenis terpilih + nama + kategori, pie chart proporsi
-    (persen di tengah donut), List Merk (kolom full-height dengan bar proporsi),
-    stat cards CGA1/CGA2/Total
-  - Mode idle/screensaver: auto-cycle antar jenis tiap 6 detik + auto-refresh data 60 detik
-  - Mode FULLSCREEN: sembunyikan Sidebar/Topbar, jam live + tanggal + DAT update (ala papan
-    bandara), progress bar auto-cycle, auto-scroll ke item aktif
-  - Theme-aware (dark/light) + ThemeToggle di header
-  - Akses: untuk SEKARANG di dalam auth. Rencana publik (tanpa login) menyusul.
+  (sama Monitoring). Return per jenis: total, cga1, cga2, kategori, merkBreakdown,
+  nonProdsus(+cga1/cga2), prodsus(+cga1/cga2), prodsusBreakdown.
+- Tabel kiri: jenis di-GROUP per kategori (kategori_oracle), urut A-Z (kategori & jenis).
+- Panel kanan atas: angka besar Total Stock jenis terpilih + nama + kategori,
+  "LIVE STOCK" label di atas pie chart (persen di tengah donut "% DARI TOTAL CGA").
+  Pie pakai ukuran FIXED 300×300 (bukan ResponsiveContainer — biar render sejak awal).
+- Panel kanan bawah: dua blok NON-PRODSUS & PRODSUS (angka besar + card CGA1/CGA2
+  masing-masing) + LIST PRODSUS (breakdown per nilai sub_coce prodsus, bar proporsi).
+- Kolom paling kanan dibagi 2: List Merk (atas) + Top 10 Stock (bawah, 10 jenis
+  terbanyak, clickable, highlight jenis terpilih).
+- Mode idle/screensaver: info bar besar (jam live + tanggal + DAT update) selalu tampil,
+  auto-cycle antar jenis tiap 6 detik (toggle Auto/Manual, progress bar), auto-refresh
+  data 60 detik, auto-scroll ke item aktif.
+- Mode FULLSCREEN (Fullscreen API): sembunyikan Sidebar/Topbar/ThemeToggle, layout
+  pakai flex-1 min-h-0 (bukan calc height — anti layout shift).
+- Theme-aware (dark/light) + ThemeToggle di header.
+- Akses: untuk SEKARANG di dalam auth. Rencana publik (tanpa login) menyusul.
 
-**Budget (Tahap 4 — PENDING):**
-- Menunggu file Excel budget dari Fillian (berisi mekanisme/standar penentuan budget
-  over/under). Halaman belum dibuat sampai formula jelas.
+**Mekanisme Prodsus/Non-Prodsus (kolom "Sub Coce" / kolom D DAT):**
+- sub_coce '0' atau semua-nol ("00000000") atau kosong = NON-PRODSUS; selain itu =
+  PRODSUS (FRDCHICKEN, SAYB, PCAFE, YCGOLD, dll). Deteksi pakai regex `/^0*$/`.
+- Disimpan di assets_raw: kolom sub_coce (nilai asli) + is_prodsus (flag).
+- Parser DAT (txtParser) baca header "Sub Coce". process route insert dua field.
+- Dihitung PER JENIS TERPILIH (ikut cycle/klik). List Prodsus = breakdown per nilai
+  sub_coce (prodsus saja).
 
-**SQL yang harus dijalankan:** `migration_theme.sql` (tambah kolom theme di profiles).
+**Budget (PENDING):**
+- Menunggu file Excel budget dari Fillian (mekanisme/standar over/under). Halaman
+  `/stock/budget` belum dibuat (menu ada tapi masih 404/blank).
+
+**SQL yang HARUS dijalankan di Supabase production:** `migration_theme.sql` (kolom
+theme di profiles) + `migration_sub_coce.sql` (sub_coce + is_prodsus di assets_raw).
+Lalu re-upload DAT agar sub_coce/is_prodsus keisi (bukan default '0').
 
 ---
 
@@ -743,10 +757,9 @@ Fitur ini dikembangkan di branch terpisah `stock` sampai stabil, baru merge ke m
 ### 🚀 Fitur Utama Direncanakan
 
 #### 1. Live Stock (Publik) + Budget Stok (Internal)
-Status: 🚧 SEDANG DIKERJAKAN di branch `stock` — Live Stock sudah jalan (lihat
-section "Live Stock + Theme System (WIP)" di atas). Budget menunggu Excel.
-Sisa untuk fitur ini: (a) Budget page + formula dari Excel, (b) Live Stock
-dijadikan publik (route di luar auth) — sekarang masih di dalam auth.
+Status: ✅ Live Stock LIVE di main/production (lihat section "Live Stock + Theme
+System" di atas). Sisa untuk fitur ini: (a) Budget page + formula dari Excel,
+(b) Live Stock dijadikan publik (route di luar auth) — sekarang masih di dalam auth.
 
 Dua bagian terpisah dengan level akses berbeda:
 
@@ -777,10 +790,10 @@ Catatan implementasi:
   budget_config: target_toko_baru, total_toko, per periode).
 
 #### 2. Light Mode (semua halaman/UI)
-Status: 🚧 Fondasi SUDAH ADA di branch `stock` (ThemeContext, ThemeToggle, CSS token,
-kolom theme di profiles). Halaman Stock sudah theme-aware. Sisa: konversi halaman
-existing (Dashboard/Monitoring/SJ/dll) dari warna hardcoded ke CSS token, lalu
-naikkan toggle ke sidebar global.
+Status: 🚧 Fondasi SUDAH di main (ThemeContext, ThemeToggle, CSS token, kolom theme
+di profiles). Halaman Stock sudah theme-aware. Sisa: konversi halaman existing
+(Dashboard/Monitoring/SJ/dll) dari warna hardcoded ke CSS token, lalu naikkan toggle
+ke sidebar global.
 
 - Tema terang untuk SELURUH halaman/UI (saat ini dark-only: #060d19 / #38bdf8).
 - Toggle dark/light, preferensi tersimpan (mis. localStorage atau profil user).
@@ -817,10 +830,15 @@ Status: 📌 Deferred — sampai semua fitur selesai
 ### Tables — Asset
 | Tabel | Fungsi |
 |-------|--------|
-| `assets_raw` | Data mentah DAT Oracle (CGA only) |
+| `assets_raw` | Data mentah DAT Oracle (CGA only). Termasuk `sub_coce` (nilai kolom D DAT: '0'/semua-nol = non-prodsus, selain itu prodsus) + `is_prodsus` (flag boolean) |
 | `assets_clean` | Data hasil klasifikasi |
 | `keyword_rules` | Rule klasifikasi adaptif |
 | `classification_logs` | Audit trail klasifikasi |
+
+### Tables — Auth / User
+| Tabel | Fungsi |
+|-------|--------|
+| `profiles` | Profil user (role super_admin/admin, status, + `theme` dark/light untuk preferensi tema) |
 
 ### Tables — Surat Jalan
 | Tabel | Fungsi |
@@ -832,6 +850,7 @@ Status: 📌 Deferred — sampai semua fitur selesai
 ### Indexes
 - `idx_assets_raw_toko` — optimasi filter warehouse (legacy, masih dipertahankan)
 - `idx_assets_raw_uploaded_at` (DESC) — untuk "DAT Update terakhir" di Dashboard
+- `idx_assets_raw_is_prodsus` — optimasi agregasi prodsus/non-prodsus (Live Stock)
 - `idx_assets_clean_jenis` — optimasi filter unknown
 - `idx_assets_clean_merk` — optimasi filter unknown
 - `idx_surat_jalan_tanggal`, `idx_surat_jalan_tujuan`, `idx_surat_jalan_status`
