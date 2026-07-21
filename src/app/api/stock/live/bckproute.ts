@@ -19,7 +19,6 @@ export interface MerkCount {
 
 export interface JenisStock {
   jenis: string
-  kategori: string       // kategori_oracle mentah, mis. "C - PERALATAN KOMPUTER"
   total: number          // total item jenis ini (CGA1 + CGA2)
   cga1: number           // jumlah di CGA1
   cga2: number           // jumlah di CGA2
@@ -46,12 +45,11 @@ export interface LiveStockResponse {
  */
 export async function GET() {
   try {
-    // Map jenis → { total, cga1, cga2, kategori, merk: Map<merk, count> }
+    // Map jenis → { total, cga1, cga2, merk: Map<merk, count> }
     const jenisMap = new Map<string, {
       total: number
       cga1: number
       cga2: number
-      kategori: string
       merk: Map<string, number>
     }>()
 
@@ -63,7 +61,7 @@ export async function GET() {
     while (true) {
       const { data, error } = await supabase
         .from('assets_clean')
-        .select(`jenis, merk, raw:assets_raw!inner(toko, kategori_oracle)`)
+        .select(`jenis, merk, raw:assets_raw!inner(toko)`)
         .range(from, from + FETCH_SIZE - 1)
 
       if (error) throw new Error(error.message)
@@ -79,10 +77,9 @@ export async function GET() {
 
         const jenis = ((row as any).jenis ?? '').trim() || 'Unknown'
         const merk  = ((row as any).merk ?? '').trim() || 'Unknown'
-        const kategori = (raw.kategori_oracle ?? '').trim() || 'Tanpa Kategori'
 
         if (!jenisMap.has(jenis)) {
-          jenisMap.set(jenis, { total: 0, cga1: 0, cga2: 0, kategori, merk: new Map() })
+          jenisMap.set(jenis, { total: 0, cga1: 0, cga2: 0, merk: new Map() })
         }
         const j = jenisMap.get(jenis)!
         j.total += 1
@@ -96,12 +93,10 @@ export async function GET() {
       if (from > 200000) break // safety guard
     }
 
-    // Build response: sertakan kategori, merk urut desc.
-    // Urutan jenisList di sini tidak krusial (halaman akan group + sort sendiri).
+    // Build response: urut jenis by total desc, merk by count desc
     const jenisList: JenisStock[] = Array.from(jenisMap.entries())
       .map(([jenis, v]) => ({
         jenis,
-        kategori: v.kategori,
         total: v.total,
         cga1: v.cga1,
         cga2: v.cga2,

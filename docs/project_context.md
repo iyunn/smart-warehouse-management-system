@@ -3,7 +3,7 @@ git # PROJECT_CONTEXT.md
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **20 Juli 2026** (Fix tag Allocated transaksi terakhir + perbaikan Dashboard)
+> Terakhir diupdate: **21 Juli 2026** (branch `stock` — fitur Live Stock + fondasi Theme, WIP)
 
 ## Project Identity
 
@@ -692,6 +692,46 @@ ke `main` dengan `--ff-only`, branch lokal & remote sudah dihapus.
 
 ---
 
+### 🚧 Live Stock + Theme System (WIP — branch `stock`, 21 Juli 2026)
+Status: 🚧 In Progress di branch `stock` (belum merge ke main)
+
+Fitur ini dikembangkan di branch terpisah `stock` sampai stabil, baru merge ke main.
+
+**Fondasi Theme (Tahap 1 — DONE):**
+- Kolom `theme` di profiles (dark/light, default dark) — preferensi ikut akun user
+- `ThemeContext.tsx` — sumber kebenaran DB profile + cache localStorage (anti-flash FOUC)
+- `ThemeToggle.tsx` — switch dark/light ala website konvensional
+- CSS variable tema di globals.css (`--bg`, `--surface`, `--text`, `--accent`, `--cga1/2/3`)
+  di-scope ke `.dark`/`.light`. Layout wire ThemeProvider + script anti-flash.
+- Untuk sekarang toggle dipasang di dalam halaman Stock saja (bukan sidebar global).
+  App existing tetap dark-only sampai fitur Light Mode penuh dikerjakan.
+
+**Menu Sidebar (Tahap 2 — DONE):**
+- Menu "Stock" dengan submenu "Live Stock" (/stock/live) & "Budget" (/stock/budget)
+
+**Live Stock (Tahap 3 — DONE):**
+- API `GET /api/stock/live` — stock per jenis (akumulasi CGA1 + CGA2, CGA3 DIKECUALIKAN
+  karena barang musnah). Sumber assets_clean join assets_raw!inner + pagination
+  (sama Monitoring). Return per jenis: total, cga1, cga2, kategori, merkBreakdown.
+- Halaman `/stock/live`:
+  - Kiri: tabel jenis di-GROUP per kategori (kategori_oracle), urut A-Z (kategori & jenis)
+  - Kanan: angka besar total stock jenis terpilih + nama + kategori, pie chart proporsi
+    (persen di tengah donut), List Merk (kolom full-height dengan bar proporsi),
+    stat cards CGA1/CGA2/Total
+  - Mode idle/screensaver: auto-cycle antar jenis tiap 6 detik + auto-refresh data 60 detik
+  - Mode FULLSCREEN: sembunyikan Sidebar/Topbar, jam live + tanggal + DAT update (ala papan
+    bandara), progress bar auto-cycle, auto-scroll ke item aktif
+  - Theme-aware (dark/light) + ThemeToggle di header
+  - Akses: untuk SEKARANG di dalam auth. Rencana publik (tanpa login) menyusul.
+
+**Budget (Tahap 4 — PENDING):**
+- Menunggu file Excel budget dari Fillian (berisi mekanisme/standar penentuan budget
+  over/under). Halaman belum dibuat sampai formula jelas.
+
+**SQL yang harus dijalankan:** `migration_theme.sql` (tambah kolom theme di profiles).
+
+---
+
 ## Features Planned
 
 ### 🎯 Next (Updated 20 Juli 2026)
@@ -703,7 +743,10 @@ ke `main` dengan `--ff-only`, branch lokal & remote sudah dihapus.
 ### 🚀 Fitur Utama Direncanakan
 
 #### 1. Live Stock (Publik) + Budget Stok (Internal)
-Status: 📋 Planned — fitur utama berikutnya
+Status: 🚧 SEDANG DIKERJAKAN di branch `stock` — Live Stock sudah jalan (lihat
+section "Live Stock + Theme System (WIP)" di atas). Budget menunggu Excel.
+Sisa untuk fitur ini: (a) Budget page + formula dari Excel, (b) Live Stock
+dijadikan publik (route di luar auth) — sekarang masih di dalam auth.
 
 Dua bagian terpisah dengan level akses berbeda:
 
@@ -734,7 +777,10 @@ Catatan implementasi:
   budget_config: target_toko_baru, total_toko, per periode).
 
 #### 2. Light Mode (semua halaman/UI)
-Status: 📋 Planned
+Status: 🚧 Fondasi SUDAH ADA di branch `stock` (ThemeContext, ThemeToggle, CSS token,
+kolom theme di profiles). Halaman Stock sudah theme-aware. Sisa: konversi halaman
+existing (Dashboard/Monitoring/SJ/dll) dari warna hardcoded ke CSS token, lalu
+naikkan toggle ke sidebar global.
 
 - Tema terang untuk SELURUH halaman/UI (saat ini dark-only: #060d19 / #38bdf8).
 - Toggle dark/light, preferensi tersimpan (mis. localStorage atau profil user).

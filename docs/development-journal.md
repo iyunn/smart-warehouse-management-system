@@ -2776,3 +2776,57 @@ Catatan: process-route.ts sudah termasuk fix tag Allocated + uploaded_at eksplis
 Rencana ke depan (disebut Fillian): pertimbangkan menghilangkan mekanisme
 draft/submitted pada Surat Jalan karena sepertinya tidak kepakai — perlu petakan
 dampak dulu (halaman buat SJ, filter status, query dashboard submitted/completed).
+
+---
+
+## 21 Juli 2026 — Live Stock + Fondasi Theme System (branch `stock`)
+
+Fitur dikembangkan di branch terpisah `stock` (checkpoint bertahap) sampai stabil,
+baru merge ke main. Budget ditunda menunggu Excel dari Fillian.
+
+### Keputusan arsitektur (dikonfirmasi Fillian)
+- Live Stock: untuk SEKARANG di dalam auth; publik (tanpa login) menyusul.
+- Sumber data: assets_clean join assets_raw!inner (SAMA dengan Monitoring).
+- Theme: preferensi disimpan di profiles DB (ikut akun), bukan localStorage saja.
+- Stock = akumulasi CGA1 + CGA2 saja. CGA3 dikecualikan (barang akan dimusnahkan).
+
+### Tahap 1 — Fondasi Theme
+- Migration kolom theme di profiles (dark/light, default dark).
+- ThemeContext: sumber kebenaran DB profile, cache localStorage untuk anti-flash.
+  Apply class dark/light ke <html>. Script inline di layout <head> untuk apply
+  tema dari cache sebelum React mount (hindari FOUC).
+- ThemeToggle: switch ala website konvensional (track + knob + ikon matahari/bulan).
+- globals.css: CSS variable tema (--bg, --surface, --text, --accent, --cga1/2/3)
+  di-scope ke .dark/.light. Dipakai halaman Stock; bisa diperluas ke seluruh app.
+- SessionContext: expose theme dari profile.
+- Keputusan: toggle dipasang di dalam halaman Stock dulu (bukan sidebar global),
+  karena app existing masih dark-only (warna hardcoded). Kalau toggle global
+  dipasang sekarang, halaman lain rusak saat light. Light mode penuh = fitur terpisah.
+
+### Tahap 2 — Menu Sidebar
+- Menu "Stock" (icon bar chart) dengan submenu Live Stock & Budget. Pola submenu
+  sama dengan "Surat Jalan Manual" yang sudah ada.
+
+### Tahap 3 — Live Stock
+- API GET /api/stock/live: pagination range loop, hitung per jenis (CGA1+CGA2,
+  CGA3 skip via extractCGA regex). Return total, cga1, cga2, kategori, merkBreakdown
+  (urut desc). Verified via simulasi node (cpu 10: Zyrex 5, Wearnes 3, Gear 2).
+- Halaman /stock/live:
+  - Tabel kiri di-GROUP per kategori (kategori_oracle), kategori & jenis urut A-Z.
+    flatOrder untuk auto-cycle mengikuti urutan grouped. Verified via simulasi.
+  - Panel kanan: hero (angka besar + pie dengan persen di tengah donut), stat cards
+    CGA1/CGA2/Total, List Merk full-height dengan bar proporsi per merk.
+  - Revisi dari feedback: layout awal terlalu kosong → dirombak jadi padat.
+- Mode idle/screensaver:
+  - Auto-cycle antar jenis tiap 6 detik (toggle Auto/Manual), auto-refresh data 60s.
+  - Fullscreen (Fullscreen API): sembunyikan Sidebar/Topbar, jam live + tanggal +
+    DAT update (ala papan bandara), progress bar auto-cycle (0→100% per 6s, verified),
+    auto-scroll ke item aktif. Sync state saat keluar via ESC.
+  - Klik manual di tabel kiri → pilih jenis + pause auto-cycle.
+
+### Tahap 4 — Budget (PENDING)
+- Menunggu Excel budget dari Fillian (mekanisme/standar over/under). Halaman belum dibuat.
+
+### Catatan
+- migration_theme.sql harus dijalankan di Supabase sebelum test.
+- Semua file di-syntax-check via esbuild + logika diverifikasi via simulasi node.
