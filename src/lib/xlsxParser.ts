@@ -149,6 +149,8 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
       jumlah_tercatat: 0,
       invoice_number: "",
       tanggal_dokumen: "",
+      sub_coce: "0",
+      is_prodsus: false,
     };
 
     for (const [excelCol, apiField] of Object.entries(COLUMN_MAP)) {
@@ -167,6 +169,12 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
 
     // Default kuantitas ke 1 kalau 0 atau tidak ada
     if (!record.kuantitas || record.kuantitas === 0) record.kuantitas = 1;
+
+    // Derive is_prodsus: non-prodsus kalau sub_coce semua nol (0, 00000000)
+    // atau kosong. Selain itu prodsus. Konsisten dengan txtParser.
+    const scRaw = (record.sub_coce ?? "").trim();
+    record.sub_coce   = scRaw || "0";
+    record.is_prodsus = !/^0*$/.test(record.sub_coce);
 
     if (!record.kode_asset) {
       warnings.push(`Baris ${i + 2}: "No. Seri" kosong — baris tetap diproses.`);
