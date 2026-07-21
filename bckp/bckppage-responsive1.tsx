@@ -251,10 +251,10 @@ function LiveStockPage() {
       {!fullscreen && <Sidebar />}
       <div className="flex flex-1 flex-col overflow-hidden">
         {!fullscreen && <Topbar title="Live Stock" />}
-        <main className="flex-1 min-h-0 overflow-hidden px-[clamp(0.75rem,2vw,1.5rem)] py-[clamp(0.5rem,1.5vh,1.25rem)] flex flex-col">
+        <main className="flex-1 min-h-0 overflow-hidden px-6 py-5 flex flex-col">
 
           {/* Header bar — info bar ala papan bandara (selalu tampil) */}
-          <div className="mb-[clamp(0.5rem,1.5vh,1.25rem)] flex items-start justify-between gap-4 flex-wrap">
+          <div className="mb-5 flex items-start justify-between gap-4 flex-wrap">
             <div className="flex flex-col gap-1">
               <div className="flex items-baseline gap-4">
                 <span className="font-mono font-bold tabular-nums leading-none" style={{ color: "var(--text)", fontSize: "clamp(1.8rem, 3vw, 2.5rem)" }}>
@@ -352,12 +352,12 @@ function LiveStockPage() {
                               background: active ? "var(--accent-soft)" : "transparent",
                             }}
                           >
-                            <span className="text-[clamp(13px,1vw,16px)] truncate"
+                            <span className="text-[13px] truncate"
                               style={{ color: active ? "var(--accent)" : "var(--text)", fontWeight: active ? 600 : 400 }}
                               title={j.jenis}>
                               {j.jenis}
                             </span>
-                            <span className="text-[clamp(13px,1vw,16px)] font-mono font-semibold shrink-0"
+                            <span className="text-[13px] font-mono font-semibold shrink-0"
                               style={{ color: active ? "var(--accent)" : "var(--text-muted)" }}>
                               {j.total.toLocaleString()}
                             </span>
@@ -384,12 +384,12 @@ function LiveStockPage() {
                         </p>
                         <div className="flex items-baseline gap-4">
                           <span className="font-mono font-bold leading-none tabular-nums"
-                            style={{ color: "var(--accent)", fontSize: "clamp(4rem, 12vmin, 11rem)" }}>
+                            style={{ color: "var(--accent)", fontSize: "clamp(6rem, 14vw, 12rem)" }}>
                             {selected.total.toLocaleString()}
                           </span>
                           <span className="text-[22px]" style={{ color: "var(--text-dim)" }}>item</span>
                         </div>
-                        <h2 className="mt-[clamp(0.5rem,1.5vmin,1.25rem)] font-bold leading-tight break-words" style={{ color: "var(--text)", fontSize: "clamp(1.5rem, 3.5vw, 3rem)" }}>
+                        <h2 className="mt-5 font-bold leading-tight break-words" style={{ color: "var(--text)", fontSize: "clamp(1.5rem, 3.5vw, 3rem)" }}>
                           {selected.jenis}
                         </h2>
                         <p className="text-[16px] mt-1.5" style={{ color: "var(--text-dim)" }}>
@@ -424,7 +424,7 @@ function LiveStockPage() {
                     </div>
 
                     {/* Divider */}
-                    <div className="h-px w-full my-[clamp(0.75rem,2vmin,1.75rem)]" style={{ background: "var(--border)" }} />
+                    <div className="h-px w-full my-7" style={{ background: "var(--border)" }} />
 
                     {/* ── BAWAH: Non-prodsus + Prodsus + List Prodsus ── */}
                     <div className="grid grid-cols-[1fr_1fr_minmax(160px,240px)] gap-4 min-w-0">
@@ -477,7 +477,7 @@ function LiveStockPage() {
                     </div>
 
                     {/* Legend proporsi */}
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-[clamp(0.75rem,2vmin,1.75rem)] text-[clamp(12px,1.2vw,15px)]" style={{ color: "var(--text-muted)" }}>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-7 text-[clamp(12px,1.2vw,15px)]" style={{ color: "var(--text-muted)" }}>
                       <span className="font-mono font-semibold" style={{ color: "var(--accent)" }}>{selected.total.toLocaleString()}</span>
                       <span>item</span>
                       <span className="font-medium" style={{ color: "var(--accent)" }}>{selected.jenis}</span>
@@ -505,8 +505,8 @@ function LiveStockPage() {
                           return (
                             <div key={m.merk} className="px-2 py-2 rounded-lg">
                               <div className="flex items-center justify-between gap-2 mb-1">
-                                <span className="text-[clamp(13px,1vw,16px)] truncate" style={{ color: "var(--text)" }} title={m.merk}>{m.merk}</span>
-                                <span className="text-[clamp(13px,1vw,16px)] font-mono font-semibold shrink-0" style={{ color: "var(--accent)" }}>{m.count.toLocaleString()}</span>
+                                <span className="text-[13px] truncate" style={{ color: "var(--text)" }} title={m.merk}>{m.merk}</span>
+                                <span className="text-[13px] font-mono font-semibold shrink-0" style={{ color: "var(--accent)" }}>{m.count.toLocaleString()}</span>
                               </div>
                               <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--surface-3)" }}>
                                 <div className="h-full rounded-full" style={{ width: `${merkPct}%`, background: "var(--accent)" }} />
@@ -536,16 +536,16 @@ function LiveStockPage() {
                               onClick={() => flatIdx >= 0 && handleSelect(flatIdx)}
                               className="w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-white/[0.03]"
                               style={{ background: isSel ? "var(--accent-soft)" : "transparent" }}>
-                              <span className="font-mono font-bold text-[clamp(13px,1vw,16px)] w-5 text-center shrink-0"
+                              <span className="font-mono font-bold text-[13px] w-5 text-center shrink-0"
                                 style={{ color: idx < 3 ? "var(--accent)" : "var(--text-dim)" }}>
                                 {idx + 1}
                               </span>
-                              <span className="text-[clamp(13px,1vw,16px)] truncate flex-1"
+                              <span className="text-[13px] truncate flex-1"
                                 style={{ color: isSel ? "var(--accent)" : "var(--text)", fontWeight: isSel ? 600 : 400 }}
                                 title={j.jenis}>
                                 {j.jenis}
                               </span>
-                              <span className="text-[clamp(13px,1vw,16px)] font-mono font-semibold shrink-0" style={{ color: "var(--accent)" }}>
+                              <span className="text-[13px] font-mono font-semibold shrink-0" style={{ color: "var(--accent)" }}>
                                 {j.total.toLocaleString()}
                               </span>
                             </button>
@@ -570,7 +570,7 @@ const ProdsusBlock = ({ label, value, cga1, cga2 }: { label: string; value: numb
     <p className="font-bold tracking-tight mb-2" style={{ color: "var(--text)", fontSize: "clamp(1.3rem, 2vw, 1.75rem)" }}>{label}</p>
     <div className="flex items-baseline gap-2 mb-4">
       <span className="font-mono font-bold leading-none tabular-nums"
-        style={{ color: "var(--accent)", fontSize: "clamp(2.5rem, 7vmin, 5rem)" }}>
+        style={{ color: "var(--accent)", fontSize: "clamp(3.5rem, 7vw, 5.5rem)" }}>
         {value.toLocaleString()}
       </span>
       <span className="text-[15px]" style={{ color: "var(--text-dim)" }}>item</span>
