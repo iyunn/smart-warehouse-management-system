@@ -21,7 +21,7 @@ import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import ThemeToggle from "@/components/ThemeToggle";
 import {
-  PieChart, Pie, Cell, ResponsiveContainer,
+  PieChart, Pie, Cell,
 } from "recharts";
 
 interface MerkCount { merk: string; count: number }
@@ -208,6 +208,12 @@ function LiveStockPage() {
 
   const jenisList = flatOrder;
   const selected  = jenisList[selectedIdx] ?? null;
+
+  // Top 10 jenis dengan stock terbanyak (dari seluruh data, bukan cuma terpilih)
+  const top10 = useMemo(() => {
+    const all = data?.jenisList ?? [];
+    return [...all].sort((a, b) => b.total - a.total).slice(0, 10);
+  }, [data]);
   const totalCGADisplay = (data?.totalCGA1 ?? 0) + (data?.totalCGA2 ?? 0);
 
   // Pie: jenis terpilih vs sisa total CGA1+CGA2
@@ -380,18 +386,17 @@ function LiveStockPage() {
                           LIVE STOCK
                         </span>
                         <div className="relative w-[300px] h-[300px]">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                              <Pie
-                                data={pieData} dataKey="value" nameKey="name"
-                                cx="50%" cy="50%" innerRadius={104} outerRadius={146}
-                                startAngle={90} endAngle={-270} stroke="none"
-                              >
-                                <Cell fill="var(--accent)" />
-                                <Cell fill="var(--surface-3)" />
-                              </Pie>
-                            </PieChart>
-                          </ResponsiveContainer>
+                          <PieChart width={300} height={300}>
+                            <Pie
+                              data={pieData} dataKey="value" nameKey="name"
+                              cx="50%" cy="50%" innerRadius={104} outerRadius={146}
+                              startAngle={90} endAngle={-270} stroke="none"
+                              isAnimationActive={false}
+                            >
+                              <Cell fill="var(--accent)" />
+                              <Cell fill="var(--surface-3)" />
+                            </Pie>
+                          </PieChart>
                           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                             <span className="font-mono font-bold leading-none" style={{ color: "var(--accent)", fontSize: "clamp(2.5rem, 4vw, 3.5rem)" }}>{pct}%</span>
                             <span className="text-[13px] mt-2 text-center leading-tight tracking-wide" style={{ color: "var(--text-dim)" }}>DARI TOTAL<br/>CGA</span>
@@ -464,31 +469,71 @@ function LiveStockPage() {
                     </div>
                   </div>
 
-                  {/* Kolom kanan: List Merk (full height) */}
-                  <div className="border-l flex flex-col" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
-                    <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
-                      <p className="text-[12px] font-semibold uppercase tracking-widest" style={{ color: "var(--text)" }}>
-                        List Merk
-                      </p>
-                      <p className="text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>
-                        {selected.merkBreakdown.length} merk
-                      </p>
+                  {/* Kolom kanan: List Merk (atas) + Top 10 (bawah) */}
+                  <div className="border-l flex flex-col min-h-0" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                    {/* ── ATAS: List Merk (setengah) ── */}
+                    <div className="flex flex-col min-h-0 basis-1/2">
+                      <div className="px-5 py-4 border-b shrink-0" style={{ borderColor: "var(--border)" }}>
+                        <p className="text-[12px] font-semibold uppercase tracking-widest" style={{ color: "var(--text)" }}>
+                          List Merk
+                        </p>
+                        <p className="text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>
+                          {selected.merkBreakdown.length} merk · {selected.jenis}
+                        </p>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-3 min-h-0">
+                        {selected.merkBreakdown.map((m) => {
+                          const merkPct = selected.total > 0 ? (m.count / selected.total) * 100 : 0;
+                          return (
+                            <div key={m.merk} className="px-2 py-2 rounded-lg">
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <span className="text-[13px] truncate" style={{ color: "var(--text)" }} title={m.merk}>{m.merk}</span>
+                                <span className="text-[13px] font-mono font-semibold shrink-0" style={{ color: "var(--accent)" }}>{m.count.toLocaleString()}</span>
+                              </div>
+                              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--surface-3)" }}>
+                                <div className="h-full rounded-full" style={{ width: `${merkPct}%`, background: "var(--accent)" }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-3">
-                      {selected.merkBreakdown.map((m) => {
-                        const merkPct = selected.total > 0 ? (m.count / selected.total) * 100 : 0;
-                        return (
-                          <div key={m.merk} className="px-2 py-2 rounded-lg">
-                            <div className="flex items-center justify-between gap-2 mb-1">
-                              <span className="text-[13px] truncate" style={{ color: "var(--text)" }} title={m.merk}>{m.merk}</span>
-                              <span className="text-[13px] font-mono font-semibold shrink-0" style={{ color: "var(--accent)" }}>{m.count.toLocaleString()}</span>
-                            </div>
-                            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--surface-3)" }}>
-                              <div className="h-full rounded-full" style={{ width: `${merkPct}%`, background: "var(--accent)" }} />
-                            </div>
-                          </div>
-                        );
-                      })}
+
+                    {/* ── BAWAH: Top 10 stock terbanyak (setengah) ── */}
+                    <div className="flex flex-col min-h-0 basis-1/2 border-t" style={{ borderColor: "var(--border)" }}>
+                      <div className="px-5 py-4 border-b shrink-0" style={{ borderColor: "var(--border)" }}>
+                        <p className="text-[12px] font-semibold uppercase tracking-widest" style={{ color: "var(--text)" }}>
+                          Top 10 Stock
+                        </p>
+                        <p className="text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>
+                          jenis terbanyak (CGA1 + CGA2)
+                        </p>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-2 min-h-0">
+                        {top10.map((j, idx) => {
+                          const isSel = selected && j.jenis === selected.jenis;
+                          const flatIdx = flatOrder.findIndex(f => f.jenis === j.jenis);
+                          return (
+                            <button key={j.jenis}
+                              onClick={() => flatIdx >= 0 && handleSelect(flatIdx)}
+                              className="w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-white/[0.03]"
+                              style={{ background: isSel ? "var(--accent-soft)" : "transparent" }}>
+                              <span className="font-mono font-bold text-[13px] w-5 text-center shrink-0"
+                                style={{ color: idx < 3 ? "var(--accent)" : "var(--text-dim)" }}>
+                                {idx + 1}
+                              </span>
+                              <span className="text-[13px] truncate flex-1"
+                                style={{ color: isSel ? "var(--accent)" : "var(--text)", fontWeight: isSel ? 600 : 400 }}
+                                title={j.jenis}>
+                                {j.jenis}
+                              </span>
+                              <span className="text-[13px] font-mono font-semibold shrink-0" style={{ color: "var(--accent)" }}>
+                                {j.total.toLocaleString()}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 </div>
