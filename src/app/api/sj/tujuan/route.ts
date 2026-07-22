@@ -28,7 +28,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { kode, nama } = body
+    const { kode, nama, kota, kecamatan } = body
 
     if (!kode || !nama) {
       return NextResponse.json({ error: 'Kode dan nama wajib diisi' }, { status: 400 })
@@ -36,7 +36,12 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await supabase
       .from('sj_tujuan')
-      .insert({ kode: kode.trim().toUpperCase(), nama: nama.trim() })
+      .insert({
+        kode: kode.trim().toUpperCase(),
+        nama: nama.trim(),
+        kota: kota?.trim() || null,
+        kecamatan: kecamatan?.trim() || null,
+      })
       .select()
       .single()
 
@@ -54,13 +59,18 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { id, kode, nama } = body
+    const { id, kode, nama, kota, kecamatan } = body
 
     if (!id) return NextResponse.json({ error: 'ID wajib' }, { status: 400 })
 
     const { data, error } = await supabase
       .from('sj_tujuan')
-      .update({ kode: kode.trim().toUpperCase(), nama: nama.trim() })
+      .update({
+        kode: kode.trim().toUpperCase(),
+        nama: nama.trim(),
+        kota: kota?.trim() || null,
+        kecamatan: kecamatan?.trim() || null,
+      })
       .eq('id', id)
       .select()
       .single()

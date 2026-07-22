@@ -4,6 +4,18 @@ export interface SJTujuan {
   id: string;
   kode: string;
   nama: string;
+  kota?: string | null;
+  kecamatan?: string | null;
+  created_at?: string;
+}
+
+// Item pendingan alokasi (satu baris = satu jenis barang untuk satu tujuan)
+export interface PendinganItem {
+  id: string;
+  tujuan_id: string;
+  jenis: string;
+  qty: number;
+  keterangan?: string;
   created_at?: string;
 }
 
