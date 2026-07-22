@@ -40,20 +40,6 @@ function formatTanggalLong(iso: string): string {
   }
 }
 
-// Maksimal item per halaman. Kalau total item > ini, sisanya lanjut ke
-// halaman berikutnya (manual pagination — react-pdf tidak reliable untuk
-// page-break otomatis di tengah tabel besar, jadi di-split manual per chunk).
-const ITEMS_PER_PAGE = 15;
-
-function chunkItems<T>(items: T[], size: number): T[][] {
-  if (items.length === 0) return [[]];
-  const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    chunks.push(items.slice(i, i + size));
-  }
-  return chunks;
-}
-
 // ─── Color palette (kekinian tapi formal) ────────────────────────────────
 const COLORS = {
   primary:    "#0EA5E9",   // cyan-500 (accent kekinian)
@@ -367,10 +353,11 @@ function DocumentHeader({ data, logoSrc }: { data: SJDataForPDF; logoSrc?: strin
   );
 }
 
-/** Baris header tabel (Jenis, Merk, Serial No, dst). Diulang di setiap halaman. */
+/** Baris header tabel (Jenis, Merk, Serial No, dst). `fixed` → berulang di
+ * setiap halaman kalau tabel pecah ke halaman berikutnya. */
 function TableHeaderRow() {
   return (
-    <View style={styles.tableHeader}>
+    <View style={styles.tableHeader} fixed>
       <Text style={[styles.tableHeaderCell, styles.colNo]}>No</Text>
       <Text style={[styles.tableHeaderCell, styles.colJenis]}>Jenis</Text>
       <Text style={[styles.tableHeaderCell, styles.colMerk]}>Merk</Text>
@@ -385,7 +372,7 @@ function TableHeaderRow() {
 
 function TableRow({ item, idx }: { item: SJItemForPDF; idx: number }) {
   return (
-    <View style={[styles.tableRow, idx % 2 === 1 ? styles.tableRowAlt : {}]}>
+    <View style={[styles.tableRow, idx % 2 === 1 ? styles.tableRowAlt : {}]} wrap={false}>
       <Text style={[styles.tableCell, styles.colNo]}>{item.urutan}</Text>
       <Text style={[styles.tableCell, styles.colJenis]}>{item.jenis || "—"}</Text>
       <Text style={[styles.tableCell, styles.colMerk]}>{item.merk || "—"}</Text>
@@ -413,82 +400,71 @@ export function SuratJalanPDF({ data, logoSrc }: SuratJalanPDFProps) {
   const totalQty = data.items.reduce((s, it) => s + (it.qty ?? 0), 0);
   const totalItems = data.items.length;
 
-  // Manual pagination: split items jadi chunk maksimal ITEMS_PER_PAGE per
-  // halaman. Total row + signature hanya dirender di chunk TERAKHIR.
-  const pages = chunkItems(data.items, ITEMS_PER_PAGE);
-  const lastPageIdx = pages.length - 1;
-
+  // Natural flow: satu Page, @react-pdf otomatis pecah ke halaman berikutnya
+  // kalau tabel kepenuhan. Header tabel `fixed` → berulang tiap halaman.
+  // Tiap baris `wrap={false}` → satu baris tidak kepotong antar halaman.
+  // Signature `wrap={false}` → blok TTD utuh mengikuti item terakhir (kalau
+  // tidak muat, pindah ke halaman berikutnya, bukan halaman kosong terpisah).
   return (
     <Document>
-      {pages.map((pageItems, pageIdx) => {
-        const isLastPage = pageIdx === lastPageIdx;
-        return (
-          <Page key={pageIdx} size="A4" style={styles.page}>
+      <Page size="A4" style={styles.page}>
 
-            <DocumentHeader data={data} logoSrc={logoSrc} />
+        <DocumentHeader data={data} logoSrc={logoSrc} />
 
-            {/* ── TABLE ────────────────────────────────────────────────── */}
-            <View style={styles.table}>
-              <TableHeaderRow />
+        {/* ── TABLE ──────────────────────────────────────────────────── */}
+        <View style={styles.table}>
+          <TableHeaderRow />
 
-              {pageItems.map((item, idx) => (
-                <TableRow key={item.urutan} item={item} idx={idx} />
-              ))}
+          {data.items.map((item, idx) => (
+            <TableRow key={item.urutan} item={item} idx={idx} />
+          ))}
 
-              {/* Total row — hanya di halaman terakhir, setelah baris terakhir */}
-              {isLastPage && (
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>Total Item:</Text>
-                  <Text style={styles.totalValue}>{totalItems}</Text>
-                  <Text style={[styles.totalLabel, { marginLeft: 16 }]}>Total Qty:</Text>
-                  <Text style={styles.totalValue}>{totalQty}</Text>
-                </View>
-              )}
+          {/* Total row — mengalir setelah baris terakhir */}
+          <View style={styles.totalRow} wrap={false}>
+            <Text style={styles.totalLabel}>Total Item:</Text>
+            <Text style={styles.totalValue}>{totalItems}</Text>
+            <Text style={[styles.totalLabel, { marginLeft: 16 }]}>Total Qty:</Text>
+            <Text style={styles.totalValue}>{totalQty}</Text>
+          </View>
+        </View>
+
+        {/* ── SIGNATURES — utuh, mengikuti item terakhir ─────────────── */}
+        <View style={styles.signatureSection} wrap={false}>
+          <View style={styles.signatureBox}>
+            <Text style={styles.signatureRole}>Dibuat</Text>
+            <View style={styles.signatureLine}>
+              <Text style={styles.signatureName}>{data.created_by || "Admin GA"}</Text>
             </View>
-
-            {/* ── SIGNATURES — hanya di halaman terakhir ─────────────────── */}
-            {isLastPage && (
-              <View style={styles.signatureSection}>
-                <View style={styles.signatureBox}>
-                  <Text style={styles.signatureRole}>Dibuat</Text>
-                  <View style={styles.signatureLine}>
-                    <Text style={styles.signatureName}>
-                      {data.created_by || "Admin GA"}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.signatureBox}>
-                  <Text style={styles.signatureRole}>Disetujui</Text>
-                  <View style={styles.signatureLine}>
-                    <Text style={styles.signatureName}>{data.approved_by || "SPV/Manager"}</Text>
-                  </View>
-                </View>
-                <View style={styles.signatureBox}>
-                  <Text style={styles.signatureRole}>Dibawa</Text>
-                  <View style={styles.signatureLine}>
-                    <Text style={styles.signatureName}>{data.pembawa || "—"}</Text>
-                  </View>
-                </View>
-                <View style={styles.signatureBox}>
-                  <Text style={styles.signatureRole}>Diterima</Text>
-                  <View style={styles.signatureLine}>
-                    <Text style={styles.signatureName}>{data.penerima || "—"}</Text>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {/* ── FOOTER (with page numbers) ─────────────────────────────── */}
-            <View style={styles.footer} fixed>
-              <Text style={styles.footerLogo}>SmartWMS</Text>
-              <Text
-                style={styles.footerText}
-                render={({ pageNumber, totalPages }) => `Halaman ${pageNumber} / ${totalPages}`}
-              />
+          </View>
+          <View style={styles.signatureBox}>
+            <Text style={styles.signatureRole}>Disetujui</Text>
+            <View style={styles.signatureLine}>
+              <Text style={styles.signatureName}>{data.approved_by || "SPV/Manager"}</Text>
             </View>
-          </Page>
-        );
-      })}
+          </View>
+          <View style={styles.signatureBox}>
+            <Text style={styles.signatureRole}>Dibawa</Text>
+            <View style={styles.signatureLine}>
+              <Text style={styles.signatureName}>{data.pembawa || "—"}</Text>
+            </View>
+          </View>
+          <View style={styles.signatureBox}>
+            <Text style={styles.signatureRole}>Diterima</Text>
+            <View style={styles.signatureLine}>
+              <Text style={styles.signatureName}>{data.penerima || "—"}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ── FOOTER (with page numbers) ─────────────────────────────── */}
+        <View style={styles.footer} fixed>
+          <Text style={styles.footerLogo}>SmartWMS</Text>
+          <Text
+            style={styles.footerText}
+            render={({ pageNumber, totalPages }) => `Halaman ${pageNumber} / ${totalPages}`}
+          />
+        </View>
+      </Page>
     </Document>
   );
 }
