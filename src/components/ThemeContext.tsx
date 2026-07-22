@@ -16,7 +16,7 @@
  */
 
 import {
-  createContext, useContext, useEffect, useState, useCallback,
+  createContext, useContext, useEffect, useState, useCallback, useRef,
   type ReactNode,
 } from "react";
 import { createClient } from "@/lib/supabase-client/client";
@@ -50,6 +50,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const supabase = createClient();
   const { user, profile } = useSession();
   const [theme, setThemeState] = useState<Theme>("dark");
+  const dbSyncedRef = useRef(false);
+  const userTouchedRef = useRef(false);
 
   // 1. Apply cache localStorage secepatnya (anti-flash) saat mount
   useEffect(() => {
@@ -66,26 +68,39 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // 2. Kalau profile sudah ke-load, DB adalah sumber kebenaran → sync
+  // 2. Sync dari DB HANYA SEKALI saat profile pertama load, dan HANYA jika user
+  //    belum toggle manual di sesi ini. localStorage tetap prioritas untuk
+  //    pilihan terbaru (mencegah profile load menimpa pilihan yang baru dibuat).
   useEffect(() => {
+    if (dbSyncedRef.current || userTouchedRef.current) return;
     const dbTheme = (profile as { theme?: Theme } | null)?.theme;
     if (dbTheme === "dark" || dbTheme === "light") {
-      setThemeState(dbTheme);
-      applyThemeClass(dbTheme);
-      try { localStorage.setItem(STORAGE_KEY, dbTheme); } catch { /* ignore */ }
+      dbSyncedRef.current = true;
+      // Kalau localStorage sudah ada nilainya, hormati itu (lebih baru dari DB
+      // dalam kasus user baru toggle sebelum profile load). Kalau belum ada,
+      // pakai nilai DB.
+      let cached: string | null = null;
+      try { cached = localStorage.getItem(STORAGE_KEY); } catch { /* ignore */ }
+      if (cached !== "dark" && cached !== "light") {
+        setThemeState(dbTheme);
+        applyThemeClass(dbTheme);
+        try { localStorage.setItem(STORAGE_KEY, dbTheme); } catch { /* ignore */ }
+      }
     }
   }, [profile]);
 
   const persistTheme = useCallback(async (next: Theme) => {
-    // Cache instan
+    // Cache instan (sumber kebenaran utama)
     try { localStorage.setItem(STORAGE_KEY, next); } catch { /* ignore */ }
-    // Simpan ke DB (ikut akun) — best-effort, kalau gagal cache tetap jalan
+    // Simpan ke DB (ikut akun antar-device) — best-effort
     if (user?.id) {
-      await supabase.from("profiles").update({ theme: next }).eq("id", user.id);
+      const { error } = await supabase.from("profiles").update({ theme: next }).eq("id", user.id);
+      if (error) console.warn("[theme] gagal simpan ke DB:", error.message);
     }
   }, [supabase, user]);
 
   const setTheme = useCallback((next: Theme) => {
+    userTouchedRef.current = true;
     setThemeState(next);
     applyThemeClass(next);
     void persistTheme(next);

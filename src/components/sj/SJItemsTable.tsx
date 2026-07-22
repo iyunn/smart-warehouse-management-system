@@ -19,6 +19,7 @@ interface SatuanSelectProps {
 
 const SatuanSelect = memo(({ value, onChange }: SatuanSelectProps) => {
   const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,11 +30,45 @@ const SatuanSelect = memo(({ value, onChange }: SatuanSelectProps) => {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Saat dibuka, set highlight ke opsi yang sedang terpilih
+  useEffect(() => {
+    if (open) {
+      const idx = SATUAN_OPTIONS.indexOf(value);
+      setHighlight(idx >= 0 ? idx : 0);
+    }
+  }, [open, value]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (!open) {
+      // Buka dropdown dengan Enter / Space / ArrowDown saat fokus
+      if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
+        e.preventDefault();
+        setOpen(true);
+      }
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlight(h => (h + 1) % SATUAN_OPTIONS.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight(h => (h - 1 + SATUAN_OPTIONS.length) % SATUAN_OPTIONS.length);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      onChange(SATUAN_OPTIONS[highlight]);
+      setOpen(false);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+    }
+  }, [open, highlight, onChange]);
+
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setOpen(!open)}
+        onKeyDown={handleKeyDown}
         className={`w-full flex items-center justify-between gap-1 px-2 py-1.5 rounded-lg border bg-white/[0.04] text-[12px] text-white/80 transition-all ${
           open ? "border-cyan-500/50 bg-white/[0.06]" : "border-white/[0.08] hover:border-white/[0.15]"
         }`}
@@ -46,14 +81,17 @@ const SatuanSelect = memo(({ value, onChange }: SatuanSelectProps) => {
 
       {open && (
         <div className="absolute z-[60] mt-1 w-full bg-[#0d1117] border border-white/[0.1] rounded-lg shadow-2xl shadow-black/50 overflow-hidden">
-          {SATUAN_OPTIONS.map(opt => (
+          {SATUAN_OPTIONS.map((opt, i) => (
             <button
               key={opt}
               type="button"
               onClick={() => { onChange(opt); setOpen(false); }}
+              onMouseEnter={() => setHighlight(i)}
               className={`w-full text-left px-3 py-1.5 text-[12px] transition-all ${
-                opt === value
+                i === highlight
                   ? "bg-cyan-500/10 text-cyan-300"
+                  : opt === value
+                  ? "text-cyan-300/70"
                   : "text-white/70 hover:bg-white/[0.04]"
               }`}
             >
@@ -69,6 +107,38 @@ SatuanSelect.displayName = "SatuanSelect";
 
 // ─── Main table ───────────────────────────────────────────────────────────
 function SJItemsTable({ items, jenisOptions, merkOptions, onChange }: SJItemsTableProps) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Scroll ke baris paling bawah (dipakai saat tambah/duplikat baris).
+  const scrollToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = bottomRef.current;
+        if (!el) return;
+        let parent = el.parentElement;
+        while (parent) {
+          const oy = getComputedStyle(parent).overflowY;
+          if ((oy === "auto" || oy === "scroll") && parent.scrollHeight > parent.clientHeight) {
+            parent.scrollTo({ top: parent.scrollHeight, behavior: "smooth" });
+            return;
+          }
+          parent = parent.parentElement;
+        }
+        el.scrollIntoView({ behavior: "smooth", block: "end" });
+      });
+    });
+  }, []);
+
+  // Auto-scroll saat field dapat fokus (via Tab/Shift+Tab/klik) agar field yang
+  // aktif selalu kelihatan — tidak tersembunyi di bawah/atas viewport.
+  const handleFocusCapture = useCallback((e: React.FocusEvent) => {
+    const target = e.target as HTMLElement;
+    if (!target || typeof target.scrollIntoView !== "function") return;
+    // block: "nearest" → hanya scroll kalau elemen di luar viewport, arah otomatis
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }, []);
 
   const updateItem = useCallback((idx: number, patch: Partial<SJItem>) => {
     const next = items.map((item, i) => i === idx ? { ...item, ...patch } : item);
@@ -81,7 +151,8 @@ function SJItemsTable({ items, jenisOptions, merkOptions, onChange }: SJItemsTab
     next.splice(idx + 1, 0, copy);
     next.forEach((item, i) => item.urutan = i + 1);
     onChange(next);
-  }, [items, onChange]);
+    scrollToBottom();
+  }, [items, onChange, scrollToBottom]);
 
   const removeRow = useCallback((idx: number) => {
     if (items.length === 1) {
@@ -95,7 +166,8 @@ function SJItemsTable({ items, jenisOptions, merkOptions, onChange }: SJItemsTab
 
   const addRow = useCallback(() => {
     onChange([...items, createEmptyItem(items.length + 1)]);
-  }, [items, onChange]);
+    scrollToBottom();
+  }, [items, onChange, scrollToBottom]);
 
   const jenisOpts = jenisOptions.map(j => ({ value: j, label: j }));
   const merkOpts  = merkOptions.map(m => ({ value: m, label: m }));
@@ -104,7 +176,7 @@ function SJItemsTable({ items, jenisOptions, merkOptions, onChange }: SJItemsTab
   const gridCols = "grid-cols-[40px_minmax(160px,1.2fr)_minmax(160px,1.2fr)_140px_60px_85px_50px_50px_minmax(150px,1fr)_70px]";
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-visible">
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-visible" onFocusCapture={handleFocusCapture}>
 
       {/* Header */}
       <div className={`grid ${gridCols} gap-2 border-b border-white/[0.06] bg-white/[0.03] px-3 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-white/40`}>
@@ -233,6 +305,7 @@ function SJItemsTable({ items, jenisOptions, merkOptions, onChange }: SJItemsTab
             </div>
           </div>
         ))}
+        <div ref={bottomRef} />
       </div>
 
       {/* Add row footer */}

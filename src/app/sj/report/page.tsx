@@ -10,7 +10,7 @@ import { exportSJReportToExcel } from "@/lib/excelExporter";
 type PeriodPreset = "all" | "today" | "yesterday" | "week" | "month" | "custom";
 type SearchField  =
   | "all" | "no_sj" | "sn" | "pembawa"
-  | "tujuan" | "jenis" | "status" | "keterangan";
+  | "tujuan" | "jenis" | "merk" | "status" | "keterangan";
 
 // Filter status mutasi untuk review cepat item yang belum dimutasi
 type MutasiFilter = "all" | "belum_oracle" | "belum_wt" | "belum_keduanya";
@@ -144,6 +144,7 @@ const SEARCH_FIELD_LABEL: Record<SearchField, string> = {
   pembawa:    "Pembawa",
   tujuan:     "Tujuan",
   jenis:      "Jenis",
+  merk:       "Merk",
   status:     "Status",
   keterangan: "Keterangan",
 };
@@ -577,6 +578,7 @@ export default function SJReportPage() {
           case "pembawa":    return it.pembawa.toLowerCase().includes(q);
           case "tujuan":     return (it.tujuan_kode + " " + it.tujuan_nama).toLowerCase().includes(q);
           case "jenis":      return it.jenis.toLowerCase().includes(q);
+          case "merk":       return (it.merk ?? "").toLowerCase().includes(q);
           case "status":     return it.status.toLowerCase().includes(q) ||
                                     (STATUS_LABEL[it.status] ?? it.status).toLowerCase().includes(q);
           case "keterangan": return it.keterangan.toLowerCase().includes(q);
@@ -587,6 +589,7 @@ export default function SJReportPage() {
               it.pembawa.toLowerCase().includes(q) ||
               (it.tujuan_kode + " " + it.tujuan_nama).toLowerCase().includes(q) ||
               it.jenis.toLowerCase().includes(q) ||
+              (it.merk ?? "").toLowerCase().includes(q) ||
               it.status.toLowerCase().includes(q) ||
               it.keterangan.toLowerCase().includes(q)
             );
@@ -769,6 +772,7 @@ export default function SJReportPage() {
                     { value: "all",        label: "Semua Field"   },
                     { value: "tujuan",     label: "Tujuan"        },
                     { value: "jenis",      label: "Jenis Barang"  },
+                    { value: "merk",       label: "Merk"          },
                     { value: "status",     label: "Status SJ"     },
                     { value: "no_sj",      label: "No. SJ"        },
                     { value: "sn",         label: "Serial Number" },
@@ -790,6 +794,8 @@ export default function SJReportPage() {
                       ? "Draft / Submitted / Completed"
                       : searchField === "tujuan"
                       ? "Cari kode atau nama tujuan..."
+                      : searchField === "merk"
+                      ? "Cari merk..."
                       : "Cari..."
                   }
                   suppressHydrationWarning

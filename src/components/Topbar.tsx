@@ -15,7 +15,7 @@ export default function Topbar({ title }: { title: string }) {
   }, []);
 
   return (
-    <header className="h-16 flex items-center justify-between px-6 border-b border-white/[0.06] bg-[#0d1117]/80 backdrop-blur-md sticky top-0 z-20">
+    <header className="h-16 flex items-center justify-between px-6 border-b sticky top-0 z-20 backdrop-blur-md" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}>
       {/* Title */}
       <div>
         <h1 className="text-white text-[16px] font-semibold tracking-tight leading-none">{title}</h1>

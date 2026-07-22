@@ -116,7 +116,15 @@ input[type="number"] {
 .light .bg-\[\#060d19\],
 .light .bg-\[\#0d1117\],
 .light .bg-\[\#111827\],
+.light .bg-\[\#0f1724\],
 .light .bg-\[\#0d1524\] { background-color: #f1f5f9 !important; }
+
+/* Surface elevated (topbar/sidebar/dropdown) — sedikit lebih terang dari bg */
+.light .bg-\[\#0d1117\]\/80,
+.light .bg-\[\#0d1117\]\/95,
+.light .bg-\[\#0c1421\]\/95,
+.light .bg-\[\#1a2030\],
+.light .bg-\[\#1a1a1f\] { background-color: #ffffff !important; }
 
 /* --- Teks putih → gelap (skala opacity dipertahankan via warna slate) --- */
 .light .text-white          { color: #0f172a !important; }

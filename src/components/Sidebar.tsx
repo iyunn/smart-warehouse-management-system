@@ -169,7 +169,7 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className={`relative flex flex-col h-screen bg-[#0d1117] border-r border-white/[0.06] transition-all duration-300 ease-in-out ${collapsed ? "w-[68px]" : "w-[230px]"}`}>
+    <aside className={`relative flex flex-col h-screen border-r transition-all duration-300 ease-in-out ${collapsed ? "w-[68px]" : "w-[230px]"}`} style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}>
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-white/[0.06]">
         <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
@@ -186,7 +186,7 @@ export default function Sidebar() {
       </div>
 
       <button onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-[72px] w-6 h-6 rounded-full bg-[#1a2030] border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:border-white/20 transition-all z-10">
+        className="absolute -right-3 top-[72px] w-6 h-6 rounded-full border flex items-center justify-center text-slate-400 hover:text-white hover:border-white/20 transition-all z-10" style={{ backgroundColor: "var(--surface-3)", borderColor: "var(--border)" }}>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
           {collapsed ? <polyline points="9 18 15 12 9 6" /> : <polyline points="15 18 9 12 15 6" />}
         </svg>
