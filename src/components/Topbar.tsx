@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "@/components/SessionContext";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function Topbar({ title }: { title: string }) {
   const [dateStr, setDateStr] = useState("");
@@ -25,6 +26,8 @@ export default function Topbar({ title }: { title: string }) {
 
       {/* Right section */}
       <div className="flex items-center gap-3">
+        {/* Toggle theme (kiri dari user) */}
+        <ThemeToggle collapsed />
         {/* Nama user + role + logout */}
         <div className="flex items-center gap-2 pl-1 cursor-pointer group" onClick={signOut} title="Klik untuk logout">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center text-white text-[13px] font-bold shadow-lg shadow-purple-500/20 group-hover:shadow-purple-500/40 transition-shadow">

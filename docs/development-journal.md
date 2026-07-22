@@ -2903,3 +2903,60 @@ Beberapa iterasi dari feedback screenshot Fillian:
 - MERGE ke main SUKSES (fast-forward), deploy Vercel hijau. Live Stock live.
 - WAJIB sebelum tampil di TV: jalankan migration_theme.sql + migration_sub_coce.sql
   di Supabase PRODUCTION, lalu re-upload DAT (biar sub_coce/is_prodsus keisi).
+
+---
+
+## 22 Juli 2026 — Dashboard Redesign + Rapikan Sidebar/Topbar + Fondasi Light Mode
+
+### Dashboard redesign (lebih padat, kurangi space kosong)
+Iterasi dari feedback Fillian (mockup):
+- Perlu Tindakan: dari 2 card memanjang jadi 2 card berdampingan, SEMUA warna
+  biru/cyan (bukan kuning+ungu), tiap card ada ikon (database/globe) + angka besar.
+- Ringkasan per Gudang: dari 3 card bertumpuk jadi 1 panel list inline (CGA1/2/3
+  sebagai baris: kode+label+detail Qty/Perolehan/Tercatat inline, angka barang besar
+  di kanan) + tombol "Lihat detail gudang" → /monitoring.
+- Layout: Trend CGA 2/3 + Ringkasan per Gudang 1/3 berdampingan; Perlu Tindakan 1/3
+  + Rekonsiliasi DAT vs LPP 2/3. Semua pakai items-stretch biar tinggi seragam
+  (tidak pincang).
+- Fix: header "Rekonsiliasi DAT vs LPP" sempat dobel (komponen DATvsLPPCards sudah
+  punya header sendiri) — dihapus dari page.
+- Tahap 2 (KPI angka besar + Analitik Prodsus) sempat dibuat lalu DIBATALKAN atas
+  permintaan Fillian (tidak suka). API fetchProdsusStats + komponen KPI di-revert.
+
+### Rapikan Sidebar & Topbar
+- Sidebar: hapus menu Settings (dummy href #) + kategori SYSTEM. Semua menu jadi
+  satu di MAIN MENU. Surat Jalan Manual & Manajemen User pindah ke MAIN MENU
+  (Manajemen User pakai flag adminOnly, tetap khusus Super Admin).
+- Fix active state: route /stock/* sebelumnya jatuh ke default "dashboard" (getActiveId
+  tidak ada handling /stock). Ditambah deteksi /stock/live → stock-live.
+- Topbar: hapus search bar + icon notif (belum berfungsi). Sisakan nama user + role
+  + logout (ikon logout diperjelas).
+- Dropdown "Stock" DIHAPUS → "Live Stock" jadi item tunggal di MAIN MENU (Budget
+  dibatalkan).
+- User info sidebar bawah → diganti tombol Logout merah estetik (border/bg/teks rose).
+
+### Fondasi Light Mode
+- Toggle theme dinaikkan ke Topbar global (kiri user info), pakai ThemeToggle collapsed.
+- Pendekatan konversi: CSS override otomatis di scope `.light` (globals.css) yang
+  membalik warna hardcoded (bg gelap → terang, text-white/* → slate gelap,
+  bg-white/[0.0x] → gelap-transparan, border-white/* → gelap-transparan, hover states).
+  Warna aksen (cyan/emerald/amber/rose/violet) tidak diubah. body background ikut token.
+- Alasan pendekatan ini: menghindari edit puluhan halaman satu-satu; ~90% warna umum
+  langsung ke-handle. Sisa: tuning per halaman untuk warna spesifik (gradient/hex unik).
+
+### Live Stock — perbaikan responsif TV (sesi sebelumnya, tercatat di sini)
+- Angka besar pakai vmin (bukan vw) biar skala ikut tinggi layar → tidak kepotong di
+  720p. Font list clamp(13px,1vw,16px) → lebih kebaca di 1080p. Margin vertikal +
+  padding responsif (vmin/vh). Header & legend flex-wrap.
+- Fix active sidebar Live Stock (nyangkut ke Dashboard).
+- Pie: ResizeObserver ukur kontainer → pieSize responsif (radius proporsional).
+
+### Housekeeping
+- File backup (bckp*) sempat ke-push ke branch stock lalu ke-git-rm. Disarankan
+  .gitignore pola backup.
+
+### Catatan
+- Budget DIBATALKAN (out of scope TA).
+- Fitur direncanakan berikutnya: Pendingan Alokasi (list barang pending per Tujuan,
+  sort by Wilayah, checklist kirim, shortcut Buat SJ pre-filled). Perlu kolom wilayah
+  di sj_tujuan.

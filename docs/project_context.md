@@ -3,7 +3,7 @@ git # PROJECT_CONTEXT.md
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **21 Juli 2026** (Live Stock + Theme System — MERGE ke main, live di production)
+> Terakhir diupdate: **22 Juli 2026** (Dashboard redesign + rapikan Sidebar/Topbar + fondasi Light Mode)
 
 ## Project Identity
 
@@ -693,7 +693,7 @@ ke `main` dengan `--ff-only`, branch lokal & remote sudah dihapus.
 ---
 
 ### ✅ Live Stock + Theme System (LIVE di production — 21 Juli 2026)
-Status: ✅ Selesai & MERGE ke main. Live Stock live di production. Budget menunggu Excel.
+Status: ✅ Selesai & MERGE ke main. Live Stock live di production. Budget DIBATALKAN (out of scope TA).
 
 **Fondasi Theme:**
 - Kolom `theme` di profiles (dark/light, default dark) — preferensi ikut akun user
@@ -705,7 +705,8 @@ Status: ✅ Selesai & MERGE ke main. Live Stock live di production. Budget menun
   App existing tetap dark-only sampai fitur Light Mode penuh dikerjakan.
 
 **Menu Sidebar:**
-- Menu "Stock" dengan submenu "Live Stock" (/stock/live) & "Budget" (/stock/budget)
+- "Live Stock" (/stock/live) sebagai item tunggal di MAIN MENU (dropdown Stock +
+  submenu Budget DIBATALKAN — lihat catatan Budget di bawah)
 
 **Live Stock (`/stock/live`):**
 - API `GET /api/stock/live` — stock per jenis (akumulasi CGA1 + CGA2, CGA3 DIKECUALIKAN
@@ -736,9 +737,9 @@ Status: ✅ Selesai & MERGE ke main. Live Stock live di production. Budget menun
 - Dihitung PER JENIS TERPILIH (ikut cycle/klik). List Prodsus = breakdown per nilai
   sub_coce (prodsus saja).
 
-**Budget (PENDING):**
-- Menunggu file Excel budget dari Fillian (mekanisme/standar over/under). Halaman
-  `/stock/budget` belum dibuat (menu ada tapi masih 404/blank).
+**Budget (DIBATALKAN — out of scope):**
+- Fitur Budget Stok dibatalkan (22 Juli 2026) karena di luar scope TA. Dropdown
+  "Stock" + submenu Budget dihapus; Live Stock jadi item tunggal di MAIN MENU.
 
 **SQL yang HARUS dijalankan di Supabase production:** `migration_theme.sql` (kolom
 theme di profiles) + `migration_sub_coce.sql` (sub_coce + is_prodsus di assets_raw).
@@ -756,44 +757,29 @@ Lalu re-upload DAT agar sub_coce/is_prodsus keisi (bukan default '0').
 
 ### 🚀 Fitur Utama Direncanakan
 
-#### 1. Live Stock (Publik) + Budget Stok (Internal)
+#### 1. Live Stock (Publik)
 Status: ✅ Live Stock LIVE di main/production (lihat section "Live Stock + Theme
-System" di atas). Sisa untuk fitur ini: (a) Budget page + formula dari Excel,
-(b) Live Stock dijadikan publik (route di luar auth) — sekarang masih di dalam auth.
+System" di atas). Budget Stok DIBATALKAN (out of scope TA). Sisa opsional:
+Live Stock dijadikan publik (route di luar auth) — sekarang masih di dalam auth.
 
-Dua bagian terpisah dengan level akses berbeda:
-
-**A. Live Stock — halaman PUBLIK (tanpa login)**
+**Live Stock — rencana halaman PUBLIK (tanpa login)**
 - Menampilkan stock aktual per jenis/CGA secara real-time, satu arah (view-only)
   ke penonton — analog dengan layar live kurs di bank, atau papan jadwal
   keberangkatan di stasiun kereta/bandara.
 - Didesain sebagai mode idle/screensaver: tampilan diam yang menayangkan informasi
   terus-menerus tanpa interaksi. Cocok dipasang di layar/monitor kantor GA.
-- Bisa diakses umum TANPA autentikasi (route publik, di luar proteksi proxy.ts).
-- Auto-refresh berkala agar angka selalu terkini. Layout besar & terbaca dari jarak.
-- Sumber data: stock aktual dari assets_raw/assets_clean (sama seperti Monitoring/
-  Ringkasan per Gudang).
+- Rencana: bisa diakses umum TANPA autentikasi (route publik, di luar proteksi
+  proxy.ts) — perlu whitelist route publik. Sekarang masih di dalam auth.
 
-**B. Budget Stok — INTERNAL (user login saja)**
-- Isinya sama seperti stock, TAPI dengan tambahan indikator **under / over**
-  berdasarkan kondisi/target yang diinput user.
-- Kondisi input contoh: jumlah target toko baru bulan ini + jumlah keseluruhan toko.
-  Budget menyesuaikan kondisi yang diinput — user bisa mengubah input KAPAN SAJA,
-  dan flag under/over ikut menyesuaikan.
-- Formula budget dinamis (per jenis/CGA) dikonfirmasi ke stakeholder. Untuk awal,
-  target/budget diinput manual oleh user.
-
-Catatan implementasi:
-- Live Stock harus di luar middleware auth (proxy.ts) — perlu whitelist route publik.
-- Budget tetap di dalam proteksi auth (role-based seperti fitur lain).
-- Perlu tabel baru untuk simpan kondisi/target budget yang diinput user (mis.
-  budget_config: target_toko_baru, total_toko, per periode).
+_Budget Stok dibatalkan: fitur under/over berdasarkan target toko tidak jadi
+dikerjakan karena di luar scope Tugas Akhir._
 
 #### 2. Light Mode (semua halaman/UI)
-Status: 🚧 Fondasi SUDAH di main (ThemeContext, ThemeToggle, CSS token, kolom theme
-di profiles). Halaman Stock sudah theme-aware. Sisa: konversi halaman existing
-(Dashboard/Monitoring/SJ/dll) dari warna hardcoded ke CSS token, lalu naikkan toggle
-ke sidebar global.
+Status: 🚧 SEDANG DIKERJAKAN (22 Juli 2026). Fondasi + toggle global sudah dibuat.
+Pendekatan: CSS override otomatis di scope `.light` (di globals.css) yang membalik
+warna hardcoded (text-white/*, bg-white/*, border-white/*, bg gelap) tanpa perlu
+edit tiap halaman. Toggle theme dipasang di Topbar (kiri user info). Sisa: tuning
+per halaman untuk warna spesifik (gradient/hex unik) yang belum ke-cover override.
 
 - Tema terang untuk SELURUH halaman/UI (saat ini dark-only: #060d19 / #38bdf8).
 - Toggle dark/light, preferensi tersimpan (mis. localStorage atau profil user).

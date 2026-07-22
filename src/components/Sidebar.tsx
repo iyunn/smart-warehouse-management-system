@@ -107,15 +107,7 @@ const navItems: NavItem[] = [
   { id: "dashboard",      label: "Dashboard",      icon: icons.dashboard,      href: "/"           },
   { id: "upload",         label: "Upload Data",    icon: icons.upload,         href: "/upload"     },
   { id: "monitoring",     label: "Monitoring",     icon: icons.monitor,        href: "/monitoring" },
-  {
-    id: "stock",
-    label: "Stock",
-    icon: icons.stock,
-    children: [
-      { id: "stock-live",   label: "Live Stock", href: "/stock/live"   },
-      { id: "stock-budget", label: "Budget",     href: "/stock/budget" },
-    ],
-  },
+  { id: "stock-live",     label: "Live Stock",     icon: icons.stock,          href: "/stock/live" },
   { id: "reconciliation", label: "Reconciliation", icon: icons.reconciliation, href: "/reconciliation" },
   { id: "classification", label: "Classification", icon: icons.classification, href: "/review"     },
   {
@@ -144,8 +136,7 @@ function getActiveId(pathname: string): string {
   if (pathname.startsWith("/sj/templates")) return "sj-template";
   if (pathname.startsWith("/sj"))          return "sj";
   if (pathname.startsWith("/stock/live"))   return "stock-live";
-  if (pathname.startsWith("/stock/budget")) return "stock-budget";
-  if (pathname.startsWith("/stock"))        return "stock";
+  if (pathname.startsWith("/stock"))        return "stock-live";
   if (pathname.startsWith("/upload"))      return "upload";
   if (pathname.startsWith("/monitoring"))  return "monitoring";
   if (pathname.startsWith("/reconciliation")) return "reconciliation";
@@ -231,29 +222,27 @@ export default function Sidebar() {
         </div>
       )}
 
-      {/* User info + Logout */}
+      {/* Logout */}
       <div className={`p-3 border-t border-white/[0.06] ${collapsed ? "flex justify-center" : ""}`}>
         {collapsed ? (
           <button onClick={signOut} title="Logout"
-            className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center text-white text-xs font-bold">
-            ↩
+            className="w-9 h-9 rounded-xl border border-rose-500/25 bg-rose-500/[0.08] text-rose-400 hover:bg-rose-500/15 hover:border-rose-500/40 transition-all flex items-center justify-center">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
           </button>
         ) : (
-          <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/5 transition-colors">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-purple-500/20">A</div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-[12px] font-medium truncate">Admin User</p>
-              <p className="text-slate-500 text-[10px] truncate">admin@wms.id</p>
-            </div>
-            <button onClick={signOut} title="Logout"
-              className="p-1.5 rounded-lg text-white/30 hover:text-rose-400 hover:bg-rose-500/10 transition-all">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16 17 21 12 16 7"/>
-                <line x1="21" y1="12" x2="9" y2="12"/>
-              </svg>
-            </button>
-          </div>
+          <button onClick={signOut}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-rose-500/25 bg-rose-500/[0.08] text-rose-400 hover:bg-rose-500/15 hover:border-rose-500/40 hover:text-rose-300 transition-all text-[13px] font-semibold">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            Logout
+          </button>
         )}
       </div>
     </aside>
