@@ -3,24 +3,35 @@
 import { memo, useCallback, useRef } from "react";
 import SearchableDropdown from "@/components/sj/SearchableDropdown";
 
+export type UrgensiLevel = "tinggi" | "sedang" | "rendah";
+
+export const URGENSI_OPTIONS: { value: UrgensiLevel; label: string }[] = [
+  { value: "tinggi", label: "Tinggi" },
+  { value: "sedang", label: "Sedang" },
+  { value: "rendah", label: "Rendah" },
+];
+
 export interface PendinganDraftItem {
   urutan: number;
   jenis: string;
+  merk: string;
   qty: number;
   keterangan: string;
+  urgensi: UrgensiLevel;
 }
 
 export function createEmptyPendinganItem(urutan: number): PendinganDraftItem {
-  return { urutan, jenis: "", qty: 1, keterangan: "" };
+  return { urutan, jenis: "", merk: "", qty: 1, keterangan: "", urgensi: "sedang" };
 }
 
 interface Props {
   items: PendinganDraftItem[];
   jenisOptions: string[];
+  merkOptions: string[];
   onChange: (items: PendinganDraftItem[]) => void;
 }
 
-function PendinganItemsTable({ items, jenisOptions, onChange }: Props) {
+function PendinganItemsTable({ items, jenisOptions, merkOptions, onChange }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -80,8 +91,9 @@ function PendinganItemsTable({ items, jenisOptions, onChange }: Props) {
   }, [items, onChange]);
 
   const jenisDropdownOptions = jenisOptions.map(j => ({ value: j, label: j }));
+  const merkDropdownOptions = merkOptions.map(m => ({ value: m, label: m }));
 
-  const gridCols = "grid-cols-[36px_minmax(180px,1.6fr)_70px_minmax(150px,1fr)_74px]";
+  const gridCols = "grid-cols-[32px_minmax(150px,1.4fr)_minmax(120px,1fr)_60px_100px_minmax(130px,1fr)_66px]";
 
   return (
     <div className="rounded-2xl border border-[color:var(--pend-border)] bg-[color:var(--pend-row)] overflow-visible" onFocusCapture={handleFocusCapture}>
@@ -89,7 +101,9 @@ function PendinganItemsTable({ items, jenisOptions, onChange }: Props) {
       <div className={`grid ${gridCols} gap-2 border-b border-[color:var(--pend-border)] px-3 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)]`}>
         <span>No</span>
         <span>Jenis Barang</span>
+        <span>Merk</span>
         <span className="text-center">Jumlah</span>
+        <span>Urgensi</span>
         <span>Keterangan</span>
         <span className="text-center">Aksi</span>
       </div>
@@ -108,10 +122,25 @@ function PendinganItemsTable({ items, jenisOptions, onChange }: Props) {
               allowCustom
             />
 
+            <SearchableDropdown
+              options={merkDropdownOptions}
+              value={item.merk}
+              onChange={(v) => updateItem(idx, { merk: v })}
+              placeholder="Merk..."
+              allowCustom
+            />
+
             <input
               type="number" min="1" value={item.qty}
               onChange={(e) => updateItem(idx, { qty: Math.max(1, Number(e.target.value) || 1) })}
               className="w-full px-2 py-1.5 rounded-lg border border-[color:var(--pend-border)] bg-[color:var(--pend-input)] text-[12px] text-[color:var(--pend-text)] text-center focus:outline-none focus:border-cyan-500/50"
+            />
+
+            <SearchableDropdown
+              options={URGENSI_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+              value={item.urgensi}
+              onChange={(v) => updateItem(idx, { urgensi: v as UrgensiLevel })}
+              placeholder="Urgensi..."
             />
 
             <input

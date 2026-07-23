@@ -2,12 +2,16 @@
 
 import { useState, useEffect, useCallback } from "react";
 
+export type UrgensiLevel = "tinggi" | "sedang" | "rendah";
+
 export interface PendinganItemFull {
   id: string;
   tujuan_id: string;
   jenis: string;
+  merk?: string;
   qty: number;
   keterangan?: string;
+  urgensi?: UrgensiLevel;
   created_at?: string;
   tujuan?: {
     id: string;
@@ -49,7 +53,7 @@ export function usePendingan() {
   // Tambah item batch untuk satu tujuan
   const addItems = useCallback(async (
     tujuan_id: string,
-    newItems: { jenis: string; qty: number; keterangan?: string }[]
+    newItems: { jenis: string; merk?: string; qty: number; keterangan?: string; urgensi?: UrgensiLevel }[]
   ) => {
     const res = await fetch("/api/pendingan", {
       method: "POST",

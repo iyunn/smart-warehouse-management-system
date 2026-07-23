@@ -4,8 +4,8 @@ import { useState, useMemo, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import SearchableDropdown from "@/components/sj/SearchableDropdown";
-import PendinganItemsTable, { createEmptyPendinganItem, type PendinganDraftItem } from "@/components/sj/PendinganItemsTable";
-import { useMasterJenis, useMasterTujuan } from "@/hooks/useSJMaster";
+import PendinganItemsTable, { createEmptyPendinganItem, URGENSI_OPTIONS, type PendinganDraftItem, type UrgensiLevel } from "@/components/sj/PendinganItemsTable";
+import { useMasterJenis, useMasterMerk, useMasterTujuan } from "@/hooks/useSJMaster";
 import { usePendingan, type PendinganItemFull } from "@/hooks/usePendingan";
 import type { SJTujuan } from "@/lib/sjTypes";
 
@@ -15,10 +15,12 @@ interface TujuanWithCount extends SJTujuan {
 
 export default function PendinganAlokasiPage() {
   const { jenis: jenisOptions } = useMasterJenis();
+  const { merk: merkOptions } = useMasterMerk();
   const { tujuan: allTujuan, loading: loadingTujuan } = useMasterTujuan();
   const { items, loading: loadingItems, addItems, clearItems } = usePendingan();
 
   const [kotaFilter, setKotaFilter] = useState("all");
+  const [urgensiFilter, setUrgensiFilter] = useState("all");
   const [selectedTujuanId, setSelectedTujuanId] = useState<string | null>(null);
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -28,11 +30,36 @@ export default function PendinganAlokasiPage() {
   const [modalTujuanId, setModalTujuanId] = useState("");
   const [draftItems, setDraftItems] = useState<PendinganDraftItem[]>([createEmptyPendinganItem(1)]);
 
+  // Item yang lolos filter urgensi (dipakai untuk hitung & tampilkan tujuan)
+  const itemsByUrgensi = useMemo(
+    () => urgensiFilter === "all"
+      ? items
+      : items.filter(it => (it.urgensi ?? "sedang") === urgensiFilter),
+    [items, urgensiFilter]
+  );
+
   const pendingCountByTujuan = useMemo(() => {
     const map = new Map<string, number>();
-    for (const it of items) map.set(it.tujuan_id, (map.get(it.tujuan_id) ?? 0) + 1);
+    for (const it of itemsByUrgensi) map.set(it.tujuan_id, (map.get(it.tujuan_id) ?? 0) + 1);
     return map;
-  }, [items]);
+  }, [itemsByUrgensi]);
+
+  // Urgensi tertinggi per tujuan (untuk badge di list kiri)
+  const topUrgensiByTujuan = useMemo(() => {
+    const rank: Record<string, number> = { tinggi: 3, sedang: 2, rendah: 1 };
+    const map = new Map<string, UrgensiLevel>();
+    for (const it of itemsByUrgensi) {
+      const u = (it.urgensi ?? "sedang") as UrgensiLevel;
+      const cur = map.get(it.tujuan_id);
+      if (!cur || rank[u] > rank[cur]) map.set(it.tujuan_id, u);
+    }
+    return map;
+  }, [itemsByUrgensi]);
+
+  const urgensiFilterOptions = useMemo(() => ([
+    { value: "all", label: "Semua Urgensi" },
+    ...URGENSI_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+  ]), []);
 
   const kotaOptions = useMemo(() => {
     const set = new Set<string>();
@@ -68,8 +95,8 @@ export default function PendinganAlokasiPage() {
   }, [allTujuan, pendingCountByTujuan, kotaFilter]);
 
   const selectedItems = useMemo(
-    () => items.filter(it => it.tujuan_id === selectedTujuanId),
-    [items, selectedTujuanId]
+    () => itemsByUrgensi.filter(it => it.tujuan_id === selectedTujuanId),
+    [itemsByUrgensi, selectedTujuanId]
   );
   const selectedTujuan = useMemo(
     () => allTujuan.find(t => t.id === selectedTujuanId) ?? null,
@@ -105,9 +132,9 @@ export default function PendinganAlokasiPage() {
   }, [selectedItems, checkedItems, clearItems]);
 
   const handleClearTujuan = useCallback(async (tujuanId: string) => {
+    // Hard-delete langsung tanpa konfirmasi (sesuai permintaan).
     const toClear = items.filter(it => it.tujuan_id === tujuanId).map(it => it.id);
     if (toClear.length === 0) return;
-    if (!confirm("Clear semua item pendingan untuk tujuan ini? Data dihapus permanen.")) return;
     setBusy(true);
     try {
       await clearItems(toClear);
@@ -126,7 +153,13 @@ export default function PendinganAlokasiPage() {
     if (!modalTujuanId) { alert("Pilih tujuan dulu"); return; }
     const valid = draftItems
       .filter(it => it.jenis.trim())
-      .map(it => ({ jenis: it.jenis.trim(), qty: Math.max(1, it.qty || 1), keterangan: it.keterangan.trim() }));
+      .map(it => ({
+        jenis: it.jenis.trim(),
+        merk: it.merk.trim(),
+        qty: Math.max(1, it.qty || 1),
+        keterangan: it.keterangan.trim(),
+        urgensi: it.urgensi,
+      }));
     if (valid.length === 0) { alert("Minimal satu item dengan jenis terisi"); return; }
     setBusy(true);
     try {
@@ -171,9 +204,15 @@ export default function PendinganAlokasiPage() {
                   </svg>
                   Pendingan Baru
                 </button>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)] mb-2">Filter Kota</p>
-                  <SearchableDropdown options={kotaOptions} value={kotaFilter} onChange={setKotaFilter} placeholder="Pilih kota..." />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)] mb-2">Kota</p>
+                    <SearchableDropdown options={kotaOptions} value={kotaFilter} onChange={setKotaFilter} placeholder="Kota..." />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)] mb-2">Urgensi</p>
+                    <SearchableDropdown options={urgensiFilterOptions} value={urgensiFilter} onChange={setUrgensiFilter} placeholder="Urgensi..." />
+                  </div>
                 </div>
               </div>
 
@@ -193,6 +232,7 @@ export default function PendinganAlokasiPage() {
                             {tujuans.map(t => (
                               <TujuanRow
                                 key={t.id} tujuan={t}
+                                topUrgensi={topUrgensiByTujuan.get(t.id)}
                                 selected={selectedTujuanId === t.id}
                                 onSelect={() => { setSelectedTujuanId(t.id); setCheckedItems(new Set()); }}
                                 onClear={() => handleClearTujuan(t.id)}
@@ -237,8 +277,8 @@ export default function PendinganAlokasiPage() {
                       <p className="text-[12px] text-[color:var(--pend-text-dim)] text-center py-8">Belum ada item.</p>
                     ) : (
                       <div className="space-y-1.5">
-                        <div className="grid grid-cols-[auto_1fr_60px_1fr] gap-2 px-2 pb-1 text-[9px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)]">
-                          <span className="w-5" /><span>Jenis Barang</span><span className="text-center">Qty</span><span>Keterangan</span>
+                        <div className="grid grid-cols-[auto_1.3fr_1fr_50px_70px_1fr] gap-2 px-2 pb-1 text-[9px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)]">
+                          <span className="w-5" /><span>Jenis</span><span>Merk</span><span className="text-center">Qty</span><span>Urgensi</span><span>Keterangan</span>
                         </div>
                         {selectedItems.map(it => (
                           <ItemRow key={it.id} item={it} checked={checkedItems.has(it.id)} onToggle={() => toggleItem(it.id)} />
@@ -292,7 +332,7 @@ export default function PendinganAlokasiPage() {
 
               <div>
                 <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Detail Barang</label>
-                <PendinganItemsTable items={draftItems} jenisOptions={jenisOptions} onChange={setDraftItems} />
+                <PendinganItemsTable items={draftItems} jenisOptions={jenisOptions} merkOptions={merkOptions} onChange={setDraftItems} />
               </div>
             </div>
 
@@ -351,6 +391,10 @@ export default function PendinganAlokasiPage() {
           border: 1px solid rgba(255,255,255,0.08);
         }
         .pend-emerald-text { color: #6ee7b7; }
+        /* Badge urgensi — dark */
+        .pend-urg-tinggi { background: rgba(244,63,94,0.18); color: #fda4af; }
+        .pend-urg-sedang { background: rgba(245,158,11,0.18); color: #fcd34d; }
+        .pend-urg-rendah { background: rgba(148,163,184,0.18); color: #cbd5e1; }
 
         /* Light — glass ala iOS + warna kontras yang terbaca */
         .light .pend-scope {
@@ -375,15 +419,24 @@ export default function PendinganAlokasiPage() {
           box-shadow: 0 8px 32px rgba(15,23,42,0.08);
         }
         .light .pend-emerald-text { color: #047857; }
+        /* Badge urgensi — light (warna gelap agar kontras di bg terang) */
+        .light .pend-urg-tinggi { background: rgba(244,63,94,0.15); color: #9f1239; }
+        .light .pend-urg-sedang { background: rgba(245,158,11,0.18); color: #92400e; }
+        .light .pend-urg-rendah { background: rgba(100,116,139,0.15); color: #475569; }
       `}</style>
     </div>
   );
 }
 
 // ─── Tujuan row ─────────────────────────────────────────────────────────────
-function TujuanRow({ tujuan, selected, onSelect, onClear, busy }: {
-  tujuan: TujuanWithCount; selected: boolean; onSelect: () => void; onClear: () => void; busy: boolean;
+function TujuanRow({ tujuan, topUrgensi, selected, onSelect, onClear, busy }: {
+  tujuan: TujuanWithCount; topUrgensi?: UrgensiLevel; selected: boolean; onSelect: () => void; onClear: () => void; busy: boolean;
 }) {
+  const urgDot: Record<string, string> = {
+    tinggi: "bg-rose-500",
+    sedang: "bg-amber-500",
+    rendah: "bg-slate-400",
+  };
   return (
     <div
       className={`flex items-center gap-2 px-2 py-2 rounded-xl transition-all cursor-pointer border ${
@@ -399,6 +452,9 @@ function TujuanRow({ tujuan, selected, onSelect, onClear, busy }: {
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
+          {topUrgensi && (
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${urgDot[topUrgensi]}`} title={`Urgensi tertinggi: ${topUrgensi}`} />
+          )}
           <span className="text-[11px] font-mono font-semibold text-[color:var(--pend-accent)]">{tujuan.kode}</span>
           <span className="text-[11px] truncate" style={{ color: "var(--pend-text)" }}>{tujuan.nama}</span>
         </div>
@@ -411,11 +467,18 @@ function TujuanRow({ tujuan, selected, onSelect, onClear, busy }: {
 }
 
 // ─── Item row ───────────────────────────────────────────────────────────────
+const URGENSI_STYLE: Record<string, string> = {
+  tinggi: "pend-urg-tinggi",
+  sedang: "pend-urg-sedang",
+  rendah: "pend-urg-rendah",
+};
+
 function ItemRow({ item, checked, onToggle }: {
   item: PendinganItemFull; checked: boolean; onToggle: () => void;
 }) {
+  const urg = (item.urgensi ?? "sedang") as string;
   return (
-    <div className={`grid grid-cols-[auto_1fr_60px_1fr] gap-2 items-center px-2 py-2 rounded-lg transition-all ${checked ? "opacity-60" : ""}`}
+    <div className={`grid grid-cols-[auto_1.3fr_1fr_50px_70px_1fr] gap-2 items-center px-2 py-2 rounded-lg transition-all ${checked ? "opacity-60" : ""}`}
       style={{ background: checked ? "rgba(16,185,129,0.10)" : "var(--pend-row)" }}>
       <button onClick={onToggle}
         className={`w-5 h-5 rounded border flex items-center justify-center transition-all shrink-0 ${
@@ -428,7 +491,11 @@ function ItemRow({ item, checked, onToggle }: {
         )}
       </button>
       <span className={`text-[12px] truncate ${checked ? "line-through" : ""}`} style={{ color: "var(--pend-text)" }}>{item.jenis}</span>
+      <span className="text-[11px] truncate text-[color:var(--pend-text-dim)]">{item.merk || "—"}</span>
       <span className="text-[12px] font-mono text-center" style={{ color: "var(--pend-text)" }}>{item.qty}</span>
+      <span className={`text-[9px] font-semibold uppercase tracking-wide rounded-md px-1.5 py-0.5 text-center ${URGENSI_STYLE[urg]}`}>
+        {urg}
+      </span>
       <span className="text-[11px] text-[color:var(--pend-text-dim)] truncate">{item.keterangan || "—"}</span>
     </div>
   );

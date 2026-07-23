@@ -14,6 +14,16 @@ export default function Topbar({ title }: { title: string }) {
     );
   }, []);
 
+  // Sinkronkan judul tab browser dengan halaman aktif.
+  // Semua halaman ber-Topbar mengirim prop `title`, jadi cukup di-set dari sini —
+  // tidak perlu metadata per halaman (semua halaman client component).
+  // Cleanup: saat pindah ke halaman tanpa Topbar (login/register/reset password),
+  // judul dikembalikan ke default agar tidak menyangkut judul halaman sebelumnya.
+  useEffect(() => {
+    if (title) document.title = `${title} — SmartWMS`;
+    return () => { document.title = "SmartWMS — Smart Asset Monitoring & Reconciliation"; };
+  }, [title]);
+
   return (
     <header className="h-16 flex items-center justify-between px-6 border-b sticky top-0 z-20 backdrop-blur-md" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}>
       {/* Title */}

@@ -399,6 +399,7 @@ function BuatSJPageContent() {
         <SJPreviewModal
           data={previewData}
           title={previewTitle}
+          jenis={existingSJ?.jenis === 'masuk' ? 'masuk' : 'keluar'}
           onClose={handleClosePreview}
         />
       )}

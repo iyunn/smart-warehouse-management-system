@@ -17,24 +17,31 @@ export default function MasterTujuanPage() {
   // Form state
   const [kode, setKode] = useState("");
   const [nama, setNama] = useState("");
+  const [kota, setKota] = useState("");
+  const [kecamatan, setKecamatan] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const filtered = tujuan.filter(t => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
-    return t.kode.toLowerCase().includes(q) || t.nama.toLowerCase().includes(q);
+    return t.kode.toLowerCase().includes(q)
+      || t.nama.toLowerCase().includes(q)
+      || (t.kota ?? "").toLowerCase().includes(q)
+      || (t.kecamatan ?? "").toLowerCase().includes(q);
   });
 
   const openCreate = () => {
     setEditTarget(null);
-    setKode(""); setNama(""); setError("");
+    setKode(""); setNama(""); setKota(""); setKecamatan(""); setError("");
     setModalOpen(true);
   };
 
   const openEdit = (t: SJTujuan) => {
     setEditTarget(t);
-    setKode(t.kode); setNama(t.nama); setError("");
+    setKode(t.kode); setNama(t.nama);
+    setKota(t.kota ?? ""); setKecamatan(t.kecamatan ?? "");
+    setError("");
     setModalOpen(true);
   };
 
@@ -48,8 +55,8 @@ export default function MasterTujuanPage() {
     try {
       const method = editTarget ? "PATCH" : "POST";
       const body   = editTarget
-        ? { id: editTarget.id, kode, nama }
-        : { kode, nama };
+        ? { id: editTarget.id, kode, nama, kota, kecamatan }
+        : { kode, nama, kota, kecamatan };
 
       const res = await fetch("/api/sj/tujuan", {
         method,
@@ -69,7 +76,7 @@ export default function MasterTujuanPage() {
     } finally {
       setSaving(false);
     }
-  }, [kode, nama, editTarget, refresh]);
+  }, [kode, nama, kota, kecamatan, editTarget, refresh]);
 
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return;
@@ -128,7 +135,7 @@ export default function MasterTujuanPage() {
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Cari kode atau nama..."
+                  placeholder="Cari kode, nama, kota, kecamatan..."
                   suppressHydrationWarning
                   className="bg-white/[0.04] border border-white/[0.08] text-slate-300 text-[12px] placeholder:text-slate-600 rounded-xl pl-8 pr-3 py-1.5 w-56 focus:outline-none focus:border-cyan-500/50"
                 />
@@ -136,9 +143,11 @@ export default function MasterTujuanPage() {
             </div>
 
             {/* Header */}
-            <div className="grid grid-cols-[120px_1fr_120px] gap-4 border-b border-white/[0.06] px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+            <div className="grid grid-cols-[110px_1fr_130px_130px_100px] gap-3 border-b border-white/[0.06] px-5 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
               <span>Kode</span>
               <span>Nama</span>
+              <span>Kota</span>
+              <span>Kecamatan</span>
               <span className="text-right">Aksi</span>
             </div>
 
@@ -156,9 +165,11 @@ export default function MasterTujuanPage() {
             ) : (
               <div className="divide-y divide-white/[0.04]">
                 {filtered.map(t => (
-                  <div key={t.id} className="grid grid-cols-[120px_1fr_120px] gap-4 items-center px-5 py-3 hover:bg-white/[0.02]">
+                  <div key={t.id} className="grid grid-cols-[110px_1fr_130px_130px_100px] gap-3 items-center px-5 py-3 hover:bg-white/[0.02]">
                     <span className="text-[12px] font-mono font-semibold text-cyan-400">{t.kode}</span>
-                    <span className="text-[12px] text-white/70">{t.nama}</span>
+                    <span className="text-[12px] text-white/70 truncate">{t.nama}</span>
+                    <span className="text-[11px] text-white/50 truncate">{t.kota || "—"}</span>
+                    <span className="text-[11px] text-white/50 truncate">{t.kecamatan || "—"}</span>
                     <div className="flex items-center justify-end gap-1">
                       <button onClick={() => openEdit(t)}
                         className="flex items-center justify-center w-7 h-7 rounded-lg text-blue-400/60 hover:text-blue-300 hover:bg-blue-500/10 transition-all">
@@ -212,6 +223,33 @@ export default function MasterTujuanPage() {
                   className="w-full bg-white/[0.04] border border-white/[0.08] text-white/80 text-[12px] placeholder:text-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:border-cyan-500/50"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-white/50 mb-1.5">Kota</label>
+                  <input
+                    type="text"
+                    value={kota}
+                    onChange={(e) => setKota(e.target.value)}
+                    placeholder="contoh: KUDUS"
+                    suppressHydrationWarning
+                    className="w-full bg-white/[0.04] border border-white/[0.08] text-white/80 text-[12px] placeholder:text-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:border-cyan-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-white/50 mb-1.5">Kecamatan</label>
+                  <input
+                    type="text"
+                    value={kecamatan}
+                    onChange={(e) => setKecamatan(e.target.value)}
+                    placeholder="contoh: BAE"
+                    suppressHydrationWarning
+                    className="w-full bg-white/[0.04] border border-white/[0.08] text-white/80 text-[12px] placeholder:text-slate-600 rounded-lg px-3 py-2 focus:outline-none focus:border-cyan-500/50"
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-white/30 -mt-1">
+                Kota &amp; kecamatan opsional — dipakai untuk pengelompokan di halaman Pendingan Alokasi.
+              </p>
               {error && <p className="text-xs text-rose-400">{error}</p>}
             </div>
 

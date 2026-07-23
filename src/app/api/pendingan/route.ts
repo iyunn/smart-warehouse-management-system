@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     let query = supabase
       .from('pendingan_items')
       .select(`
-        id, tujuan_id, jenis, qty, keterangan, created_at,
+        id, tujuan_id, jenis, merk, qty, keterangan, urgensi, created_at,
         tujuan:sj_tujuan!inner(id, kode, nama, kota, kecamatan)
       `)
       .order('created_at', { ascending: true })
@@ -49,15 +49,19 @@ export async function POST(req: NextRequest) {
     // Normalisasi jadi array
     const rawItems = Array.isArray(body.items)
       ? body.items
-      : [{ jenis: body.jenis, qty: body.qty, keterangan: body.keterangan }]
+      : [{ jenis: body.jenis, merk: body.merk, qty: body.qty, keterangan: body.keterangan, urgensi: body.urgensi }]
+
+    const VALID_URGENSI = ['tinggi', 'sedang', 'rendah']
 
     const rows = rawItems
       .filter((it: { jenis?: string }) => it.jenis && it.jenis.trim())
-      .map((it: { jenis: string; qty?: number; keterangan?: string }) => ({
+      .map((it: { jenis: string; merk?: string; qty?: number; keterangan?: string; urgensi?: string }) => ({
         tujuan_id,
         jenis: it.jenis.trim(),
+        merk: (it.merk ?? '').trim(),
         qty: Math.max(1, Number(it.qty) || 1),
         keterangan: (it.keterangan ?? '').trim(),
+        urgensi: VALID_URGENSI.includes(it.urgensi ?? '') ? it.urgensi : 'sedang',
       }))
 
     if (rows.length === 0) {

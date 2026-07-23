@@ -236,19 +236,27 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Minimal 1 item barang' }, { status: 400 })
     }
 
-    // Update header
+    // Update header.
+    // [FIX] `jenis` HANYA di-update kalau body memang mengirimnya. Sebelumnya
+    // selalu di-set (`jenis === 'masuk' ? 'masuk' : 'keluar'`), sehingga SJ
+    // 'masuk' yang diedit dari halaman Buat SJ (yang tidak mengirim `jenis`)
+    // ikut berubah jadi 'keluar'.
+    const headerPatch: Record<string, unknown> = {
+      tanggal,
+      tujuan_id,
+      pembawa:     pembawa ?? '',
+      penerima:    penerima ?? '',
+      approved_by: approved_by ?? '',
+      status:      status ?? 'draft',
+      updated_at:  new Date().toISOString(),
+    }
+    if (jenis === 'masuk' || jenis === 'keluar') {
+      headerPatch.jenis = jenis
+    }
+
     const { data: sjData, error: sjError } = await supabase
       .from('surat_jalan')
-      .update({
-        tanggal,
-        tujuan_id,
-        pembawa:     pembawa ?? '',
-        penerima:    penerima ?? '',
-        approved_by: approved_by ?? '',
-        status:      status ?? 'draft',
-        jenis:       jenis === 'masuk' ? 'masuk' : 'keluar',
-        updated_at:  new Date().toISOString(),
-      })
+      .update(headerPatch)
       .eq('id', id)
       .select()
       .single()
