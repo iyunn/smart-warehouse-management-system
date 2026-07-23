@@ -1845,3 +1845,4 @@ Proyeksi: ~117 KB/bulan dari tabel SJ (estimasi 50 SJ × 8 item). Butuh **ratusa
 - Initial upload pipeline
 - Excel parser (later deprecated)
 - Dashboard UI foundation
+
