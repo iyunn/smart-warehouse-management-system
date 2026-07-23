@@ -15,18 +15,26 @@
  */
 
 import { useState, useCallback, useMemo, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import SearchableDropdown from "@/components/sj/SearchableDropdown";
 import SJItemsTableMasuk from "@/components/sj/SJItemsTableMasuk";
 import SJPreviewModal from "@/components/sj/SJPreviewModal";
 import { useMasterJenis, useMasterMerk, useMasterTujuan } from "@/hooks/useSJMaster";
+import { useSJDetail } from "@/hooks/useSJList";
 import { createEmptyItem, type SJItem } from "@/lib/sjTypes";
 import type { SJDataForPDF } from "@/components/sj/SuratJalanPDF";
 
 function TerimaBarangContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // Mode edit — dipakai saat Daftar SJ membuka Penerimaan Barang lewat ?edit=<id>
+  const editId = searchParams.get("edit");
+  const isEditMode = !!editId;
+  const { sj: existingSJ, loading: loadingExisting, error: loadError } = useSJDetail(editId);
+  const [hydrated, setHydrated] = useState(false);
 
   const { jenis: jenisOptions } = useMasterJenis();
   const { merk: merkOptions }   = useMasterMerk();
@@ -43,6 +51,29 @@ function TerimaBarangContent() {
 
   const [previewData, setPreviewData]   = useState<SJDataForPDF | null>(null);
   const [previewTitle, setPreviewTitle] = useState("");
+
+  // Isi form dari SJ yang sedang diedit (sekali saja)
+  useEffect(() => {
+    if (isEditMode && existingSJ && !hydrated) {
+      setTanggal(existingSJ.tanggal);
+      setAsalId(existingSJ.tujuan_id);
+      setPengirim(existingSJ.pembawa ?? "");
+      const existingItems = (existingSJ.items ?? []).map((it: any, idx: number) => ({
+        urutan:        idx + 1,
+        jenis:         it.jenis ?? "",
+        merk:          it.merk ?? "",
+        serial_number: it.serial_number ?? "",
+        qty:           it.qty ?? 1,
+        satuan:        it.satuan ?? "Unit",
+        is_baru:       it.is_baru ?? false,
+        is_aktiva:     it.is_aktiva ?? false,
+        keterangan:    it.keterangan ?? "",
+        kode_asset:    it.kode_asset ?? "",
+      }));
+      setItems(existingItems.length > 0 ? existingItems : [createEmptyItem(1)]);
+      setHydrated(true);
+    }
+  }, [isEditMode, existingSJ, hydrated]);
 
   const asalOptions = useMemo(
     () => tujuanList.map(t => ({ value: t.id, label: `${t.kode} — ${t.nama}` })),
@@ -67,19 +98,21 @@ function TerimaBarangContent() {
 
     setSubmitting(true);
     try {
+      const payload = {
+        tanggal,
+        tujuan_id:   asalId,          // DB: tujuan_id = asal toko
+        pembawa:     pengirim,         // DB: pembawa   = pengirim dari toko
+        penerima:    penerimaDisplay,  // DB: penerima  = Admin GA
+        approved_by: "SPV/Manager",
+        items:       validItems,
+        status:      "submitted",
+        jenis:       "masuk",          // ← kunci perbedaan dari SJ keluar
+      };
+
       const res = await fetch("/api/sj", {
-        method:  "POST",
+        method:  isEditMode ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tanggal,
-          tujuan_id:   asalId,          // DB: tujuan_id = asal toko
-          pembawa:     pengirim,         // DB: pembawa   = pengirim dari toko
-          penerima:    penerimaDisplay,  // DB: penerima  = Admin GA
-          approved_by: "SPV/Manager",
-          items:       validItems,
-          status:      "submitted",
-          jenis:       "masuk",          // ← kunci perbedaan dari SJ keluar
-        }),
+        body: JSON.stringify(isEditMode ? { id: editId, ...payload } : payload),
       });
 
       if (!res.ok) {
@@ -88,11 +121,12 @@ function TerimaBarangContent() {
       }
 
       const data = await res.json();
+      const finalNoSJ = isEditMode ? existingSJ?.no_sj : data.no_sj;
 
       // Tampilkan preview — Tahap 3 akan buat PDF khusus "Surat Penerimaan Barang"
       // Untuk sementara pakai SJPreviewModal existing (judul sudah di-override)
       const pdfData: SJDataForPDF = {
-        no_sj:       data.no_sj,
+        no_sj:       finalNoSJ,
         tanggal,
         tujuan_kode: selectedAsal?.kode ?? "",
         tujuan_nama: selectedAsal?.nama ?? "",
@@ -114,7 +148,7 @@ function TerimaBarangContent() {
         })),
       };
 
-      setPreviewTitle("Surat Penerimaan Barang Berhasil Dibuat");
+      setPreviewTitle(isEditMode ? "Surat Penerimaan Barang Berhasil Diupdate" : "Surat Penerimaan Barang Berhasil Dibuat");
       setPreviewData(pdfData);
 
     } catch (err) {
@@ -122,21 +156,26 @@ function TerimaBarangContent() {
     } finally {
       setSubmitting(false);
     }
-  }, [tanggal, asalId, pengirim, penerimaDisplay, items, selectedAsal]);
+  }, [tanggal, asalId, pengirim, penerimaDisplay, items, selectedAsal, isEditMode, editId, existingSJ]);
 
   const handleClosePreview = useCallback(() => {
     setPreviewData(null);
+    if (isEditMode) {
+      // Selesai mengedit — kembali ke Daftar Surat Jalan
+      router.push("/sj/list");
+      return;
+    }
     // Reset form untuk penerimaan berikutnya
     setItems([createEmptyItem(1)]);
     setPengirim("");
     setAsalId("");
-  }, []);
+  }, [isEditMode, router]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#080e18] text-white">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar title="Penerimaan Barang" />
+        <Topbar title={isEditMode ? "Edit Penerimaan Barang" : "Penerimaan Barang"} />
 
         <main className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
 
@@ -241,7 +280,7 @@ function TerimaBarangContent() {
                   Menyimpan...
                 </>
               ) : (
-                <>Simpan Penerimaan Barang</>
+                <>{isEditMode ? "Update Penerimaan Barang" : "Simpan Penerimaan Barang"}</>
               )}
             </button>
           </div>

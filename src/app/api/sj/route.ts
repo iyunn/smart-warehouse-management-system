@@ -292,6 +292,86 @@ export async function PATCH(req: NextRequest) {
 
     if (itemsError) throw new Error(itemsError.message)
 
+    // ── Sinkronkan staging_area untuk SJ jenis 'masuk' ──────────────────────
+    // POST menulis ke staging_area dan DELETE membersihkannya, tapi PATCH
+    // dulu tidak menyentuhnya sama sekali. Akibatnya setelah SJ masuk diedit:
+    // barang yang dihapus tetap nyangkut di staging, dan barang yang baru
+    // ditambahkan tidak pernah muncul di sana (jadi tidak bisa diberi catatan
+    // sebelum di-sync ke asset_notes saat upload DAT).
+    //
+    // Pakai pola yang sama dengan items: replace penuh. Catatan yang sudah
+    // diketik dipertahankan dengan mencocokkan kode_asset. Barang yang kode
+    // asetnya SUDAH muncul di DAT/CGA tidak dimasukkan lagi — aturan yang sama
+    // dipakai syncStagingToNotes() saat membersihkan staging.
+    const sjJenis = (sjData as { jenis?: string })?.jenis
+    if (sjJenis === 'masuk') {
+      // Simpan catatan lama (per kode_asset) agar tidak hilang saat replace
+      const { data: oldStaging } = await supabase
+        .from('staging_area')
+        .select('kode_asset, catatan')
+        .eq('sj_id', id)
+
+      const catatanLama = new Map<string, string>()
+      for (const row of oldStaging ?? []) {
+        const k = (row as { kode_asset?: string }).kode_asset
+        const c = (row as { catatan?: string }).catatan
+        if (k && c && c.trim()) catatanLama.set(k, c)
+      }
+
+      await supabase.from('staging_area').delete().eq('sj_id', id)
+
+      // Kode aset yang sudah tercatat di CGA → tidak perlu ditampung staging
+      const kodeItems: string[] = items
+        .map((it: any) => (it.kode_asset ?? '').trim())
+        .filter((k: string) => !!k)
+
+      const sudahDiCGA = new Set<string>()
+      if (kodeItems.length > 0) {
+        const { data: existingAssets } = await supabase
+          .from('assets_raw')
+          .select('kode_asset, toko')
+          .in('kode_asset', kodeItems)
+        for (const r of existingAssets ?? []) {
+          const kode = (r as { kode_asset?: string }).kode_asset
+          const toko = (r as { toko?: string }).toko ?? ''
+          if (kode && /CGA\d/i.test(toko)) sudahDiCGA.add(kode)
+        }
+      }
+
+      const { data: tujuanData } = await supabase
+        .from('sj_tujuan')
+        .select('kode, nama')
+        .eq('id', tujuan_id)
+        .maybeSingle()
+      const asalToko = tujuanData
+        ? `${tujuanData.kode} - ${tujuanData.nama}`
+        : ''
+
+      const stagingRows = items
+        .filter((item: any) => {
+          const kode = (item.kode_asset ?? '').trim()
+          return !kode || !sudahDiCGA.has(kode)
+        })
+        .map((item: any) => {
+          const kode = (item.kode_asset ?? '').trim()
+          return {
+            kode_asset:  kode || null,
+            jenis:       item.jenis ?? '',
+            merk:        item.merk ?? '',
+            deskripsi:   item.keterangan ?? '',
+            catatan:     kode ? (catatanLama.get(kode) ?? '') : '',
+            asal_toko:   asalToko,
+            is_at_lebih: !kode,
+            sj_id:       id,
+          }
+        })
+
+      // Best-effort — kalau gagal, perubahan SJ tetap tersimpan
+      if (stagingRows.length > 0) {
+        await supabase.from('staging_area').insert(stagingRows)
+      }
+    }
+
     return NextResponse.json({ sj: sjData })
 
   } catch (error) {
