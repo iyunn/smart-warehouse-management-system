@@ -3,7 +3,7 @@ git # PROJECT_CONTEXT.md
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **22 Juli 2026** (Dashboard redesign + rapikan Sidebar/Topbar + fondasi Light Mode)
+> Terakhir diupdate: **23 Juli 2026** (Fitur Pendingan Alokasi + fix PDF SJ + perbaikan Buat SJ)
 
 ## Project Identity
 
@@ -340,13 +340,13 @@ Status: ✅ Completed (semua sesi + fitur pelengkap)
 - Bonus: re-apply tag Allocated juga lebih efisien (1x di akhir dengan data
   lengkap, bukan 10x dengan data parsial yang sebagian besar sia-sia)
 
-### ✅ Fix — PDF Surat Jalan Pagination (17 Juni 2026)
+### ✅ Fix — PDF Surat Jalan Pagination (17 Juni 2026) — DIGANTI 23 Juli 2026
 - Bug: react-pdf gagal page-break otomatis di tabel >15 item — seluruh
   tabel "all-or-nothing" pindah ke halaman 2, header tersisa sendirian di
   halaman 1
-- Fix: manual pagination — items di-chunk maksimal 15/halaman, header surat
-  lengkap (logo, No SJ, Tanggal, Kepada Yth, intro) dan header tabel diulang
-  di setiap halaman, Total Item/Qty + signature hanya di halaman terakhir
+- Fix waktu itu: manual pagination — items di-chunk maksimal 15/halaman
+- ⚠️ SUDAH TIDAK BERLAKU. Diganti pendekatan natural flow (23 Juli 2026) —
+  lihat section "Fix PDF Surat Jalan — Natural Flow" di bawah.
 - File: `SuratJalanPDF.tsx`
 
 ### ✅ Fitur Baru — Template Item SJ (17 Juni 2026)
@@ -438,6 +438,57 @@ Toggle 4 metric: Item/Qty/Nilai Perolehan/Tercatat. Export Excel 1 sheet semua m
 - `src/app/page.tsx` — replace `TrendClosingPlaceholder` dengan `TrendCGACards`
 
 **Tabel baru `dat_closing`** — SQL migration dijalankan di Supabase.
+
+### ✅ Fix PDF Surat Jalan — Natural Flow (23 Juli 2026)
+Mengganti manual pagination (maks 15 item/halaman) yang bikin halaman berisi
+tepat 15 item bawahnya kosong & tanda tangan terpisah.
+- Manual chunk dibuang (`chunkItems`, `ITEMS_PER_PAGE` dihapus). Satu `<Page>`
+  berisi semua item; @react-pdf memecah halaman otomatis.
+- Header tabel `fixed` → berulang tiap halaman. `DocumentHeader` TIDAK fixed →
+  hanya halaman pertama (ini penyebab bug lama "halaman 1 header doang").
+- Tiap baris, total row, dan signature section pakai `wrap={false}` → tidak
+  kepotong; blok TTD utuh mengikuti item terakhir.
+- Hasil: item ≤15 → TTD padat di bawah tabel; >15 → tabel mengalir, TTD ikut
+  di halaman terakhir.
+- File: `SuratJalanPDF.tsx`
+
+### ✅ Fitur Pendingan Alokasi (23 Juli 2026)
+Daftar rencana kirim manual per Tujuan — mencatat barang apa saja yang masih
+harus dikirim ke tiap toko. Bukan kalkulasi stok (input manual).
+
+**Database:**
+- `sj_tujuan` + kolom `kota`, `kecamatan` (nullable). Data diisi massal dari
+  `alamat-toko.xlsx` (828 baris) via `UPDATE ... FROM (VALUES ...)` match by kode.
+  7 kota: Batang, Demak, Jepara, Kendal, Kudus, Pekalongan, Semarang.
+- Tabel `pendingan_items` (flat): id, tujuan_id (FK cascade), jenis, qty,
+  keterangan, created_at. RLS DIMATIKAN (konsisten dengan tabel lain via anon key).
+- Index: idx_pendingan_items_tujuan, idx_pendingan_items_created, idx_sj_tujuan_kota.
+
+**API & hook:**
+- `GET/POST/DELETE /api/pendingan` (GET join tujuan + optional ?tujuan_id,
+  POST batch, DELETE hard-delete by ids).
+- Hook `usePendingan` (items, loading, refresh, addItems, clearItems).
+- `/api/sj/tujuan` POST & PATCH menerima kota + kecamatan.
+
+**Halaman `/sj/pendingan` (2 kolom):**
+- Kiri: tombol "Pendingan Baru", filter dropdown Kota (default Semua Kota),
+  list tujuan yang punya pending di-group Kota → Kecamatan, cekbox-tujuan
+  (clear semua item tujuan itu) + badge jumlah.
+- Kanan: item tujuan terpilih (jenis, qty, keterangan) + cekbox-item per baris.
+  Centang sebagian → tombol clear item tercentang; semua tercentang → badge
+  "Semua tercentang". Clear = hard-delete.
+- Input via MODAL form ala Buat SJ: dropdown Tujuan + `PendinganItemsTable`
+  (jenis autocomplete allowCustom, jumlah, keterangan) dengan Tambah Baris,
+  duplikat baris, hapus baris, auto-scroll. Simpan batch.
+- Menu di submenu Surat Jalan Manual.
+
+**Glass theme (uji coba di halaman ini saja):** panel semi-transparan +
+`backdrop-filter: blur()`, background radial gradient supaya blur terlihat.
+Light mode ala iOS (blur 20px, saturate 160%, opacity 0.45, shadow halus).
+Blur/opacity diekspos sebagai CSS variable di blok "KONTROL GLASS THEME"
+supaya mudah di-tuning. Warna teks/aksen pakai token `--pend-*` berbeda per
+tema (dark: cyan terang; light: cyan gelap #0369a1, teks slate, emerald gelap)
+agar kontras terbaca. Beban performa minim (murni CSS, GPU-accelerated).
 
 ---
 
@@ -775,11 +826,17 @@ _Budget Stok dibatalkan: fitur under/over berdasarkan target toko tidak jadi
 dikerjakan karena di luar scope Tugas Akhir._
 
 #### 2. Light Mode (semua halaman/UI)
-Status: 🚧 SEDANG DIKERJAKAN (22 Juli 2026). Fondasi + toggle global sudah dibuat.
-Pendekatan: CSS override otomatis di scope `.light` (di globals.css) yang membalik
+Status: 🚧 SEDANG DIKERJAKAN (update 23 Juli 2026). Fondasi + toggle global jalan,
+theme persist sudah diperbaiki.
+Pendekatan: CSS override otomatis di scope `.light` (globals.css) yang membalik
 warna hardcoded (text-white/*, bg-white/*, border-white/*, bg gelap) tanpa perlu
-edit tiap halaman. Toggle theme dipasang di Topbar (kiri user info). Sisa: tuning
-per halaman untuk warna spesifik (gradient/hex unik) yang belum ke-cover override.
+edit tiap halaman. Toggle theme di Topbar (kiri user info).
+Catatan penting: override per-hex RAPUH untuk class dengan variant opacity
+(mis. `bg-[#0d1117]/80`) — komponen inti (Topbar, Sidebar, tombol collapse)
+karena itu diubah memakai TOKEN langsung (`var(--surface)` / `var(--surface-3)`).
+Pola token ini yang sebaiknya dipakai saat mengonversi halaman lain.
+Sisa: tuning per halaman untuk warna spesifik (gradient/hex unik) yang belum
+ke-cover override.
 
 - Tema terang untuk SELURUH halaman/UI (saat ini dark-only: #060d19 / #38bdf8).
 - Toggle dark/light, preferensi tersimpan (mis. localStorage atau profil user).
@@ -829,9 +886,10 @@ Status: 📌 Deferred — sampai semua fitur selesai
 ### Tables — Surat Jalan
 | Tabel | Fungsi |
 |-------|--------|
-| `sj_tujuan` | Master tujuan/cost center penerima SJ |
+| `sj_tujuan` | Master tujuan/cost center penerima SJ. Termasuk `kota` & `kecamatan` (nullable, dipakai untuk grouping & filter di Pendingan Alokasi) |
 | `surat_jalan` | Header surat jalan |
 | `surat_jalan_items` | Detail item per surat jalan |
+| `pendingan_items` | Item pendingan alokasi (flat: tujuan_id FK cascade, jenis, qty, keterangan). Clear = hard-delete. RLS dimatikan |
 
 ### Indexes
 - `idx_assets_raw_toko` — optimasi filter warehouse (legacy, masih dipertahankan)
@@ -841,6 +899,8 @@ Status: 📌 Deferred — sampai semua fitur selesai
 - `idx_assets_clean_merk` — optimasi filter unknown
 - `idx_surat_jalan_tanggal`, `idx_surat_jalan_tujuan`, `idx_surat_jalan_status`
 - `idx_sj_items_sj_id`, `idx_sj_items_serial`, `idx_sj_items_jenis`, `idx_sj_items_mutasi_status`
+- `idx_pendingan_items_tujuan`, `idx_pendingan_items_created` — Pendingan Alokasi
+- `idx_sj_tujuan_kota` — filter kota di Pendingan Alokasi
 
 ### Constraints
 - `assets_raw_kode_asset_unique` — enable upsert

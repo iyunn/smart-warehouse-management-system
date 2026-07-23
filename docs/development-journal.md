@@ -2960,3 +2960,108 @@ Iterasi dari feedback Fillian (mockup):
 - Fitur direncanakan berikutnya: Pendingan Alokasi (list barang pending per Tujuan,
   sort by Wilayah, checklist kirim, shortcut Buat SJ pre-filled). Perlu kolom wilayah
   di sj_tujuan.
+
+---
+
+## 23 Juli 2026 — Fix PDF Surat Jalan, Perbaikan Buat SJ/Rekap, Fitur Pendingan Alokasi
+
+### Fix output PDF Surat Jalan (hilangkan batas 15 item)
+Masalah: dulu dipasang `ITEMS_PER_PAGE = 15` (manual pagination — split item per
+chunk 15, tiap chunk satu `<Page>`) karena page-break otomatis di tengah tabel besar
+sempat nge-bug (halaman 1 cuma header, tabel pindah ke halaman berikutnya).
+Akibatnya: halaman dengan tepat 15 item bawahnya kosong & jelek, dan tanda tangan
+selalu di chunk terakhir walau ruang masih banyak.
+
+Solusi — natural flow @react-pdf:
+- Manual chunk DIHAPUS (`chunkItems` + `ITEMS_PER_PAGE` dibuang). Satu `<Page>` berisi
+  SEMUA item; @react-pdf memecah otomatis kalau tabel kepenuhan.
+- Header tabel (`TableHeaderRow`) pakai `fixed` → berulang tiap halaman saat tabel pecah.
+- `DocumentHeader` (logo/judul/tujuan) TIDAK fixed → hanya di halaman pertama
+  (ini yang dulu bikin bug "halaman 1 header doang").
+- Tiap `TableRow` + total row + signature section pakai `wrap={false}` → tidak
+  kepotong di batas halaman; blok TTD utuh mengikuti item terakhir.
+Hasil: item ≤15 → TTD padat di bawah tabel; item >15 → tabel mengalir, TTD ikut di
+halaman terakhir (bukan halaman kosong terpisah).
+
+### Perbaikan halaman Buat SJ & Rekap Alokasi
+- **Auto-scroll** (`SJItemsTable`): helper `scrollToBottom` mencari scroll container
+  terdekat (main dengan overflow-y-auto) lalu `scrollTo` ke scrollHeight (double rAF
+  agar DOM baris baru sudah render). Dipakai di tombol "+ Tambah Baris" DAN tombol
+  duplikat baris (ikon panah bawah). Catatan: `scrollIntoView` pada sentinel setinggi
+  0 diabaikan browser — itu sebab percobaan awal tidak jalan.
+- **Auto-scroll saat fokus**: `onFocusCapture` di container tabel → field yang dapat
+  fokus via Tab/Shift+Tab/klik otomatis di-scroll ke viewport (`block: "nearest"`,
+  hanya scroll kalau di luar layar).
+- **Dropdown Satuan keyboard nav**: `SatuanSelect` kini support ArrowDown/Up (navigasi),
+  Enter (buka/pilih), Escape (tutup), Space (buka). Highlight ikut keyboard + mouse.
+- **Filter Merk di Rekap Alokasi** (`/sj/report`): tambah "merk" ke SearchField type +
+  SEARCH_FIELD_LABEL + case di switch filter + case "all" + opsi dropdown + placeholder.
+
+### Light Mode — perbaikan lanjutan
+- **Theme tidak persist saat refresh** (balik ke dark). Root cause: useEffect DB-sync di
+  `ThemeContext` jalan setiap `profile` berubah dan MENIMPA pilihan terbaru dengan nilai
+  DB lama. Fix: DB-sync hanya SEKALI saat profile pertama load (`dbSyncedRef`),
+  localStorage jadi prioritas (kalau sudah ada nilai, tidak ditimpa profile),
+  `userTouchedRef` mencegah timpa setelah toggle manual, error update DB di-log.
+- **Topbar & tombol collapse sidebar tetap dark**: override CSS per-hex ternyata rapuh
+  (topbar pakai `bg-[#0d1117]/80` — variant opacity, class-nya beda). Fix: Topbar,
+  `aside` Sidebar, dan tombol collapse diubah pakai TOKEN langsung
+  (`var(--surface)` / `var(--surface-3)` via inline style), tidak bergantung override.
+- globals.css: lengkapi override hex yang terlewat (`#111827`, `#0f1724`, `#0c1421]/95`,
+  `#1a2030`, `#1a1a1f`, `#0d1117]/80` & `/95`).
+
+### FITUR BARU — Pendingan Alokasi (`/sj/pendingan`)
+Daftar rencana kirim manual per Tujuan (bukan kalkulasi stok) — membantu GA mencatat
+barang apa saja yang masih harus dikirim ke tiap toko/tujuan.
+
+**Database:**
+- `sj_tujuan` tambah kolom `kota` + `kecamatan` (keduanya nullable).
+- Tabel baru `pendingan_items` (flat, 1 tabel): id, tujuan_id (FK → sj_tujuan,
+  ON DELETE CASCADE), jenis, qty, keterangan, created_at.
+  Dipilih flat (bukan header+detail) karena tidak ada metadata per-tujuan yang perlu
+  disimpan — grouping cukup di query/UI, lebih ringan.
+- Index: idx_pendingan_items_tujuan, idx_pendingan_items_created, idx_sj_tujuan_kota.
+- [PENTING] `pendingan_items` awalnya kena RLS default project → error
+  "new row violates row-level security policy". Fix: `DISABLE ROW LEVEL SECURITY`
+  (konsisten dengan tabel lain yang diakses via anon key dari API server-side).
+- Data kota/kecamatan diisi massal dari file `alamat-toko.xlsx` (828 baris) via satu
+  statement `UPDATE ... FROM (VALUES ...) WHERE t.kode = v.kode` — hanya meng-update
+  tujuan yang kode-nya ada di file. 7 kota: Batang, Demak, Jepara, Kendal, Kudus,
+  Pekalongan, Semarang.
+
+**API & hook:**
+- `GET/POST/DELETE /api/pendingan` — GET list (join sj_tujuan untuk kota/kecamatan,
+  optional filter ?tujuan_id), POST batch insert, DELETE hard-delete by ids.
+- `usePendingan` hook: items + loading + refresh + addItems + clearItems.
+- `POST/PATCH /api/sj/tujuan` diupdate agar menerima `kota` & `kecamatan`.
+
+**Halaman (layout 2 kolom):**
+- KIRI: tombol "Pendingan Baru" + dropdown filter Kota (default "Semua Kota") +
+  list tujuan yang punya pending, di-group **Kota → Kecamatan** (urut A-Z), tiap
+  tujuan ada cekbox-tujuan (clear semua item tujuan itu) + badge jumlah pending.
+- KANAN: item tujuan terpilih (jenis, qty, keterangan) dengan cekbox-item per baris.
+  Centang sebagian → tombol "Clear N item tercentang". Kalau SEMUA item tercentang →
+  badge "Semua tercentang" muncul. Clear = hard-delete.
+- INPUT: lewat MODAL form ala Buat SJ — pilih Tujuan (dropdown searchable) + tabel
+  item multi-baris (`PendinganItemsTable`: jenis autocomplete + allowCustom, jumlah,
+  keterangan) dengan Tambah Baris, duplikat baris ke bawah, hapus baris, auto-scroll.
+  Simpan sekaligus batch.
+  [DECISION] Dibuat komponen tabel BARU (bukan reuse SJItemsTable) supaya ramping —
+  SJItemsTable bawa kolom merk/satuan/SN/tag yang tidak dipakai di pendingan.
+- Menu "Pendingan Alokasi" ditambahkan di submenu Surat Jalan Manual.
+
+**Glass theme (uji coba di halaman ini saja):**
+- Glassmorphism: panel semi-transparan + `backdrop-filter: blur()`, background halaman
+  diberi radial gradient supaya efek blur kelihatan (glass butuh sesuatu di belakang).
+- Light mode: ala iOS — `blur(20px) saturate(160%)`, opacity 0.45, shadow halus.
+- Beban performa minim: murni CSS, GPU-accelerated, tanpa perhitungan JS.
+- Blur & opacity dibuat sebagai CSS variable terpisah di blok "KONTROL GLASS THEME"
+  di atas style, supaya mudah di-tuning manual (tinggal ganti angka).
+- Semua warna teks/border/aksen pakai token `--pend-*` yang berbeda per tema:
+  dark → cyan terang (#38bdf8) & teks putih; light → cyan gelap (#0369a1),
+  teks slate (#1e293b), emerald gelap (#047857) supaya kontras & terbaca.
+
+### Catatan
+- Budget tetap DIBATALKAN (out of scope TA).
+- Shortcut "Buat SJ" dari pendingan (pre-fill form) TIDAK jadi dibuat — diputuskan
+  fokus ke list + checklist saja.
