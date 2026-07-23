@@ -502,6 +502,79 @@ const MutasiWTCell = memo(({ itemId, isAktiva, initialMutasiWT, onSaved }: {
 });
 MutasiWTCell.displayName = "MutasiWTCell";
 
+// ─── Mutasi "Keduanya" ────────────────────────────────────────────────────
+// Satu checkbox untuk menandai mutasi Oracle + WT sekaligus.
+//
+// Kenapa perlu: mutasi Oracle dan WT dikerjakan di dua program berbeda dan
+// tidak bisa bersamaan. Kalau user mencentang salah satu duluan, baris itu
+// langsung hilang dari filter "Belum Keduanya" padahal pekerjaannya belum
+// selesai. Dengan checkbox ini user bisa menunda penandaan sampai kedua
+// program benar-benar sudah dimutasi, lalu tandai sekali klik.
+//
+// Catatan: kode_asset ikut dikirim apa adanya karena API menulis ulang kolom
+// itu setiap kali menerima mutasi_oracle_status — kalau tidak disertakan,
+// kode aset yang sudah terisi akan terhapus jadi null.
+const MutasiBothCell = memo(({ itemId, isAktiva, kodeAsset, mutasiOracle, mutasiWT, onSaved }: {
+  itemId: string;
+  isAktiva: boolean;
+  kodeAsset: string;
+  mutasiOracle: boolean;
+  mutasiWT: boolean;
+  onSaved: (itemId: string, val: boolean, kodeAsset: string) => void;
+}) => {
+  const [saving, setSaving] = useState(false);
+  const bothOn = mutasiOracle && mutasiWT;
+
+  const persist = useCallback(async (next: boolean) => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/sj/report", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          item_id: itemId,
+          kode_asset: kodeAsset,
+          mutasi_oracle_status: next,
+          mutasi_wt_status: next,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) onSaved(itemId, next, kodeAsset);
+    } catch {
+      // diam — biarkan user retry
+    } finally {
+      setSaving(false);
+    }
+  }, [itemId, kodeAsset, onSaved]);
+
+  if (!isAktiva) {
+    return (
+      <div className="flex items-center justify-center">
+        <input
+          type="checkbox" checked={false} disabled suppressHydrationWarning
+          className="h-3.5 w-3.5 rounded border-white/10 bg-white/[0.02] opacity-30 cursor-not-allowed"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-center gap-1.5">
+      <input
+        type="checkbox"
+        checked={bothOn}
+        disabled={saving}
+        onChange={() => persist(!bothOn)}
+        suppressHydrationWarning
+        title={bothOn ? "Batalkan kedua mutasi" : "Tandai mutasi Oracle + WT sekaligus"}
+        className="h-3.5 w-3.5 rounded border-white/20 bg-white/[0.04] accent-emerald-500 cursor-pointer disabled:opacity-40"
+      />
+      {saving && <span className="text-[9px] text-white/30">...</span>}
+    </div>
+  );
+});
+MutasiBothCell.displayName = "MutasiBothCell";
+
 // ─── Main Page ────────────────────────────────────────────────────────────
 export default function SJReportPage() {
   const { items, loading } = useSJReport();
@@ -521,6 +594,14 @@ export default function SJReportPage() {
       const current = prev[itemId] ?? fallback;
       return { ...prev, [itemId]: { ...current, mutasi_wt: mutasiWT } };
     });
+  }, []);
+
+  // Checkbox "Keduanya" — set mutasi Oracle & WT sekaligus di override lokal
+  const handleBothSaved = useCallback((itemId: string, val: boolean, kodeAsset: string) => {
+    setAllocOverride((prev) => ({
+      ...prev,
+      [itemId]: { kode_asset: kodeAsset, mutasi_oracle: val, mutasi_wt: val },
+    }));
   }, []);
 
   const usedKodes = useMemo(() => {
@@ -834,7 +915,7 @@ export default function SJReportPage() {
           <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03] shadow-xl shadow-black/30">
             <div className="overflow-x-auto">
               <div className="min-w-[1760px]">
-                <div className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_50px_70px_180px_90px_150px_80px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+                <div className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_50px_70px_180px_90px_150px_80px_70px] gap-2 border-b border-white/[0.06] px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-white/25">
                   <span>Tanggal</span>
                   <span>No. SJ</span>
                   <span>Tujuan</span>
@@ -849,6 +930,7 @@ export default function SJReportPage() {
                   <span>Status</span>
                   <span>Kode Aset / Mutasi</span>
                   <span className="text-center">Mutasi WT</span>
+                  <span className="text-center">Keduanya</span>
                 </div>
 
                 {loading ? (
@@ -882,7 +964,7 @@ export default function SJReportPage() {
                           : it.is_mutated;
                         return (
                         <div key={it.item_id}
-                          className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_50px_70px_180px_90px_150px_80px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
+                          className="grid grid-cols-[90px_180px_140px_100px_130px_100px_80px_50px_50px_70px_180px_90px_150px_80px_70px] gap-2 items-center px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-[11px]">
                           <div className="min-w-0">
                             <p className="text-white/60">{formatTanggal(it.tanggal)}</p>
                             <p className="text-[9px] text-white/30">{formatHari(it.tanggal)}</p>
@@ -922,6 +1004,14 @@ export default function SJReportPage() {
                               mutasi_oracle: mutasiVal,
                               mutasi_wt: mutasiWtVal,
                             })}
+                          />
+                          <MutasiBothCell
+                            itemId={it.item_id}
+                            isAktiva={it.is_aktiva}
+                            kodeAsset={kodeVal}
+                            mutasiOracle={mutasiVal}
+                            mutasiWT={mutasiWtVal}
+                            onSaved={handleBothSaved}
                           />
                         </div>
                         );
