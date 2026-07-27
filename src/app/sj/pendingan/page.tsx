@@ -17,7 +17,7 @@ export default function PendinganAlokasiPage() {
   const { jenis: jenisOptions } = useMasterJenis();
   const { merk: merkOptions } = useMasterMerk();
   const { tujuan: allTujuan, loading: loadingTujuan } = useMasterTujuan();
-  const { items, loading: loadingItems, addItems, clearItems } = usePendingan();
+  const { items, loading: loadingItems, addItems, updateItem, clearItems } = usePendingan();
 
   const [kotaFilter, setKotaFilter] = useState("all");
   const [urgensiFilter, setUrgensiFilter] = useState("all");
@@ -30,6 +30,15 @@ export default function PendinganAlokasiPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTujuanId, setModalTujuanId] = useState("");
   const [draftItems, setDraftItems] = useState<PendinganDraftItem[]>([createEmptyPendinganItem(1)]);
+
+  // Modal edit satu item
+  const [editTarget, setEditTarget] = useState<PendinganItemFull | null>(null);
+  const [editJenis, setEditJenis] = useState("");
+  const [editMerk, setEditMerk] = useState("");
+  const [editQty, setEditQty] = useState("1");
+  const [editKet, setEditKet] = useState("");
+  const [editUrgensi, setEditUrgensi] = useState<UrgensiLevel>("sedang");
+  const [editArah, setEditArah] = useState("kirim");
 
   // Item yang lolos filter urgensi (dipakai untuk hitung & tampilkan tujuan)
   const itemsByUrgensi = useMemo(() => {
@@ -178,6 +187,34 @@ export default function PendinganAlokasiPage() {
     finally { setBusy(false); }
   }, [modalTujuanId, draftItems, addItems]);
 
+  const openEdit = useCallback((it: PendinganItemFull) => {
+    setEditTarget(it);
+    setEditJenis(it.jenis);
+    setEditMerk(it.merk ?? "");
+    setEditQty(String(it.qty ?? 1));
+    setEditKet(it.keterangan ?? "");
+    setEditUrgensi((it.urgensi ?? "sedang") as UrgensiLevel);
+    setEditArah(it.arah ?? "kirim");
+  }, []);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!editTarget) return;
+    if (!editJenis.trim()) { alert("Jenis tidak boleh kosong"); return; }
+    setBusy(true);
+    try {
+      await updateItem(editTarget.id, {
+        jenis: editJenis.trim(),
+        merk: editMerk.trim(),
+        qty: Math.max(1, Number(editQty) || 1),
+        keterangan: editKet.trim(),
+        urgensi: editUrgensi,
+        arah: editArah as "kirim" | "tarik",
+      });
+      setEditTarget(null);
+    } catch (e) { alert(e instanceof Error ? e.message : "Gagal mengubah"); }
+    finally { setBusy(false); }
+  }, [editTarget, editJenis, editMerk, editQty, editKet, editUrgensi, editArah, updateItem]);
+
   const tujuanDropdownOptions = useMemo(
     () => allTujuan
       .slice()
@@ -288,11 +325,11 @@ export default function PendinganAlokasiPage() {
                       <p className="text-[12px] text-[color:var(--pend-text-dim)] text-center py-8">Belum ada item.</p>
                     ) : (
                       <div className="space-y-1.5">
-                        <div className="grid grid-cols-[auto_1.2fr_0.9fr_46px_62px_66px_1fr] gap-2 px-2 pb-1 text-[9px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)]">
-                          <span className="w-5" /><span>Jenis</span><span>Merk</span><span className="text-center">Qty</span><span>Arah</span><span>Urgensi</span><span>Keterangan</span>
+                        <div className="grid grid-cols-[auto_1.15fr_0.85fr_44px_60px_64px_1fr_28px] gap-2 px-2 pb-1 text-[9px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)]">
+                          <span className="w-5" /><span>Jenis</span><span>Merk</span><span className="text-center">Qty</span><span>Arah</span><span>Urgensi</span><span>Keterangan</span><span />
                         </div>
                         {selectedItems.map(it => (
-                          <ItemRow key={it.id} item={it} checked={checkedItems.has(it.id)} onToggle={() => toggleItem(it.id)} />
+                          <ItemRow key={it.id} item={it} checked={checkedItems.has(it.id)} onToggle={() => toggleItem(it.id)} onEdit={() => openEdit(it)} />
                         ))}
                       </div>
                     )}
@@ -320,6 +357,86 @@ export default function PendinganAlokasiPage() {
           </div>
         </main>
       </div>
+
+      {/* ══ MODAL EDIT ITEM ═════════════════════════════════════════════════ */}
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
+          onClick={() => setEditTarget(null)}>
+          <div className="pend-glass rounded-2xl w-full max-w-lg flex flex-col overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-[color:var(--pend-border)] flex items-center justify-between">
+              <h3 className="text-[15px] font-semibold" style={{ color: "var(--pend-text)" }}>Edit Item Pendingan</h3>
+              <button onClick={() => setEditTarget(null)} className="text-[color:var(--pend-text-dim)] hover:opacity-70">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Jenis Barang *</label>
+                <SearchableDropdown
+                  options={jenisOptions.map(j => ({ value: j, label: j }))}
+                  value={editJenis} onChange={setEditJenis}
+                  placeholder="Jenis..." allowCustom
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Merk</label>
+                <SearchableDropdown
+                  options={merkOptions.map(m => ({ value: m, label: m }))}
+                  value={editMerk} onChange={setEditMerk}
+                  placeholder="Merk..." allowCustom
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Jumlah</label>
+                  <input type="number" min="1" value={editQty}
+                    onChange={e => setEditQty(e.target.value)}
+                    className="w-full px-2 py-1.5 rounded-lg border border-[color:var(--pend-border)] bg-[color:var(--pend-input)] text-[12px] text-center focus:outline-none focus:border-cyan-500/50"
+                    style={{ color: "var(--pend-text)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Arah</label>
+                  <SearchableDropdown
+                    options={ARAH_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+                    value={editArah} onChange={setEditArah} placeholder="Arah..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Urgensi</label>
+                  <SearchableDropdown
+                    options={URGENSI_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+                    value={editUrgensi} onChange={(v) => setEditUrgensi(v as UrgensiLevel)} placeholder="Urgensi..."
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Keterangan</label>
+                <input type="text" value={editKet}
+                  onChange={e => setEditKet(e.target.value)}
+                  placeholder="Keterangan..."
+                  className="w-full px-2 py-1.5 rounded-lg border border-[color:var(--pend-border)] bg-[color:var(--pend-input)] text-[12px] focus:outline-none focus:border-cyan-500/50"
+                  style={{ color: "var(--pend-text)" }}
+                />
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-[color:var(--pend-border)] flex items-center justify-end gap-2">
+              <button onClick={() => setEditTarget(null)}
+                className="px-4 py-2 rounded-xl border border-[color:var(--pend-border)] text-[12px] text-[color:var(--pend-text-dim)] hover:opacity-70 transition-all">
+                Batal
+              </button>
+              <button onClick={handleSaveEdit} disabled={busy}
+                className="px-5 py-2 rounded-xl bg-cyan-500/20 border border-cyan-500/50 text-[color:var(--pend-accent)] text-[12px] font-semibold hover:bg-cyan-500/30 transition-all disabled:opacity-50">
+                Simpan Perubahan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ══ MODAL INPUT (form ala SJ) ═══════════════════════════════════════ */}
       {modalOpen && (
@@ -490,13 +607,13 @@ const URGENSI_STYLE: Record<string, string> = {
   rendah: "pend-urg-rendah",
 };
 
-function ItemRow({ item, checked, onToggle }: {
-  item: PendinganItemFull; checked: boolean; onToggle: () => void;
+function ItemRow({ item, checked, onToggle, onEdit }: {
+  item: PendinganItemFull; checked: boolean; onToggle: () => void; onEdit: () => void;
 }) {
   const urg = (item.urgensi ?? "sedang") as string;
   const arah = (item.arah ?? "kirim") as string;
   return (
-    <div className={`grid grid-cols-[auto_1.2fr_0.9fr_46px_62px_66px_1fr] gap-2 items-center px-2 py-2 rounded-lg transition-all ${checked ? "opacity-60" : ""}`}
+    <div className={`grid grid-cols-[auto_1.15fr_0.85fr_44px_60px_64px_1fr_28px] gap-2 items-center px-2 py-2 rounded-lg transition-all ${checked ? "opacity-60" : ""}`}
       style={{ background: checked ? "rgba(16,185,129,0.10)" : "var(--pend-row)" }}>
       <button onClick={onToggle}
         className={`w-5 h-5 rounded border flex items-center justify-center transition-all shrink-0 ${
@@ -518,6 +635,16 @@ function ItemRow({ item, checked, onToggle }: {
         {urg}
       </span>
       <span className="text-[11px] text-[color:var(--pend-text-dim)] truncate">{item.keterangan || "—"}</span>
+      <button
+        onClick={onEdit}
+        title="Edit item"
+        className="w-6 h-6 rounded-md flex items-center justify-center text-[color:var(--pend-text-dim)] hover:text-[color:var(--pend-accent)] hover:bg-cyan-500/10 transition-all"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </svg>
+      </button>
     </div>
   );
 }

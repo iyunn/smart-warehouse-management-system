@@ -81,5 +81,21 @@ export function usePendingan() {
     await refresh();
   }, [refresh]);
 
-  return { items, loading, error, refresh, addItems, clearItems };
+  // Edit satu item (hanya field yang dikirim yang diubah)
+  const updateItem = useCallback(async (
+    id: string,
+    patch: { jenis?: string; merk?: string; qty?: number; keterangan?: string; urgensi?: UrgensiLevel; arah?: ArahPendingan }
+  ) => {
+    const res = await fetch("/api/pendingan", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...patch }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? "Gagal mengubah");
+    await refresh();
+    return json.item;
+  }, [refresh]);
+
+  return { items, loading, error, refresh, addItems, updateItem, clearItems };
 }

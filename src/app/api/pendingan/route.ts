@@ -85,6 +85,58 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// PATCH — edit satu item pendingan.
+// Body: { id, jenis?, merk?, qty?, keterangan?, urgensi?, arah? }
+// Hanya field yang dikirim yang di-update (conditional), agar tidak menimpa
+// field lain dengan nilai kosong.
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { id } = body
+
+    if (!id) {
+      return NextResponse.json({ error: 'id wajib diisi' }, { status: 400 })
+    }
+
+    const VALID_URGENSI = ['tinggi', 'sedang', 'rendah']
+    const VALID_ARAH = ['kirim', 'tarik']
+
+    const patch: Record<string, unknown> = {}
+
+    if (typeof body.jenis === 'string') {
+      const jenis = body.jenis.trim()
+      if (!jenis) {
+        return NextResponse.json({ error: 'Jenis tidak boleh kosong' }, { status: 400 })
+      }
+      patch.jenis = jenis
+    }
+    if (typeof body.merk === 'string')       patch.merk = body.merk.trim()
+    if (typeof body.keterangan === 'string') patch.keterangan = body.keterangan.trim()
+    if (body.qty !== undefined)              patch.qty = Math.max(1, Number(body.qty) || 1)
+    if (VALID_URGENSI.includes(body.urgensi)) patch.urgensi = body.urgensi
+    if (VALID_ARAH.includes(body.arah))       patch.arah = body.arah
+
+    if (Object.keys(patch).length === 0) {
+      return NextResponse.json({ error: 'Tidak ada field untuk diupdate' }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
+      .from('pendingan_items')
+      .update(patch)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw new Error(error.message)
+    return NextResponse.json({ item: data })
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Error' },
+      { status: 500 }
+    )
+  }
+}
+
 // DELETE — clear item (hard delete). Body: { ids: string[] } atau ?id=xxx
 export async function DELETE(req: NextRequest) {
   try {
