@@ -3131,3 +3131,50 @@ padahal belum selesai. Fix: kolom baru "Keduanya" (paling kanan tabel) — satu 
 set/batalkan mutasi Oracle + WT sekaligus. Satu request PATCH (API /api/sj/report sudah
 dukung conditional update dua field). kode_asset ikut dikirim agar tidak terhapus jadi
 null saat mutasi_oracle_status diset. Disabled untuk baris non-aktiva.
+
+---
+
+## 25 Juli 2026 — Arah Tarik/Kirim, Fix Staging Non-AT, Edit Item Pendingan
+
+### Mekanisme Arah (Tarik / Kirim) di Pendingan Alokasi
+Kebutuhan riil: satu toko bisa punya dua jenis kebutuhan sekaligus —
+- `kirim` = barang baru dari gudang DIKIRIM ke toko
+- `tarik` = barang bekas / ex-peremajaan DITARIK dari toko ke gudang
+
+Implementasi:
+- `pendingan_items` tambah kolom `arah` (TEXT, default 'kirim') + index
+  idx_pendingan_items_arah. Migration: `migration-pendingan-arah.sql`.
+- API POST validasi VALID_ARAH = ['kirim','tarik'], fallback 'kirim' kalau nilai
+  tidak sah. GET ikut select kolom arah.
+- `PendinganItemsTable`: kolom Arah baru (SearchableDropdown, sebelum Urgensi).
+  Karena per ITEM, dalam satu entri tujuan bisa dicampur kirim & tarik.
+- Halaman: badge Arah di list item (Kirim = biru, Tarik = ungu; versi gelap saat
+  light mode agar kontras). Filter Arah di panel kiri ("Kirim & Tarik"/Kirim/Tarik),
+  bertumpuk dengan filter Kota & Urgensi.
+- Item lama tanpa arah otomatis dianggap 'kirim'.
+
+### [BUG FIX] Non-AT tidak boleh masuk staging
+Root cause: POST /api/sj memasukkan SEMUA item SJ masuk ke `staging_area` tanpa cek
+`is_aktiva`. Barang non-AT (consumable, sparepart) tidak akan pernah muncul di DAT,
+sehingga `syncStagingToNotes()` tidak pernah membersihkannya → NYANGKUT SELAMANYA
+di Staging Area.
+
+Fix: filter `is_aktiva` di POST **dan** PATCH sebelum insert ke staging_area.
+Item AT tanpa kode_asset TETAP masuk sebagai AT Lebih (itu memang tujuan fitur —
+beda kasus dengan non-AT).
+
+Data non-AT lama yang sudah terlanjur nyangkut dibersihkan manual oleh Fillian
+lewat halaman Staging (hapus).
+
+### Fitur Edit Item Pendingan
+Tanpa migration (semua kolom sudah ada).
+- Endpoint baru `PATCH /api/pendingan` — pola conditional update (sama dengan
+  /api/sj): hanya field yang dikirim yang di-update, agar tidak menimpa field lain
+  dengan nilai kosong. Validasi: jenis tidak boleh kosong (ditolak 400), qty < 1
+  dinormalkan jadi 1, nilai urgensi/arah di luar daftar sah DIABAIKAN (bukan
+  ditimpa) sehingga nilai lama dipertahankan.
+- Hook `usePendingan` tambah `updateItem(id, patch)`.
+- UI: tombol edit (ikon pensil) di kolom paling kanan tiap baris item → modal edit
+  berisi Jenis, Merk, Jumlah, Arah, Urgensi, Keterangan (Jumlah/Arah/Urgensi
+  disusun 3 kolom agar ringkas). Tombol edit sengaja TIDAK di-disable saat item
+  tercentang — koreksi masih boleh selama belum di-clear.

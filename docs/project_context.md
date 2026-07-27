@@ -3,7 +3,7 @@ git # PROJECT_CONTEXT.md
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **24 Juli 2026** (7 temuan revisi + penutupan celah SJ masuk + checkbox Keduanya di Rekap)
+> Terakhir diupdate: **25 Juli 2026** (Arah Tarik/Kirim + fix staging non-AT + edit item pendingan)
 
 ## Project Identity
 
@@ -462,27 +462,32 @@ harus dikirim ke tiap toko. Bukan kalkulasi stok (input manual).
   7 kota: Batang, Demak, Jepara, Kendal, Kudus, Pekalongan, Semarang.
 - Tabel `pendingan_items` (flat): id, tujuan_id (FK cascade), jenis, qty,
   keterangan, created_at. RLS DIMATIKAN (konsisten dengan tabel lain via anon key).
-- Index: idx_pendingan_items_tujuan, idx_pendingan_items_created, idx_sj_tujuan_kota.
+- Index: idx_pendingan_items_tujuan, idx_pendingan_items_created, idx_pendingan_items_urgensi,
+  idx_pendingan_items_arah, idx_sj_tujuan_kota.
 
 **API & hook:**
-- `GET/POST/DELETE /api/pendingan` (GET join tujuan + optional ?tujuan_id,
-  POST batch, DELETE hard-delete by ids).
-- Hook `usePendingan` (items, loading, refresh, addItems, clearItems).
+- `GET/POST/PATCH/DELETE /api/pendingan` (GET join tujuan + optional ?tujuan_id,
+  POST batch, PATCH edit 1 item dengan conditional update, DELETE hard-delete by ids).
+- Hook `usePendingan` (items, loading, refresh, addItems, updateItem, clearItems).
 - `/api/sj/tujuan` POST & PATCH menerima kota + kecamatan.
 
 **Halaman `/sj/pendingan` (2 kolom):**
-- Kiri: tombol "Pendingan Baru", filter Kota + Urgensi (2 dropdown sejajar,
-  bertumpuk), list tujuan yang punya pending di-group Kota → Kecamatan,
-  cekbox-tujuan (clear langsung tanpa konfirmasi) + badge jumlah + dot urgensi
-  tertinggi.
-- Kanan: item tujuan terpilih (jenis, merk, qty, urgensi, keterangan) + cekbox-item
-  per baris. Centang sebagian → tombol clear item tercentang; semua tercentang →
-  badge "Semua tercentang". Clear = hard-delete. Badge urgensi berwarna kontras
-  dark & light.
+- Kiri: tombol "Pendingan Baru", filter Kota + Urgensi (2 dropdown sejajar) +
+  filter Arah di bawahnya — ketiganya bertumpuk. List tujuan yang punya pending
+  di-group Kota → Kecamatan, cekbox-tujuan (clear langsung tanpa konfirmasi) +
+  badge jumlah + dot urgensi tertinggi.
+- Kanan: item tujuan terpilih (jenis, merk, qty, arah, urgensi, keterangan) +
+  cekbox-item per baris + tombol edit (ikon pensil) per item. Centang sebagian →
+  tombol clear item tercentang; semua tercentang → badge "Semua tercentang".
+  Clear = hard-delete. Badge urgensi & arah (Kirim biru / Tarik ungu) berwarna
+  kontras dark & light.
+- Edit item: modal berisi Jenis, Merk, Jumlah, Arah, Urgensi, Keterangan.
+  Tombol edit tetap aktif walau item tercentang (koreksi masih boleh).
 - Input via MODAL form ala Buat SJ: dropdown Tujuan + `PendinganItemsTable`
-  (jenis + merk autocomplete allowCustom, jumlah, urgensi via SearchableDropdown,
-  keterangan) dengan Tambah Baris, duplikat baris, hapus baris, auto-scroll.
-  Simpan batch.
+  (jenis + merk autocomplete allowCustom, jumlah, arah & urgensi via
+  SearchableDropdown, keterangan) dengan Tambah Baris, duplikat baris, hapus
+  baris, auto-scroll. Simpan batch. Arah per ITEM → dalam satu entri tujuan bisa
+  dicampur kirim & tarik.
 - Menu di submenu Surat Jalan Manual.
 
 **Glass theme (uji coba di halaman ini saja):** panel semi-transparan +
@@ -507,6 +512,12 @@ template SJ keluar (fixed dengan teruskan prop jenis ke SJPreviewModal).
 (replace penuh, catatan lama dipertahankan via kode_asset). Item yang kode asetnya
 sudah muncul di CGA di-skip (tidak muncul lagi di staging). Dulu PATCH tidak menyentuh
 staging sama sekali → barang dihapus nyangkut, barang baru tidak masuk.
+
+**Hanya item AT yang masuk staging (25 Juli 2026).** POST & PATCH memfilter
+`is_aktiva` sebelum insert ke `staging_area`. Sebelumnya SEMUA item SJ masuk ikut
+ditampung — barang non-AT tidak pernah muncul di DAT sehingga tidak pernah
+dibersihkan `syncStagingToNotes()` dan nyangkut selamanya. Item AT tanpa kode aset
+TETAP masuk sebagai AT Lebih (beda kasus dengan non-AT).
 
 **Catatan arsitektur:** `surat_jalan` menampung 2 jenis dokumen (keluar/masuk) via
 kolom `jenis`. Kolom `tujuan_id` bermakna ganda (tujuan/asal) — hanya penamaan, tidak
@@ -920,7 +931,7 @@ Status: 📌 Deferred — sampai semua fitur selesai
 | `sj_tujuan` | Master tujuan/cost center penerima SJ. Termasuk `kota` & `kecamatan` (nullable, dipakai untuk grouping & filter di Pendingan Alokasi) |
 | `surat_jalan` | Header surat jalan |
 | `surat_jalan_items` | Detail item per surat jalan |
-| `pendingan_items` | Item pendingan alokasi (flat: tujuan_id FK cascade, jenis, merk, qty, keterangan, urgensi tinggi/sedang/rendah). Clear = hard-delete. RLS dimatikan |
+| `pendingan_items` | Item pendingan alokasi (flat: tujuan_id FK cascade, jenis, merk, qty, keterangan, urgensi tinggi/sedang/rendah, arah kirim/tarik). Clear = hard-delete. RLS dimatikan |
 
 ### Indexes
 - `idx_assets_raw_toko` — optimasi filter warehouse (legacy, masih dipertahankan)
@@ -930,7 +941,7 @@ Status: 📌 Deferred — sampai semua fitur selesai
 - `idx_assets_clean_merk` — optimasi filter unknown
 - `idx_surat_jalan_tanggal`, `idx_surat_jalan_tujuan`, `idx_surat_jalan_status`
 - `idx_sj_items_sj_id`, `idx_sj_items_serial`, `idx_sj_items_jenis`, `idx_sj_items_mutasi_status`
-- `idx_pendingan_items_tujuan`, `idx_pendingan_items_created`, `idx_pendingan_items_urgensi` — Pendingan Alokasi
+- `idx_pendingan_items_tujuan`, `idx_pendingan_items_created`, `idx_pendingan_items_urgensi`, `idx_pendingan_items_arah` — Pendingan Alokasi
 - `idx_sj_tujuan_kota` — filter kota di Pendingan Alokasi
 
 ### Constraints
