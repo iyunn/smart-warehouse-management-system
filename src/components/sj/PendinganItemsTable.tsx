@@ -4,6 +4,12 @@ import { memo, useCallback, useRef } from "react";
 import SearchableDropdown from "@/components/sj/SearchableDropdown";
 
 export type UrgensiLevel = "tinggi" | "sedang" | "rendah";
+export type ArahPendingan = "kirim" | "tarik";
+
+export const ARAH_OPTIONS: { value: ArahPendingan; label: string }[] = [
+  { value: "kirim", label: "Kirim" },
+  { value: "tarik", label: "Tarik" },
+];
 
 export const URGENSI_OPTIONS: { value: UrgensiLevel; label: string }[] = [
   { value: "tinggi", label: "Tinggi" },
@@ -18,10 +24,11 @@ export interface PendinganDraftItem {
   qty: number;
   keterangan: string;
   urgensi: UrgensiLevel;
+  arah: ArahPendingan;
 }
 
 export function createEmptyPendinganItem(urutan: number): PendinganDraftItem {
-  return { urutan, jenis: "", merk: "", qty: 1, keterangan: "", urgensi: "sedang" };
+  return { urutan, jenis: "", merk: "", qty: 1, keterangan: "", urgensi: "sedang", arah: "kirim" };
 }
 
 interface Props {
@@ -93,7 +100,7 @@ function PendinganItemsTable({ items, jenisOptions, merkOptions, onChange }: Pro
   const jenisDropdownOptions = jenisOptions.map(j => ({ value: j, label: j }));
   const merkDropdownOptions = merkOptions.map(m => ({ value: m, label: m }));
 
-  const gridCols = "grid-cols-[32px_minmax(150px,1.4fr)_minmax(120px,1fr)_60px_100px_minmax(130px,1fr)_66px]";
+  const gridCols = "grid-cols-[30px_minmax(130px,1.3fr)_minmax(105px,1fr)_54px_92px_92px_minmax(115px,1fr)_62px]";
 
   return (
     <div className="rounded-2xl border border-[color:var(--pend-border)] bg-[color:var(--pend-row)] overflow-visible" onFocusCapture={handleFocusCapture}>
@@ -103,6 +110,7 @@ function PendinganItemsTable({ items, jenisOptions, merkOptions, onChange }: Pro
         <span>Jenis Barang</span>
         <span>Merk</span>
         <span className="text-center">Jumlah</span>
+        <span>Arah</span>
         <span>Urgensi</span>
         <span>Keterangan</span>
         <span className="text-center">Aksi</span>
@@ -134,6 +142,13 @@ function PendinganItemsTable({ items, jenisOptions, merkOptions, onChange }: Pro
               type="number" min="1" value={item.qty}
               onChange={(e) => updateItem(idx, { qty: Math.max(1, Number(e.target.value) || 1) })}
               className="w-full px-2 py-1.5 rounded-lg border border-[color:var(--pend-border)] bg-[color:var(--pend-input)] text-[12px] text-[color:var(--pend-text)] text-center focus:outline-none focus:border-cyan-500/50"
+            />
+
+            <SearchableDropdown
+              options={ARAH_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+              value={item.arah}
+              onChange={(v) => updateItem(idx, { arah: v as ArahPendingan })}
+              placeholder="Arah..."
             />
 
             <SearchableDropdown

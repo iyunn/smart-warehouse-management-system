@@ -3065,3 +3065,69 @@ barang apa saja yang masih harus dikirim ke tiap toko/tujuan.
 - Budget tetap DIBATALKAN (out of scope TA).
 - Shortcut "Buat SJ" dari pendingan (pre-fill form) TIDAK jadi dibuat — diputuskan
   fokus ke list + checklist saja.
+
+---
+
+## 24 Juli 2026 — 7 Temuan Revisi, Penutupan Celah SJ Masuk, Checkbox "Keduanya"
+
+### 7 temuan revisi (batch)
+1. **Urgensi pendingan** — `pendingan_items` tambah kolom `urgensi`
+   ('tinggi'/'sedang'/'rendah', default 'sedang') + index idx_pendingan_items_urgensi.
+   Dipilih per item saat input. Filter Urgensi berdampingan dengan filter Kota
+   (2 dropdown sejajar), keduanya bertumpuk. Badge urgensi berwarna kontras di
+   dark & light; dot kecil di baris tujuan menandai urgensi tertinggi. Item lama
+   otomatis dianggap 'sedang'.
+2. **Merk pendingan** — `pendingan_items` tambah kolom `merk` (default ''). Kolom
+   input baru di form (autocomplete master merk) + tampil di list item.
+3. **Cekbox tujuan** — clear langsung hard-delete tanpa dialog konfirmasi.
+4. **SJ masuk berubah jadi keluar saat diedit** — root cause: PATCH /api/sj selalu
+   set `jenis` (`jenis === 'masuk' ? 'masuk' : 'keluar'`), sedangkan halaman Buat SJ
+   tidak mengirim `jenis` saat edit → undefined → jatuh ke 'keluar'. Fix: `jenis`
+   hanya di-update kalau body memang mengirimnya (headerPatch kondisional). Plus bug
+   lanjutannya: preview/print PDF setelah edit SJ masuk pakai template SJ keluar —
+   fix dengan meneruskan prop `jenis` (dari existingSJ.jenis) ke SJPreviewModal;
+   generateSJPdfBlob memang sudah memilih SuratPenerimaanPDF saat jenis 'masuk'.
+5. **Tanggal Excel Rekap** — dicek ternyata sudah benar (pakai it.tanggal dari input),
+   tidak ada perbaikan.
+6. **Title tab browser** — semua halaman client component (tidak bisa export metadata),
+   tapi semua sudah pakai <Topbar title="...">. Solusi: Topbar set document.title =
+   `${title} — SmartWMS` via useEffect, plus cleanup ke default saat unmount (halaman
+   auth tanpa Topbar). Satu perubahan, 14 halaman otomatis benar.
+7. **Master Tujuan** — form tambah input Kota & Kecamatan (opsional), tabel tampilkan
+   kedua kolom, search ikut mencakup keduanya. API tujuan POST/PATCH sudah menerima
+   kota/kecamatan dari sprint sebelumnya.
+
+Migration: `migration-pendingan-merk-urgensi.sql` (kolom merk + urgensi + index).
+
+### Penutupan celah alur SJ masuk (arsitektur)
+Diskusi arsitektur: `surat_jalan` menampung 2 jenis dokumen (keluar/masuk) dibedakan
+kolom `jenis`. Kolom `tujuan_id` bermakna ganda (tujuan untuk keluar, ASAL untuk masuk)
+— tidak merusak data, hanya penamaan. Yang berbahaya: satu jalur edit (`/sj/buat`)
+memperlakukan dua jenis dokumen seragam. Ditutup 3 celah:
+
+- **Staging tidak sinkron saat edit** — POST SJ masuk auto-insert ke `staging_area`,
+  DELETE membersihkannya, tapi PATCH dulu tidak menyentuhnya. Akibat: barang yang
+  dihapus nyangkut di staging, barang baru tidak masuk staging (tidak bisa diberi
+  catatan sebelum sync ke asset_notes). Fix: PATCH sinkronkan staging_area untuk SJ
+  masuk (replace penuh, pola sama dengan surat_jalan_items). Catatan lama dipertahankan
+  via pencocokan kode_asset.
+- **Barang sudah di CGA muncul lagi di staging** — fix lanjutan: item yang kode asetnya
+  sudah ada di assets_raw dengan toko CGA di-skip dari staging (aturan sama dengan
+  syncStagingToNotes()). Cek cuma untuk kode aset di SJ itu (bukan seluruh DAT), ringan.
+- **Jalur edit salah** — tombol Edit di Daftar SJ dulu selalu ke /sj/buat. Fix: baca
+  `sj.jenis` → SJ masuk ke `/sj/masuk?edit=`, keluar ke `/sj/buat?edit=`. Halaman
+  Penerimaan Barang (`/sj/masuk`) kini dukung mode edit: hydrate form dari existingSJ,
+  submit PATCH (bukan POST), judul & tombol menyesuaikan ("Edit/Update Penerimaan
+  Barang"), setelah simpan kembali ke /sj/list (bukan reset form).
+
+Hasil: kolom `tujuan_id` tetap bermakna ganda di DB (tidak masalah), tapi tiap jenis
+dokumen kini punya halaman editnya sendiri sehingga tidak ada lagi perlakuan seragam
+yang salah.
+
+### Checkbox "Keduanya" di Rekap Alokasi
+Masalah: mutasi Oracle & WT dikerjakan di 2 program berbeda, tidak bisa bersamaan.
+Kalau user centang salah satu duluan, baris langsung hilang dari filter "Belum Keduanya"
+padahal belum selesai. Fix: kolom baru "Keduanya" (paling kanan tabel) — satu klik
+set/batalkan mutasi Oracle + WT sekaligus. Satu request PATCH (API /api/sj/report sudah
+dukung conditional update dua field). kode_asset ikut dikirim agar tidak terhapus jadi
+null saat mutasi_oracle_status diset. Disabled untuk baris non-aktiva.

@@ -163,21 +163,28 @@ export async function POST(req: NextRequest) {
         ? `${tujuanData.kode} - ${tujuanData.nama}`
         : '';
 
-      const stagingRows = items.map((item: any) => {
-        const kode = (item.kode_asset ?? '').trim();
-        return {
-          kode_asset:    kode || null,
-          jenis:         item.jenis ?? '',
-          merk:          item.merk ?? '',
-          deskripsi:     item.keterangan ?? '',
-          catatan:       '',
-          asal_toko:     asalToko,
-          is_at_lebih:   !kode,   // tidak ada kode_asset = AT Lebih
-          sj_id:         sjData.id,
-        };
-      });
+      // Hanya item AT (is_aktiva) yang masuk staging. Barang non-AT tidak
+      // pernah muncul di DAT, jadi kalau ikut ditampung akan nyangkut selamanya
+      // karena syncStagingToNotes() tidak akan pernah membersihkannya.
+      const stagingRows = items
+        .filter((item: any) => !!item.is_aktiva)
+        .map((item: any) => {
+          const kode = (item.kode_asset ?? '').trim();
+          return {
+            kode_asset:    kode || null,
+            jenis:         item.jenis ?? '',
+            merk:          item.merk ?? '',
+            deskripsi:     item.keterangan ?? '',
+            catatan:       '',
+            asal_toko:     asalToko,
+            is_at_lebih:   !kode,   // AT tapi tanpa kode_asset = AT Lebih
+            sj_id:         sjData.id,
+          };
+        });
       // Best-effort — kalau gagal, SJ tetap tersimpan (tidak rollback)
-      await supabase.from('staging_area').insert(stagingRows);
+      if (stagingRows.length > 0) {
+        await supabase.from('staging_area').insert(stagingRows);
+      }
     }
 
     return NextResponse.json({ sj: sjData, no_sj })
@@ -349,6 +356,8 @@ export async function PATCH(req: NextRequest) {
 
       const stagingRows = items
         .filter((item: any) => {
+          // Hanya AT — non-AT tidak pernah muncul di DAT, akan nyangkut selamanya
+          if (!item.is_aktiva) return false
           const kode = (item.kode_asset ?? '').trim()
           return !kode || !sudahDiCGA.has(kode)
         })

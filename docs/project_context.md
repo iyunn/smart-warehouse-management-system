@@ -3,7 +3,7 @@ git # PROJECT_CONTEXT.md
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **23 Juli 2026** (Fitur Pendingan Alokasi + fix PDF SJ + perbaikan Buat SJ)
+> Terakhir diupdate: **24 Juli 2026** (7 temuan revisi + penutupan celah SJ masuk + checkbox Keduanya di Rekap)
 
 ## Project Identity
 
@@ -471,15 +471,18 @@ harus dikirim ke tiap toko. Bukan kalkulasi stok (input manual).
 - `/api/sj/tujuan` POST & PATCH menerima kota + kecamatan.
 
 **Halaman `/sj/pendingan` (2 kolom):**
-- Kiri: tombol "Pendingan Baru", filter dropdown Kota (default Semua Kota),
-  list tujuan yang punya pending di-group Kota → Kecamatan, cekbox-tujuan
-  (clear semua item tujuan itu) + badge jumlah.
-- Kanan: item tujuan terpilih (jenis, qty, keterangan) + cekbox-item per baris.
-  Centang sebagian → tombol clear item tercentang; semua tercentang → badge
-  "Semua tercentang". Clear = hard-delete.
+- Kiri: tombol "Pendingan Baru", filter Kota + Urgensi (2 dropdown sejajar,
+  bertumpuk), list tujuan yang punya pending di-group Kota → Kecamatan,
+  cekbox-tujuan (clear langsung tanpa konfirmasi) + badge jumlah + dot urgensi
+  tertinggi.
+- Kanan: item tujuan terpilih (jenis, merk, qty, urgensi, keterangan) + cekbox-item
+  per baris. Centang sebagian → tombol clear item tercentang; semua tercentang →
+  badge "Semua tercentang". Clear = hard-delete. Badge urgensi berwarna kontras
+  dark & light.
 - Input via MODAL form ala Buat SJ: dropdown Tujuan + `PendinganItemsTable`
-  (jenis autocomplete allowCustom, jumlah, keterangan) dengan Tambah Baris,
-  duplikat baris, hapus baris, auto-scroll. Simpan batch.
+  (jenis + merk autocomplete allowCustom, jumlah, urgensi via SearchableDropdown,
+  keterangan) dengan Tambah Baris, duplikat baris, hapus baris, auto-scroll.
+  Simpan batch.
 - Menu di submenu Surat Jalan Manual.
 
 **Glass theme (uji coba di halaman ini saja):** panel semi-transparan +
@@ -489,6 +492,34 @@ Blur/opacity diekspos sebagai CSS variable di blok "KONTROL GLASS THEME"
 supaya mudah di-tuning. Warna teks/aksen pakai token `--pend-*` berbeda per
 tema (dark: cyan terang; light: cyan gelap #0369a1, teks slate, emerald gelap)
 agar kontras terbaca. Beban performa minim (murni CSS, GPU-accelerated).
+
+### ✅ Perbaikan alur SJ & Rekap (24 Juli 2026)
+
+**Edit SJ masuk lewat halaman sendiri.** Dulu tombol Edit di Daftar SJ selalu ke
+`/sj/buat` untuk semua jenis. Sekarang baca `sj.jenis`: SJ masuk → `/sj/masuk?edit=`,
+keluar → `/sj/buat?edit=`. Halaman Penerimaan Barang (`/sj/masuk`) dukung mode edit
+(hydrate form, submit PATCH, judul & tombol menyesuaikan, kembali ke /sj/list setelah
+simpan). Sebelumnya edit SJ masuk dari halaman keluar menyebabkan: (a) `jenis` berubah
+jadi 'keluar' (PATCH selalu set jenis — fixed jadi kondisional), (b) preview PDF pakai
+template SJ keluar (fixed dengan teruskan prop jenis ke SJPreviewModal).
+
+**Staging sinkron saat edit SJ masuk.** PATCH kini menyinkronkan `staging_area`
+(replace penuh, catatan lama dipertahankan via kode_asset). Item yang kode asetnya
+sudah muncul di CGA di-skip (tidak muncul lagi di staging). Dulu PATCH tidak menyentuh
+staging sama sekali → barang dihapus nyangkut, barang baru tidak masuk.
+
+**Catatan arsitektur:** `surat_jalan` menampung 2 jenis dokumen (keluar/masuk) via
+kolom `jenis`. Kolom `tujuan_id` bermakna ganda (tujuan/asal) — hanya penamaan, tidak
+merusak data. Memisah jadi 2 tabel TIDAK direkomendasikan (ongkos besar, manfaat kecil).
+
+**Checkbox "Keduanya" di Rekap Alokasi.** Kolom baru (paling kanan) untuk menandai
+mutasi Oracle + WT sekaligus dalam satu klik. Guna: mutasi Oracle & WT dikerjakan di
+2 program berbeda tak bisa bersamaan; kalau centang salah satu duluan baris hilang dari
+filter "Belum Keduanya" padahal belum selesai. Satu request PATCH (API sudah dukung
+conditional update dua field); kode_asset ikut dikirim agar tidak terhapus.
+
+**Title tab browser.** Topbar set `document.title = "${title} — SmartWMS"` (semua
+halaman sudah kirim prop title). Reset ke default saat unmount (halaman auth).
 
 ---
 
@@ -889,7 +920,7 @@ Status: 📌 Deferred — sampai semua fitur selesai
 | `sj_tujuan` | Master tujuan/cost center penerima SJ. Termasuk `kota` & `kecamatan` (nullable, dipakai untuk grouping & filter di Pendingan Alokasi) |
 | `surat_jalan` | Header surat jalan |
 | `surat_jalan_items` | Detail item per surat jalan |
-| `pendingan_items` | Item pendingan alokasi (flat: tujuan_id FK cascade, jenis, qty, keterangan). Clear = hard-delete. RLS dimatikan |
+| `pendingan_items` | Item pendingan alokasi (flat: tujuan_id FK cascade, jenis, merk, qty, keterangan, urgensi tinggi/sedang/rendah). Clear = hard-delete. RLS dimatikan |
 
 ### Indexes
 - `idx_assets_raw_toko` — optimasi filter warehouse (legacy, masih dipertahankan)
@@ -899,7 +930,7 @@ Status: 📌 Deferred — sampai semua fitur selesai
 - `idx_assets_clean_merk` — optimasi filter unknown
 - `idx_surat_jalan_tanggal`, `idx_surat_jalan_tujuan`, `idx_surat_jalan_status`
 - `idx_sj_items_sj_id`, `idx_sj_items_serial`, `idx_sj_items_jenis`, `idx_sj_items_mutasi_status`
-- `idx_pendingan_items_tujuan`, `idx_pendingan_items_created` — Pendingan Alokasi
+- `idx_pendingan_items_tujuan`, `idx_pendingan_items_created`, `idx_pendingan_items_urgensi` — Pendingan Alokasi
 - `idx_sj_tujuan_kota` — filter kota di Pendingan Alokasi
 
 ### Constraints

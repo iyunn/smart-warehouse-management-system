@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import SearchableDropdown from "@/components/sj/SearchableDropdown";
-import PendinganItemsTable, { createEmptyPendinganItem, URGENSI_OPTIONS, type PendinganDraftItem, type UrgensiLevel } from "@/components/sj/PendinganItemsTable";
+import PendinganItemsTable, { createEmptyPendinganItem, URGENSI_OPTIONS, ARAH_OPTIONS, type PendinganDraftItem, type UrgensiLevel } from "@/components/sj/PendinganItemsTable";
 import { useMasterJenis, useMasterMerk, useMasterTujuan } from "@/hooks/useSJMaster";
 import { usePendingan, type PendinganItemFull } from "@/hooks/usePendingan";
 import type { SJTujuan } from "@/lib/sjTypes";
@@ -21,6 +21,7 @@ export default function PendinganAlokasiPage() {
 
   const [kotaFilter, setKotaFilter] = useState("all");
   const [urgensiFilter, setUrgensiFilter] = useState("all");
+  const [arahFilter, setArahFilter] = useState("all");
   const [selectedTujuanId, setSelectedTujuanId] = useState<string | null>(null);
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -31,12 +32,12 @@ export default function PendinganAlokasiPage() {
   const [draftItems, setDraftItems] = useState<PendinganDraftItem[]>([createEmptyPendinganItem(1)]);
 
   // Item yang lolos filter urgensi (dipakai untuk hitung & tampilkan tujuan)
-  const itemsByUrgensi = useMemo(
-    () => urgensiFilter === "all"
-      ? items
-      : items.filter(it => (it.urgensi ?? "sedang") === urgensiFilter),
-    [items, urgensiFilter]
-  );
+  const itemsByUrgensi = useMemo(() => {
+    let list = items;
+    if (urgensiFilter !== "all") list = list.filter(it => (it.urgensi ?? "sedang") === urgensiFilter);
+    if (arahFilter !== "all")    list = list.filter(it => (it.arah ?? "kirim") === arahFilter);
+    return list;
+  }, [items, urgensiFilter, arahFilter]);
 
   const pendingCountByTujuan = useMemo(() => {
     const map = new Map<string, number>();
@@ -59,6 +60,11 @@ export default function PendinganAlokasiPage() {
   const urgensiFilterOptions = useMemo(() => ([
     { value: "all", label: "Semua Urgensi" },
     ...URGENSI_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+  ]), []);
+
+  const arahFilterOptions = useMemo(() => ([
+    { value: "all", label: "Kirim & Tarik" },
+    ...ARAH_OPTIONS.map(o => ({ value: o.value, label: o.label })),
   ]), []);
 
   const kotaOptions = useMemo(() => {
@@ -159,6 +165,7 @@ export default function PendinganAlokasiPage() {
         qty: Math.max(1, it.qty || 1),
         keterangan: it.keterangan.trim(),
         urgensi: it.urgensi,
+        arah: it.arah,
       }));
     if (valid.length === 0) { alert("Minimal satu item dengan jenis terisi"); return; }
     setBusy(true);
@@ -213,6 +220,10 @@ export default function PendinganAlokasiPage() {
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)] mb-2">Urgensi</p>
                     <SearchableDropdown options={urgensiFilterOptions} value={urgensiFilter} onChange={setUrgensiFilter} placeholder="Urgensi..." />
                   </div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)] mb-2">Arah</p>
+                  <SearchableDropdown options={arahFilterOptions} value={arahFilter} onChange={setArahFilter} placeholder="Arah..." />
                 </div>
               </div>
 
@@ -277,8 +288,8 @@ export default function PendinganAlokasiPage() {
                       <p className="text-[12px] text-[color:var(--pend-text-dim)] text-center py-8">Belum ada item.</p>
                     ) : (
                       <div className="space-y-1.5">
-                        <div className="grid grid-cols-[auto_1.3fr_1fr_50px_70px_1fr] gap-2 px-2 pb-1 text-[9px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)]">
-                          <span className="w-5" /><span>Jenis</span><span>Merk</span><span className="text-center">Qty</span><span>Urgensi</span><span>Keterangan</span>
+                        <div className="grid grid-cols-[auto_1.2fr_0.9fr_46px_62px_66px_1fr] gap-2 px-2 pb-1 text-[9px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)]">
+                          <span className="w-5" /><span>Jenis</span><span>Merk</span><span className="text-center">Qty</span><span>Arah</span><span>Urgensi</span><span>Keterangan</span>
                         </div>
                         {selectedItems.map(it => (
                           <ItemRow key={it.id} item={it} checked={checkedItems.has(it.id)} onToggle={() => toggleItem(it.id)} />
@@ -395,6 +406,9 @@ export default function PendinganAlokasiPage() {
         .pend-urg-tinggi { background: rgba(244,63,94,0.18); color: #fda4af; }
         .pend-urg-sedang { background: rgba(245,158,11,0.18); color: #fcd34d; }
         .pend-urg-rendah { background: rgba(148,163,184,0.18); color: #cbd5e1; }
+        /* Badge arah — dark */
+        .pend-arah-kirim { background: rgba(56,189,248,0.18); color: #7dd3fc; }
+        .pend-arah-tarik { background: rgba(168,85,247,0.20); color: #d8b4fe; }
 
         /* Light — glass ala iOS + warna kontras yang terbaca */
         .light .pend-scope {
@@ -423,6 +437,9 @@ export default function PendinganAlokasiPage() {
         .light .pend-urg-tinggi { background: rgba(244,63,94,0.15); color: #9f1239; }
         .light .pend-urg-sedang { background: rgba(245,158,11,0.18); color: #92400e; }
         .light .pend-urg-rendah { background: rgba(100,116,139,0.15); color: #475569; }
+        /* Badge arah — light */
+        .light .pend-arah-kirim { background: rgba(56,189,248,0.18); color: #075985; }
+        .light .pend-arah-tarik { background: rgba(168,85,247,0.16); color: #6b21a8; }
       `}</style>
     </div>
   );
@@ -477,8 +494,9 @@ function ItemRow({ item, checked, onToggle }: {
   item: PendinganItemFull; checked: boolean; onToggle: () => void;
 }) {
   const urg = (item.urgensi ?? "sedang") as string;
+  const arah = (item.arah ?? "kirim") as string;
   return (
-    <div className={`grid grid-cols-[auto_1.3fr_1fr_50px_70px_1fr] gap-2 items-center px-2 py-2 rounded-lg transition-all ${checked ? "opacity-60" : ""}`}
+    <div className={`grid grid-cols-[auto_1.2fr_0.9fr_46px_62px_66px_1fr] gap-2 items-center px-2 py-2 rounded-lg transition-all ${checked ? "opacity-60" : ""}`}
       style={{ background: checked ? "rgba(16,185,129,0.10)" : "var(--pend-row)" }}>
       <button onClick={onToggle}
         className={`w-5 h-5 rounded border flex items-center justify-center transition-all shrink-0 ${
@@ -493,6 +511,9 @@ function ItemRow({ item, checked, onToggle }: {
       <span className={`text-[12px] truncate ${checked ? "line-through" : ""}`} style={{ color: "var(--pend-text)" }}>{item.jenis}</span>
       <span className="text-[11px] truncate text-[color:var(--pend-text-dim)]">{item.merk || "—"}</span>
       <span className="text-[12px] font-mono text-center" style={{ color: "var(--pend-text)" }}>{item.qty}</span>
+      <span className={`text-[9px] font-semibold uppercase tracking-wide rounded-md px-1.5 py-0.5 text-center ${arah === "tarik" ? "pend-arah-tarik" : "pend-arah-kirim"}`}>
+        {arah}
+      </span>
       <span className={`text-[9px] font-semibold uppercase tracking-wide rounded-md px-1.5 py-0.5 text-center ${URGENSI_STYLE[urg]}`}>
         {urg}
       </span>
