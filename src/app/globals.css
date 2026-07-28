@@ -302,7 +302,7 @@ body { background-color: var(--bg); }
    AKSEN    : text-accent   bg-accent   border-accent
               text-success  text-warning  text-danger  (+ bg- / border-)
    UKURAN   : text-mini  text-tiny  text-small  text-base2
-              text-lead  text-title  text-display
+              text-lead  text-sub  text-title  text-display
 
    Contoh pemakaian di komponen:
        <p className="text-muted text-small">Total Barang</p>
@@ -340,6 +340,7 @@ body { background-color: var(--bg); }
   --text-small:     var(--ui-fs-11);
   --text-base2:     var(--ui-fs-12);
   --text-lead:      var(--ui-fs-13);
+  --text-sub:       var(--ui-fs-14);
   --text-title:     var(--ui-fs-15);
   --text-display:   var(--ui-fs-16);
 }
