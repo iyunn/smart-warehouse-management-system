@@ -3,7 +3,7 @@ git # PROJECT_CONTEXT.md
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **25 Juli 2026** (Arah Tarik/Kirim + fix staging non-AT + edit item pendingan)
+> Terakhir diupdate: **26 Juli 2026** (refactor UI ke design token Tailwind — branch `style`, berjalan)
 
 ## Project Identity
 
@@ -531,6 +531,46 @@ conditional update dua field); kode_asset ikut dikirim agar tidak terhapus.
 
 **Title tab browser.** Topbar set `document.title = "${title} — SmartWMS"` (semua
 halaman sudah kirim prop title). Reset ke default saat unmount (halaman auth).
+
+### 🚧 Refactor UI ke Design Token Tailwind (branch `style` — BERJALAN)
+Status: dikerjakan bertahap di branch `style`, BELUM merge ke main.
+
+**Tujuan:** Fillian bisa mengubah warna, ukuran font, dan jenis font dengan mudah,
+memakai mekanisme resmi Tailwind v4 (utility class di komponen), bukan override CSS.
+
+**Setup terverifikasi:** npm proper Tailwind v4 (`tailwindcss` + `@tailwindcss/postcss`),
+bukan Play CDN. Tidak ada `build.css` — kompilasi otomatis oleh PostCSS plugin,
+hasil ke `.next/static/css/` (gitignored).
+
+**`src/app/globals.css` terdiri 3 lapis:**
+1. **Panel kustomisasi** — satu blok `:root` berisi semua knob: font family,
+   ukuran font 8–16px, radius, warna dark & light, warna aksen khusus light.
+2. **`@theme inline`** — utility class semantik: `bg-canvas/surface/panel/field`,
+   `border-line`, `text-heading/body/muted/dim`,
+   `text-accent/success/warning/danger/info`, ukuran `text-nano`…`text-display`.
+3. **Lapisan kompatibilitas** — memetakan class hardcoded lama ke token dengan
+   `!important` agar halaman yang belum dimigrasi tetap ikut tema.
+   Dihapus bertahap seiring migrasi selesai.
+
+**`@custom-variant`** menghubungkan `dark:` / `light:` ke class tema aplikasi
+(bawaan Tailwind v4 mengikat ke setelan OS, bukan toggle aplikasi).
+
+**Kontras light mode diperbaiki:** warna terang khas dark mode (cyan-400, rose-400,
+amber-300, dst) dipetakan ke versi gelap. Rasio kontras WCAG naik dari 1.44–2.69
+(gagal) menjadi 5.01–7.10 (lolos AA).
+
+**Progres:** Template Item ✅ · Master Tujuan ✅ · Manajemen User ✅ ·
+berikutnya Pendingan Alokasi, lalu Upload → Rekap Alokasi → Daftar SJ → Buat SJ →
+Monitoring → Dashboard. **Live Stock dilewati** (ukuran TV `vmin`/`clamp` sudah
+disetel dan mudah rusak).
+
+**Aturan yang dipegang:** hanya class warna & ukuran font yang diganti; class layout
+(`flex`, `gap-2`, `px-4`) sudah idiomatis dan tidak disentuh; nilai arbitrary untuk
+kasus sekali-pakai (mis. `grid-cols-[...]` tabel) sengaja dipertahankan sesuai
+anjuran dokumentasi Tailwind. Tiap halaman diverifikasi: syntax lolos, kode di luar
+`className` identik byte-per-byte, jumlah class layout tidak berubah.
+
+Panduan lengkap: `docs/UI-CUSTOMIZATION.md`.
 
 ---
 

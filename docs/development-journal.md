@@ -3178,3 +3178,105 @@ Tanpa migration (semua kolom sudah ada).
   berisi Jenis, Merk, Jumlah, Arah, Urgensi, Keterangan (Jumlah/Arah/Urgensi
   disusun 3 kolom agar ringkas). Tombol edit sengaja TIDAK di-disable saat item
   tercentang — koreksi masih boleh selama belum di-clear.
+
+---
+
+## 26 Juli 2026 — Refactor UI ke Design Token Tailwind (branch `style`, BERJALAN)
+
+> Dikerjakan di branch terpisah `style`, BELUM di-merge ke main.
+> Alasan branch terpisah: menyentuh seluruh tampilan, sementara main dipakai
+> operasional harian divisi GA.
+
+### Latar belakang
+Fillian ingin bisa mengubah warna, ukuran font, dan jenis font dengan mudah.
+Awalnya dibuat lapisan CSS override, tapi Fillian menilai itu bukan "cara asli
+Tailwind" (Tailwind bekerja lewat class di komponen). Diputuskan refactor ke
+mekanisme resmi Tailwind v4, dicicil per halaman.
+
+### Temuan setup (hasil verifikasi)
+- Instalasi = **npm proper Tailwind v4** (`tailwindcss ^4` + `@tailwindcss/postcss`),
+  BUKAN Play CDN. `postcss` tidak tercantum eksplisit — normal, dibawa Next.js.
+- Tidak ada `build.css` karena memakai jalur PostCSS plugin + Next.js: kompilasi
+  otomatis saat `next dev`/`next build`, hasil masuk `.next/static/css/` (gitignored).
+  `build.css` hanya ada di jalur Tailwind CLI (proyek tanpa bundler).
+
+### Struktur globals.css (3 lapis)
+1. **Panel kustomisasi** — semua knob di satu blok `:root`: font family, 9 tingkat
+   ukuran font (8–16px), 4 radius, warna dark & light, + warna aksen khusus light
+   untuk kontras. Nilai default DISAMAKAN PERSIS dengan tampilan sebelumnya.
+2. **`@theme inline`** — menghasilkan utility class semantik resmi Tailwind:
+   `bg-canvas/surface/panel/field`, `border-line`, `text-heading/body/muted/dim`,
+   `text-accent/success/warning/danger/info`, `text-nano/mini/tiny/small/base2/
+   lead/sub/title/display`. Pakai `inline` supaya class menunjuk langsung ke
+   `--surface`/`--text` sehingga ikut berganti saat toggle tema.
+3. **Lapisan kompatibilitas** — memetakan ~1.500 class hardcoded lama
+   (`text-white/40`, `bg-[#0d1117]`, `text-[12px]`) ke token, dengan `!important`,
+   supaya halaman yang BELUM dimigrasi tetap ikut tema. Dihapus bertahap seiring
+   migrasi selesai.
+
+### [BUG FIX] Kontras light mode
+Root cause: aplikasi memakai warna terang khas dark mode (`text-cyan-400` 62×,
+`text-rose-400` 49×, `text-amber-300` 31×). Di latar terang jadi pudar.
+Diukur dengan rasio kontras WCAG (minimal 4.5): warna lama berada di **1.44–2.69**
+(amber-300 = 1.44, praktis tak terbaca). Setelah dipetakan ke versi gelap
+(`--ui-light-cyan` #0369a1 dst): **5.01–7.10**, semua lolos AA.
+
+### [BUG FIX] `dark:` tidak ikut toggle
+Tailwind v4 secara bawaan mengaitkan `dark:` ke `prefers-color-scheme` (setelan OS),
+bukan class `.dark` aplikasi. Ditambahkan:
+```
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant light (&:where(.light, .light *));
+```
+[GOTCHA] Sempat error `@custom-variant dark has no selector or body` karena ditulis
+dengan DUA SPASI setelah nama variant (untuk perataan kolom). Parser Tailwind
+menolak. Harus tepat satu spasi.
+
+### [GOTCHA] Dua class warna tidak boleh ditumpuk
+`className="text-heading text-gray-100"` → `text-gray-100` diabaikan. Pemenang
+ditentukan urutan di CSS hasil build, BUKAN urutan penulisan di className.
+Untuk menimpa: pakai satu class saja, atau varian `text-gray-900 dark:text-cyan-400`.
+Hindari nama class yang ada di lapisan kompatibilitas (dipaksa `!important`).
+
+### Keputusan: apa yang jadi token, apa yang tetap arbitrary
+Penyaring: **berulang & bermakna → token; sekali-pakai & spesifik → arbitrary.**
+- Token: warna, ukuran font, radius, (rencana) lebar sidebar.
+- Tetap arbitrary: `grid-cols-[...]` tabel (dipakai sekali, angkanya menggambarkan
+  kolom tabel itu sendiri — dijadikan token justru menurunkan keterbacaan),
+  tinggi panel sekali-pakai, posisi absolut. Dokumentasi resmi Tailwind memang
+  menganjurkan arbitrary value untuk kasus sekali-pakai.
+- Class layout (`flex`, `gap-2`, `px-4`) SUDAH idiomatis — tidak ada yang diubah.
+
+### Prosedur migrasi per halaman (dipakai konsisten)
+Hanya class warna & ukuran font yang diganti. Setiap halaman diverifikasi 3 hal:
+1. Syntax lolos esbuild
+2. Kode di luar `className` **identik byte-per-byte** (bukti nol perubahan logika)
+3. Jumlah class layout tidak berubah (bukti layout tidak bergeser)
+
+[GOTCHA] Verifikasi #2 sempat menandai "berubah" di Manajemen User — ternyata class
+yang disimpan di konstanta (`const STATUS_BADGE: Record<string,string>`) lalu dipakai
+via `${STATUS_BADGE[u.status]}`. Itu tetap class UI, cuma tidak literal di className.
+Halaman lain dengan badge status (Daftar SJ, Rekap Alokasi) kemungkinan sama.
+
+### Progres migrasi
+| # | Halaman | Status |
+|---|---------|--------|
+| 1 | Template Item (`/sj/templates`) | ✅ selesai |
+| 2 | Master Tujuan (`/sj/tujuan`) | ✅ selesai |
+| 3 | Manajemen User (`/admin/users`) | ✅ selesai |
+| 4 | Pendingan Alokasi | ⏳ berikutnya (hati-hati: punya blok glass `--pend-*` sendiri) |
+| 5 | Upload | belum |
+| 6 | Rekap Alokasi | belum |
+| 7 | Daftar SJ | belum |
+| 8 | Buat SJ | belum |
+| 9 | Monitoring | belum |
+| 10 | Dashboard | belum |
+| — | Live Stock | **DILEWATI** — ukuran TV (`vmin`/`clamp`) sudah disetel, mudah rusak |
+
+Urutan sengaja dari halaman paling jarang dipakai supaya kalau ada yang meleset
+dampaknya kecil.
+
+### Dokumentasi
+`docs/UI-CUSTOMIZATION.md` — panduan lengkap: tabel "mau ubah apa", pemetaan class
+lama→baru, contoh migrasi, resep cepat (tampilan lega, nuansa hijau, kontras tinggi),
+aturan menimpa warna, dan daftar nilai bawaan untuk balik ke awal.
