@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Hubungkan varian dark: / light: ke class tema aplikasi (bukan setelan OS).
+   Tanpa ini, `dark:` mengikuti pengaturan sistem operasi dan TIDAK ikut
+   tombol toggle di Topbar.
+
+   Setelah ini kamu bisa menulis:
+       <p className="text-gray-900 dark:text-cyan-400">
+   → gelap saat mode terang, cyan saat mode gelap.
+   ══════════════════════════════════════════════════════════════════════════ */
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant light (&:where(.light, .light *));
+
 :root {
   --color-bg: #080e18;
   --color-surface: #111827;
@@ -170,3 +182,324 @@ input[type="number"] {
 
 /* Body background ikut tema (dasar, di bawah semua halaman) */
 body { background-color: var(--bg); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ██  PANEL KUSTOMISASI UI  ██
+   ══════════════════════════════════════════════════════════════════════════
+   SEMUA yang bisa kamu ubah ada di blok :root di bawah ini.
+   Cukup ganti ANGKA / KODE WARNA-nya — tidak perlu menyentuh file lain.
+
+   Nilai default di bawah SAMA PERSIS dengan tampilan sekarang, jadi selama
+   belum kamu ubah, tidak ada satu pun yang berubah.
+
+   Aturan main:
+   - Ubah nilai SETELAH tanda titik dua, jangan ubah nama variabelnya
+   - Warna boleh hex (#38bdf8) atau rgba(56,189,248,0.5)
+   - Ukuran font pakai px (mis. 13px)
+   - Setelah simpan, refresh browser
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ───── 1. FONT STYLE ─────────────────────────────────────────────────
+     Ganti jenis huruf seluruh aplikasi.
+     Font bawaan: DM Sans (teks) & JetBrains Mono (angka).
+     Mau pakai font lain? Tulis nama font-nya di depan, contoh:
+        --ui-font-sans: 'Poppins', var(--font-dm-sans), sans-serif;
+     (font harus sudah tersedia di sistem / di-import di layout.tsx)          */
+  --ui-font-sans: var(--font-dm-sans), 'DM Sans', sans-serif;
+  --ui-font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', monospace;
+
+  /* Ketebalan huruf tebal (600 = semibold, 700 = bold, 800 = extra bold) */
+  --ui-weight-bold: 700;
+
+  /* ───── 2. FONT SIZE ──────────────────────────────────────────────────
+     Ukuran huruf per tingkatan. Naikkan semua kalau tulisan terasa kekecilan.
+     Dipakai di: label, tabel, isi, judul.                                   */
+  --ui-fs-8:  8px;    /* badge super kecil (BARU / AT)       */
+  --ui-fs-9:  9px;    /* label mini (header kolom kecil)     */
+  --ui-fs-10: 10px;   /* label kecil / badge                 */
+  --ui-fs-11: 11px;   /* keterangan, sub-teks                */
+  --ui-fs-12: 12px;   /* teks utama tabel & form             */
+  --ui-fs-13: 13px;   /* teks agak besar, nama item          */
+  --ui-fs-14: 14px;   /* sub-judul                           */
+  --ui-fs-15: 15px;   /* judul modal                         */
+  --ui-fs-16: 16px;   /* judul halaman (Topbar)              */
+
+  /* ───── 3. SUDUT MELENGKUNG ───────────────────────────────────────────
+     Besar lengkungan sudut kotak. 0px = kotak tegas, lebih besar = makin bulat */
+  --ui-radius-sm: 6px;    /* tombol kecil, badge   */
+  --ui-radius-md: 8px;    /* input, dropdown       */
+  --ui-radius-lg: 12px;   /* tombol, baris item    */
+  --ui-radius-xl: 16px;   /* kartu / panel besar   */
+
+  /* ───── 4. WARNA — MODE GELAP (DARK) ──────────────────────────────────  */
+  --ui-dark-bg:          #080e18;   /* latar belakang halaman        */
+  --ui-dark-surface:     #0d1524;   /* latar kartu / sidebar / topbar */
+  --ui-dark-panel:       rgba(255, 255, 255, 0.03);  /* latar panel dalam */
+  --ui-dark-input:       rgba(255, 255, 255, 0.06);  /* latar kotak isian */
+  --ui-dark-border:      rgba(255, 255, 255, 0.08);  /* garis tepi        */
+
+  --ui-dark-text:        #ffffff;   /* teks paling terang / judul    */
+  --ui-dark-text-body:   #e2e8f0;   /* teks isi                      */
+  --ui-dark-text-muted:  #94a3b8;   /* teks samar                    */
+  --ui-dark-text-dim:    #64748b;   /* teks paling samar / label     */
+
+  --ui-dark-accent:      #38bdf8;   /* warna utama (biru muda)       */
+  --ui-dark-success:     #34d399;   /* hijau — berhasil / CGA1       */
+  --ui-dark-warning:     #fbbf24;   /* kuning — peringatan / CGA2    */
+  --ui-dark-danger:      #fb7185;   /* merah — bahaya / CGA3         */
+
+  /* ───── 5. WARNA — MODE TERANG (LIGHT) ────────────────────────────────  */
+  --ui-light-bg:         #f1f5f9;
+  --ui-light-surface:    #ffffff;
+  --ui-light-panel:      rgba(15, 23, 42, 0.02);
+  --ui-light-input:      rgba(15, 23, 42, 0.05);
+  --ui-light-border:     rgba(15, 23, 42, 0.10);
+
+  --ui-light-text:       #0f172a;
+  --ui-light-text-body:  #1e293b;
+  --ui-light-text-muted: #475569;
+  --ui-light-text-dim:   #94a3b8;
+
+  --ui-light-accent:     #0284c7;
+  --ui-light-success:    #059669;
+  --ui-light-warning:    #d97706;
+  --ui-light-danger:     #e11d48;
+
+  /* ───── 6. WARNA AKSEN DI MODE TERANG (perbaikan kontras) ─────────────
+     Aplikasi ini banyak memakai warna terang khas mode gelap
+     (cyan-400, rose-400, amber-300, dst). Kalau dipakai apa adanya di
+     latar terang, hasilnya PUDAR dan bikin mata lelah.
+
+     Nilai di bawah adalah versi GELAP dari tiap warna, khusus mode terang.
+     Makin kecil angkanya makin gelap (= makin kontras / makin tegas).
+
+     Kalau menurutmu masih kurang tegas, pakai yang lebih gelap.
+     Kalau terlalu pekat, naikkan ke yang lebih terang.                     */
+  --ui-light-cyan:    #0369a1;   /* alternatif: #075985 (lebih gelap) */
+  --ui-light-emerald: #047857;   /* alternatif: #065f46               */
+  --ui-light-amber:   #92400e;   /* alternatif: #78350f               */
+  --ui-light-rose:    #be123c;   /* alternatif: #9f1239               */
+  --ui-light-violet:  #6d28d9;   /* alternatif: #5b21b6               */
+  --ui-light-blue:    #1d4ed8;   /* alternatif: #1e40af               */
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ██  @theme — UTILITY CLASS RESMI TAILWIND  ██
+   ══════════════════════════════════════════════════════════════════════════
+   Blok ini membuat Tailwind MENGHASILKAN class baru yang bisa langsung
+   dipakai di komponen — inilah "cara asli Tailwind".
+
+   Nilainya menunjuk ke token tema (--surface, --text, dst) yang otomatis
+   berganti mengikuti mode gelap / terang. Jadi cukup tulis class-nya,
+   warnanya ikut tema dengan sendirinya.
+
+   ── Class yang tersedia ──────────────────────────────────────────────────
+   LATAR    : bg-canvas  bg-surface  bg-panel  bg-field
+   GARIS    : border-line
+   TEKS     : text-heading  text-body  text-muted  text-dim
+   AKSEN    : text-accent   bg-accent   border-accent
+              text-success  text-warning  text-danger  (+ bg- / border-)
+   UKURAN   : text-mini  text-tiny  text-small  text-base2
+              text-lead  text-title  text-display
+
+   Contoh pemakaian di komponen:
+       <p className="text-muted text-small">Total Barang</p>
+       <div className="bg-surface border border-line rounded-xl">
+       <span className="text-accent font-bold">3.482</span>
+
+   Semua otomatis benar di mode gelap MAUPUN terang — tidak perlu
+   menulis varian light/dark lagi.
+   ══════════════════════════════════════════════════════════════════════════ */
+@theme inline {
+  /* Latar & garis */
+  --color-canvas:   var(--bg);
+  --color-surface:  var(--surface);
+  --color-panel:    var(--surface-2);
+  --color-field:    var(--surface-3);
+  --color-line:     var(--border);
+
+  /* Teks */
+  --color-heading:  var(--text-strong);
+  --color-body:     var(--text);
+  --color-muted:    var(--text-muted);
+  --color-dim:      var(--text-dim);
+
+  /* Aksen */
+  --color-accent:   var(--accent);
+  --color-success:  var(--cga1);
+  --color-warning:  var(--cga2);
+  --color-danger:   var(--cga3);
+  --color-info:     var(--info);
+
+  /* Ukuran huruf */
+  --text-nano:      var(--ui-fs-8);
+  --text-mini:      var(--ui-fs-9);
+  --text-tiny:      var(--ui-fs-10);
+  --text-small:     var(--ui-fs-11);
+  --text-base2:     var(--ui-fs-12);
+  --text-lead:      var(--ui-fs-13);
+  --text-title:     var(--ui-fs-15);
+  --text-display:   var(--ui-fs-16);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ██  LAPISAN KOMPATIBILITAS (kode lama)  ██
+   ══════════════════════════════════════════════════════════════════════════
+   Di bawah ini yang membuat 1.500-an class lama (text-white/40, bg-[#0d1117],
+   text-[12px], dst) tetap ikut tema selama belum dipindahkan ke class baru
+   di atas. Jangan diubah — hapus barisnya HANYA kalau halaman terkait sudah
+   selesai dipindahkan.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ▼▼▼  DI BAWAH INI JANGAN DIUBAH  ▼▼▼
+   Bagian ini yang menyalurkan nilai di atas ke seluruh halaman.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Font ── */
+body                        { font-family: var(--ui-font-sans); }
+.font-mono, code, pre       { font-family: var(--ui-font-mono); }
+.font-bold                  { font-weight: var(--ui-weight-bold); }
+
+/* ── Ukuran font (class arbitrary Tailwind → token) ── */
+.text-\[9px\]   { font-size: var(--ui-fs-9)  !important; }
+.text-\[10px\]  { font-size: var(--ui-fs-10) !important; }
+.text-\[11px\]  { font-size: var(--ui-fs-11) !important; }
+.text-\[12px\]  { font-size: var(--ui-fs-12) !important; }
+.text-\[13px\]  { font-size: var(--ui-fs-13) !important; }
+.text-\[14px\]  { font-size: var(--ui-fs-14) !important; }
+.text-\[15px\]  { font-size: var(--ui-fs-15) !important; }
+.text-\[16px\]  { font-size: var(--ui-fs-16) !important; }
+
+/* ── Sudut melengkung ── */
+.rounded-md   { border-radius: var(--ui-radius-sm) !important; }
+.rounded-lg   { border-radius: var(--ui-radius-md) !important; }
+.rounded-xl   { border-radius: var(--ui-radius-lg) !important; }
+.rounded-2xl  { border-radius: var(--ui-radius-xl) !important; }
+
+/* ── Token tema (dipakai komponen yang sudah pakai var()) ── */
+.dark {
+  --bg:          var(--ui-dark-bg);
+  --surface:     var(--ui-dark-surface);
+  --surface-2:   var(--ui-dark-panel);
+  --surface-3:   var(--ui-dark-input);
+  --border:      var(--ui-dark-border);
+  --text-strong: var(--ui-dark-text);
+  --info:        #60a5fa;
+  --text:        var(--ui-dark-text-body);
+  --text-muted:  var(--ui-dark-text-muted);
+  --text-dim:    var(--ui-dark-text-dim);
+  --accent:      var(--ui-dark-accent);
+  --cga1:        var(--ui-dark-success);
+  --cga2:        var(--ui-dark-warning);
+  --cga3:        var(--ui-dark-danger);
+}
+.light {
+  --bg:          var(--ui-light-bg);
+  --surface:     var(--ui-light-surface);
+  --surface-2:   var(--ui-light-panel);
+  --surface-3:   var(--ui-light-input);
+  --border:      var(--ui-light-border);
+  --text-strong: var(--ui-light-text);
+  --info:        var(--ui-light-blue);
+  --text:        var(--ui-light-text-body);
+  --text-muted:  var(--ui-light-text-muted);
+  --text-dim:    var(--ui-light-text-dim);
+  --accent:      var(--ui-light-accent);
+  --cga1:        var(--ui-light-success);
+  --cga2:        var(--ui-light-warning);
+  --cga3:        var(--ui-light-danger);
+}
+
+/* ── DARK: class warna hardcoded → token ── */
+.dark .bg-\[\#080e18\], .dark .bg-\[\#060d19\], .dark .bg-\[\#0d1524\] { background-color: var(--ui-dark-bg) !important; }
+.dark .bg-\[\#0d1117\], .dark .bg-\[\#111827\], .dark .bg-\[\#0f1724\],
+.dark .bg-\[\#1a2030\], .dark .bg-\[\#1a1a1f\],
+.dark .bg-\[\#0d1117\]\/80, .dark .bg-\[\#0d1117\]\/95,
+.dark .bg-\[\#0c1421\]\/95 { background-color: var(--ui-dark-surface) !important; }
+
+.dark .text-white       { color: var(--ui-dark-text) !important; }
+.dark .text-white\/80   { color: color-mix(in srgb, var(--ui-dark-text) 80%, transparent) !important; }
+.dark .text-white\/70   { color: color-mix(in srgb, var(--ui-dark-text) 70%, transparent) !important; }
+.dark .text-white\/60   { color: color-mix(in srgb, var(--ui-dark-text) 60%, transparent) !important; }
+.dark .text-white\/50   { color: color-mix(in srgb, var(--ui-dark-text) 50%, transparent) !important; }
+.dark .text-white\/40   { color: color-mix(in srgb, var(--ui-dark-text) 40%, transparent) !important; }
+.dark .text-white\/30   { color: color-mix(in srgb, var(--ui-dark-text) 30%, transparent) !important; }
+.dark .text-white\/25   { color: color-mix(in srgb, var(--ui-dark-text) 25%, transparent) !important; }
+.dark .text-white\/20   { color: color-mix(in srgb, var(--ui-dark-text) 20%, transparent) !important; }
+
+.dark .text-slate-300   { color: var(--ui-dark-text-body) !important; }
+.dark .text-slate-400   { color: var(--ui-dark-text-muted) !important; }
+.dark .text-slate-500   { color: var(--ui-dark-text-muted) !important; }
+.dark .text-slate-600   { color: var(--ui-dark-text-dim) !important; }
+
+.dark .bg-white\/\[0\.02\], .dark .bg-white\/\[0\.03\] { background-color: var(--ui-dark-panel) !important; }
+.dark .bg-white\/\[0\.04\], .dark .bg-white\/\[0\.05\],
+.dark .bg-white\/5, .dark .bg-white\/10 { background-color: var(--ui-dark-input) !important; }
+
+.dark .border-white\/\[0\.04\], .dark .border-white\/\[0\.06\],
+.dark .border-white\/\[0\.08\], .dark .border-white\/10 { border-color: var(--ui-dark-border) !important; }
+
+.dark .text-cyan-300, .dark .text-cyan-400 { color: var(--ui-dark-accent) !important; }
+.dark .text-emerald-300, .dark .text-emerald-400 { color: var(--ui-dark-success) !important; }
+.dark .text-amber-300, .dark .text-amber-400 { color: var(--ui-dark-warning) !important; }
+.dark .text-rose-300, .dark .text-rose-400 { color: var(--ui-dark-danger) !important; }
+
+/* ── LIGHT: class warna hardcoded → token ── */
+.light .bg-\[\#080e18\], .light .bg-\[\#060d19\], .light .bg-\[\#0d1524\],
+.light .bg-\[\#111827\], .light .bg-\[\#0f1724\] { background-color: var(--ui-light-bg) !important; }
+.light .bg-\[\#0d1117\], .light .bg-\[\#1a2030\], .light .bg-\[\#1a1a1f\],
+.light .bg-\[\#0d1117\]\/80, .light .bg-\[\#0d1117\]\/95,
+.light .bg-\[\#0c1421\]\/95 { background-color: var(--ui-light-surface) !important; }
+
+.light .text-white       { color: var(--ui-light-text) !important; }
+.light .text-white\/80   { color: color-mix(in srgb, var(--ui-light-text) 80%, transparent) !important; }
+.light .text-white\/70   { color: color-mix(in srgb, var(--ui-light-text) 72%, transparent) !important; }
+.light .text-white\/60   { color: color-mix(in srgb, var(--ui-light-text) 66%, transparent) !important; }
+.light .text-white\/50   { color: color-mix(in srgb, var(--ui-light-text) 60%, transparent) !important; }
+.light .text-white\/40   { color: color-mix(in srgb, var(--ui-light-text) 52%, transparent) !important; }
+.light .text-white\/30   { color: color-mix(in srgb, var(--ui-light-text) 44%, transparent) !important; }
+.light .text-white\/25   { color: color-mix(in srgb, var(--ui-light-text) 40%, transparent) !important; }
+.light .text-white\/20   { color: color-mix(in srgb, var(--ui-light-text) 34%, transparent) !important; }
+
+.light .bg-white\/\[0\.02\], .light .bg-white\/\[0\.03\] { background-color: var(--ui-light-panel) !important; }
+.light .bg-white\/\[0\.04\], .light .bg-white\/\[0\.05\],
+.light .bg-white\/5, .light .bg-white\/10 { background-color: var(--ui-light-input) !important; }
+
+.light .border-white\/\[0\.04\], .light .border-white\/\[0\.06\],
+.light .border-white\/\[0\.08\], .light .border-white\/10 { border-color: var(--ui-light-border) !important; }
+
+/* Semua warna teks terang → versi gelap agar kontras di latar terang */
+.light .text-cyan-200, .light .text-cyan-300,
+.light .text-cyan-400, .light .text-cyan-500   { color: var(--ui-light-cyan) !important; }
+
+.light .text-emerald-200, .light .text-emerald-300,
+.light .text-emerald-400, .light .text-emerald-500,
+.light .text-green-300, .light .text-green-400 { color: var(--ui-light-emerald) !important; }
+
+.light .text-amber-200, .light .text-amber-300,
+.light .text-amber-400, .light .text-amber-500,
+.light .text-yellow-300, .light .text-yellow-400,
+.light .text-orange-300, .light .text-orange-400 { color: var(--ui-light-amber) !important; }
+
+.light .text-rose-200, .light .text-rose-300,
+.light .text-rose-400, .light .text-rose-500,
+.light .text-red-300, .light .text-red-400,
+.light .text-pink-300, .light .text-pink-400   { color: var(--ui-light-rose) !important; }
+
+.light .text-violet-200, .light .text-violet-300,
+.light .text-violet-400, .light .text-purple-300,
+.light .text-purple-400, .light .text-indigo-300,
+.light .text-indigo-400                        { color: var(--ui-light-violet) !important; }
+
+.light .text-blue-300, .light .text-blue-400,
+.light .text-sky-300, .light .text-sky-400     { color: var(--ui-light-blue) !important; }
+
+/* Teks slate terang (dirancang untuk latar gelap) → gelap di light mode */
+.light .text-slate-200, .light .text-slate-300 { color: var(--ui-light-text-body) !important; }
+.light .text-slate-400, .light .text-slate-500,
+.light .text-slate-600                         { color: var(--ui-light-text-muted) !important; }
+.light .text-gray-300, .light .text-gray-400,
+.light .text-gray-500, .light .text-zinc-400   { color: var(--ui-light-text-muted) !important; }
