@@ -604,12 +604,30 @@ export default function SJReportPage() {
     }));
   }, []);
 
+  // Kode aset yang MASIH aktif dipakai — untuk mencegah salah ketik kode kembar.
+  //
+  // Item yang sudah DIMUTASI sengaja TIDAK dihitung. Alasannya: satu aset punya
+  // siklus hidup berulang — masuk ke gudang lewat SJ Penerimaan, lalu dikirim
+  // lagi ke toko lewat SJ Keluar dengan kode aset yang sama. Begitu sebuah item
+  // terkonfirmasi mutasi, baris itu jadi CATATAN RIWAYAT, bukan pemakaian aktif,
+  // sehingga kodenya harus bebas dipakai lagi di surat jalan berikutnya.
+  //
+  // Sebelumnya semua item ikut dihitung, sehingga kode yang sudah selesai
+  // dimutasi di SJ Penerimaan memblokir input kode yang sama di SJ Keluar.
   const usedKodes = useMemo(() => {
     const s = new Set<string>();
     for (const it of items) {
       const override = allocOverride[it.item_id];
       const kode = override ? override.kode_asset : it.kode_asset;
-      if (kode && kode.trim()) s.add(kode.trim());
+      if (!kode || !kode.trim()) continue;
+
+      // Status mutasi terkini: pakai override kalau user baru saja mengubahnya
+      const mutated = override
+        ? (override.kode_asset ? it.is_mutated : override.mutasi_oracle)
+        : it.is_mutated;
+      if (mutated) continue;   // sudah selesai → riwayat, bukan pemakaian aktif
+
+      s.add(kode.trim());
     }
     return s;
   }, [items, allocOverride]);
