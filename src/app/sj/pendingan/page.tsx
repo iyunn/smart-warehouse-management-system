@@ -241,7 +241,7 @@ export default function PendinganAlokasiPage() {
               <div className="p-4 border-b border-[color:var(--pend-border)] space-y-3">
                 <button
                   onClick={openModal}
-                  className="w-full py-2.5 rounded-xl bg-cyan-500/15 border border-cyan-500/40 text-[color:var(--pend-accent)] text-[12px] font-semibold hover:bg-cyan-500/25 transition-all flex items-center justify-center gap-2"
+                  className="w-full py-2.5 rounded-xl bg-accent/15 border border-accent/40 text-[color:var(--pend-accent)] text-base2 font-semibold hover:bg-accent/25 transition-all flex items-center justify-center gap-2"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                     <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
@@ -250,32 +250,32 @@ export default function PendinganAlokasiPage() {
                 </button>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)] mb-2">Kota</p>
+                    <p className="text-tiny font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)] mb-2">Kota</p>
                     <SearchableDropdown options={kotaOptions} value={kotaFilter} onChange={setKotaFilter} placeholder="Kota..." />
                   </div>
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)] mb-2">Urgensi</p>
+                    <p className="text-tiny font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)] mb-2">Urgensi</p>
                     <SearchableDropdown options={urgensiFilterOptions} value={urgensiFilter} onChange={setUrgensiFilter} placeholder="Urgensi..." />
                   </div>
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)] mb-2">Arah</p>
+                  <p className="text-tiny font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)] mb-2">Arah</p>
                   <SearchableDropdown options={arahFilterOptions} value={arahFilter} onChange={setArahFilter} placeholder="Arah..." />
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-3 space-y-4">
                 {loadingTujuan || loadingItems ? (
-                  <p className="text-[12px] text-[color:var(--pend-text-dim)] text-center py-8">Memuat...</p>
+                  <p className="text-base2 text-[color:var(--pend-text-dim)] text-center py-8">Memuat...</p>
                 ) : groupedTujuan.length === 0 ? (
-                  <p className="text-[12px] text-[color:var(--pend-text-dim)] text-center py-8">Belum ada pendingan.</p>
+                  <p className="text-base2 text-[color:var(--pend-text-dim)] text-center py-8">Belum ada pendingan.</p>
                 ) : (
                   groupedTujuan.map(({ kota, kecamatans }) => (
                     <div key={kota}>
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-[color:var(--pend-accent)] px-2 mb-1.5">{kota}</p>
+                      <p className="text-small font-bold uppercase tracking-wider text-[color:var(--pend-accent)] px-2 mb-1.5">{kota}</p>
                       {kecamatans.map(({ kecamatan, tujuans }) => (
                         <div key={kecamatan} className="mb-2">
-                          <p className="text-[10px] font-medium text-[color:var(--pend-text-dim)] px-2 mb-1">{kecamatan}</p>
+                          <p className="text-tiny font-medium text-[color:var(--pend-text-dim)] px-2 mb-1">{kecamatan}</p>
                           <div className="space-y-1">
                             {tujuans.map(t => (
                               <TujuanRow
@@ -300,32 +300,32 @@ export default function PendinganAlokasiPage() {
             <div className="pend-glass rounded-2xl flex flex-col overflow-hidden">
               {!selectedTujuan ? (
                 <div className="flex-1 flex items-center justify-center">
-                  <p className="text-[13px] text-[color:var(--pend-text-dim)]">Pilih tujuan di kiri, atau klik &quot;Pendingan Baru&quot;.</p>
+                  <p className="text-lead text-[color:var(--pend-text-dim)]">Pilih tujuan di kiri, atau klik &quot;Pendingan Baru&quot;.</p>
                 </div>
               ) : (
                 <>
                   <div className="p-4 border-b border-[color:var(--pend-border)] flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-mono font-bold text-[color:var(--pend-accent)]">{selectedTujuan.kode}</span>
-                        <span className="text-[13px] truncate" style={{ color: "var(--pend-text)" }}>{selectedTujuan.nama}</span>
+                        <span className="text-lead font-mono font-bold text-[color:var(--pend-accent)]">{selectedTujuan.kode}</span>
+                        <span className="text-lead truncate" style={{ color: "var(--pend-text)" }}>{selectedTujuan.nama}</span>
                       </div>
-                      <p className="text-[10px] text-[color:var(--pend-text-dim)] mt-0.5">
+                      <p className="text-tiny text-[color:var(--pend-text-dim)] mt-0.5">
                         {[selectedTujuan.kota, selectedTujuan.kecamatan].filter(Boolean).join(" · ") || "Tanpa wilayah"}
                         {" · "}{selectedItems.length} item pending
                       </p>
                     </div>
                     {allItemsChecked && selectedItems.length > 0 && (
-                      <span className="text-[10px] bg-emerald-500/15 border border-emerald-500/30 rounded-lg px-2 py-1 shrink-0 pend-emerald-text">Semua tercentang</span>
+                      <span className="text-tiny bg-success/15 border border-success/30 rounded-lg px-2 py-1 shrink-0 pend-emerald-text">Semua tercentang</span>
                     )}
                   </div>
 
                   <div className="flex-1 overflow-y-auto p-3">
                     {selectedItems.length === 0 ? (
-                      <p className="text-[12px] text-[color:var(--pend-text-dim)] text-center py-8">Belum ada item.</p>
+                      <p className="text-base2 text-[color:var(--pend-text-dim)] text-center py-8">Belum ada item.</p>
                     ) : (
                       <div className="space-y-1.5">
-                        <div className="grid grid-cols-[auto_1.15fr_0.85fr_44px_60px_64px_1fr_28px] gap-2 px-2 pb-1 text-[9px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)]">
+                        <div className="grid grid-cols-[auto_1.15fr_0.85fr_44px_60px_64px_1fr_28px] gap-2 px-2 pb-1 text-mini font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)]">
                           <span className="w-5" /><span>Jenis</span><span>Merk</span><span className="text-center">Qty</span><span>Arah</span><span>Urgensi</span><span>Keterangan</span><span />
                         </div>
                         {selectedItems.map(it => (
@@ -338,7 +338,7 @@ export default function PendinganAlokasiPage() {
                   {selectedItems.some(it => checkedItems.has(it.id)) && (
                     <div className="px-4 py-2 border-t border-[color:var(--pend-border)]">
                       <button onClick={handleClearChecked} disabled={busy}
-                        className="w-full py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-[12px] font-semibold hover:bg-emerald-500/25 transition-all disabled:opacity-50 pend-emerald-text">
+                        className="w-full py-2 rounded-xl bg-success/15 border border-success/40 text-base2 font-semibold hover:bg-success/25 transition-all disabled:opacity-50 pend-emerald-text">
                         Clear {selectedItems.filter(it => checkedItems.has(it.id)).length} item tercentang (sudah kirim)
                       </button>
                     </div>
@@ -346,7 +346,7 @@ export default function PendinganAlokasiPage() {
 
                   <div className="p-4 border-t border-[color:var(--pend-border)]">
                     <button onClick={openModal}
-                      className="w-full py-2 rounded-xl bg-cyan-500/15 border border-cyan-500/40 text-[color:var(--pend-accent)] text-[12px] font-semibold hover:bg-cyan-500/25 transition-all">
+                      className="w-full py-2 rounded-xl bg-accent/15 border border-accent/40 text-[color:var(--pend-accent)] text-base2 font-semibold hover:bg-accent/25 transition-all">
                       + Tambah Item ke Tujuan Ini
                     </button>
                   </div>
@@ -366,7 +366,7 @@ export default function PendinganAlokasiPage() {
           <div className="pend-glass rounded-2xl w-full max-w-lg flex flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}>
             <div className="p-5 border-b border-[color:var(--pend-border)] flex items-center justify-between">
-              <h3 className="text-[15px] font-semibold" style={{ color: "var(--pend-text)" }}>Edit Item Pendingan</h3>
+              <h3 className="text-title font-semibold" style={{ color: "var(--pend-text)" }}>Edit Item Pendingan</h3>
               <button onClick={() => setEditTarget(null)} className="text-[color:var(--pend-text-dim)] hover:opacity-70">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
@@ -374,7 +374,7 @@ export default function PendinganAlokasiPage() {
 
             <div className="p-5 space-y-3">
               <div>
-                <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Jenis Barang *</label>
+                <label className="block text-small font-medium text-[color:var(--pend-text-dim)] mb-1.5">Jenis Barang *</label>
                 <SearchableDropdown
                   options={jenisOptions.map(j => ({ value: j, label: j }))}
                   value={editJenis} onChange={setEditJenis}
@@ -382,7 +382,7 @@ export default function PendinganAlokasiPage() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Merk</label>
+                <label className="block text-small font-medium text-[color:var(--pend-text-dim)] mb-1.5">Merk</label>
                 <SearchableDropdown
                   options={merkOptions.map(m => ({ value: m, label: m }))}
                   value={editMerk} onChange={setEditMerk}
@@ -391,22 +391,22 @@ export default function PendinganAlokasiPage() {
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Jumlah</label>
+                  <label className="block text-small font-medium text-[color:var(--pend-text-dim)] mb-1.5">Jumlah</label>
                   <input type="number" min="1" value={editQty}
                     onChange={e => setEditQty(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg border border-[color:var(--pend-border)] bg-[color:var(--pend-input)] text-[12px] text-center focus:outline-none focus:border-cyan-500/50"
+                    className="w-full px-2 py-1.5 rounded-lg border border-[color:var(--pend-border)] bg-[color:var(--pend-input)] text-base2 text-center focus:outline-none focus:border-accent/50"
                     style={{ color: "var(--pend-text)" }}
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Arah</label>
+                  <label className="block text-small font-medium text-[color:var(--pend-text-dim)] mb-1.5">Arah</label>
                   <SearchableDropdown
                     options={ARAH_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
                     value={editArah} onChange={setEditArah} placeholder="Arah..."
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Urgensi</label>
+                  <label className="block text-small font-medium text-[color:var(--pend-text-dim)] mb-1.5">Urgensi</label>
                   <SearchableDropdown
                     options={URGENSI_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
                     value={editUrgensi} onChange={(v) => setEditUrgensi(v as UrgensiLevel)} placeholder="Urgensi..."
@@ -414,11 +414,11 @@ export default function PendinganAlokasiPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Keterangan</label>
+                <label className="block text-small font-medium text-[color:var(--pend-text-dim)] mb-1.5">Keterangan</label>
                 <input type="text" value={editKet}
                   onChange={e => setEditKet(e.target.value)}
                   placeholder="Keterangan..."
-                  className="w-full px-2 py-1.5 rounded-lg border border-[color:var(--pend-border)] bg-[color:var(--pend-input)] text-[12px] focus:outline-none focus:border-cyan-500/50"
+                  className="w-full px-2 py-1.5 rounded-lg border border-[color:var(--pend-border)] bg-[color:var(--pend-input)] text-base2 focus:outline-none focus:border-accent/50"
                   style={{ color: "var(--pend-text)" }}
                 />
               </div>
@@ -426,11 +426,11 @@ export default function PendinganAlokasiPage() {
 
             <div className="p-4 border-t border-[color:var(--pend-border)] flex items-center justify-end gap-2">
               <button onClick={() => setEditTarget(null)}
-                className="px-4 py-2 rounded-xl border border-[color:var(--pend-border)] text-[12px] text-[color:var(--pend-text-dim)] hover:opacity-70 transition-all">
+                className="px-4 py-2 rounded-xl border border-[color:var(--pend-border)] text-base2 text-[color:var(--pend-text-dim)] hover:opacity-70 transition-all">
                 Batal
               </button>
               <button onClick={handleSaveEdit} disabled={busy}
-                className="px-5 py-2 rounded-xl bg-cyan-500/20 border border-cyan-500/50 text-[color:var(--pend-accent)] text-[12px] font-semibold hover:bg-cyan-500/30 transition-all disabled:opacity-50">
+                className="px-5 py-2 rounded-xl bg-accent/20 border border-accent/50 text-[color:var(--pend-accent)] text-base2 font-semibold hover:bg-accent/30 transition-all disabled:opacity-50">
                 Simpan Perubahan
               </button>
             </div>
@@ -446,7 +446,7 @@ export default function PendinganAlokasiPage() {
           <div className="pend-glass rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}>
             <div className="p-5 border-b border-[color:var(--pend-border)] flex items-center justify-between">
-              <h3 className="text-[15px] font-semibold" style={{ color: "var(--pend-text)" }}>Input Pendingan Alokasi</h3>
+              <h3 className="text-title font-semibold" style={{ color: "var(--pend-text)" }}>Input Pendingan Alokasi</h3>
               <button onClick={() => setModalOpen(false)} className="text-[color:var(--pend-text-dim)] hover:opacity-70">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
@@ -454,23 +454,23 @@ export default function PendinganAlokasiPage() {
 
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               <div>
-                <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Tujuan *</label>
+                <label className="block text-small font-medium text-[color:var(--pend-text-dim)] mb-1.5">Tujuan *</label>
                 <SearchableDropdown options={tujuanDropdownOptions} value={modalTujuanId} onChange={setModalTujuanId} placeholder="Pilih tujuan..." />
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-[color:var(--pend-text-dim)] mb-1.5">Detail Barang</label>
+                <label className="block text-small font-medium text-[color:var(--pend-text-dim)] mb-1.5">Detail Barang</label>
                 <PendinganItemsTable items={draftItems} jenisOptions={jenisOptions} merkOptions={merkOptions} onChange={setDraftItems} />
               </div>
             </div>
 
             <div className="p-4 border-t border-[color:var(--pend-border)] flex items-center justify-end gap-2">
               <button onClick={() => setModalOpen(false)}
-                className="px-4 py-2 rounded-xl border border-[color:var(--pend-border)] text-[12px] text-[color:var(--pend-text-dim)] hover:opacity-70 transition-all">
+                className="px-4 py-2 rounded-xl border border-[color:var(--pend-border)] text-base2 text-[color:var(--pend-text-dim)] hover:opacity-70 transition-all">
                 Batal
               </button>
               <button onClick={handleSaveModal} disabled={busy}
-                className="px-5 py-2 rounded-xl bg-cyan-500/20 border border-cyan-500/50 text-[color:var(--pend-accent)] text-[12px] font-semibold hover:bg-cyan-500/30 transition-all disabled:opacity-50">
+                className="px-5 py-2 rounded-xl bg-accent/20 border border-accent/50 text-[color:var(--pend-accent)] text-base2 font-semibold hover:bg-accent/30 transition-all disabled:opacity-50">
                 Simpan Pendingan
               </button>
             </div>
@@ -567,14 +567,14 @@ function TujuanRow({ tujuan, topUrgensi, selected, onSelect, onClear, busy }: {
   tujuan: TujuanWithCount; topUrgensi?: UrgensiLevel; selected: boolean; onSelect: () => void; onClear: () => void; busy: boolean;
 }) {
   const urgDot: Record<string, string> = {
-    tinggi: "bg-rose-500",
-    sedang: "bg-amber-500",
-    rendah: "bg-slate-400",
+    tinggi: "bg-danger",
+    sedang: "bg-warning",
+    rendah: "bg-muted",
   };
   return (
     <div
       className={`flex items-center gap-2 px-2 py-2 rounded-xl transition-all cursor-pointer border ${
-        selected ? "bg-cyan-500/15 border-cyan-500/40" : "border-transparent"
+        selected ? "bg-accent/15 border-accent/40" : "border-transparent"
       }`}
       style={!selected ? { background: "var(--pend-row)" } : undefined}
       onClick={onSelect}
@@ -582,18 +582,18 @@ function TujuanRow({ tujuan, topUrgensi, selected, onSelect, onClear, busy }: {
       <button
         onClick={(e) => { e.stopPropagation(); onClear(); }} disabled={busy}
         title="Clear semua item tujuan ini (sudah kirim)"
-        className="w-4 h-4 rounded border border-[color:var(--pend-text-dim)] hover:border-emerald-500 hover:bg-emerald-500/20 transition-all shrink-0 disabled:opacity-40"
+        className="w-4 h-4 rounded border border-[color:var(--pend-text-dim)] hover:border-success hover:bg-success/20 transition-all shrink-0 disabled:opacity-40"
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           {topUrgensi && (
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${urgDot[topUrgensi]}`} title={`Urgensi tertinggi: ${topUrgensi}`} />
           )}
-          <span className="text-[11px] font-mono font-semibold text-[color:var(--pend-accent)]">{tujuan.kode}</span>
-          <span className="text-[11px] truncate" style={{ color: "var(--pend-text)" }}>{tujuan.nama}</span>
+          <span className="text-small font-mono font-semibold text-[color:var(--pend-accent)]">{tujuan.kode}</span>
+          <span className="text-small truncate" style={{ color: "var(--pend-text)" }}>{tujuan.nama}</span>
         </div>
       </div>
-      <span className="text-[10px] font-mono text-[color:var(--pend-text-dim)] rounded-md px-1.5 py-0.5 shrink-0" style={{ background: "var(--pend-input)" }}>
+      <span className="text-tiny font-mono text-[color:var(--pend-text-dim)] rounded-md px-1.5 py-0.5 shrink-0" style={{ background: "var(--pend-input)" }}>
         {tujuan.pendingCount}
       </span>
     </div>
@@ -617,7 +617,7 @@ function ItemRow({ item, checked, onToggle, onEdit }: {
       style={{ background: checked ? "rgba(16,185,129,0.10)" : "var(--pend-row)" }}>
       <button onClick={onToggle}
         className={`w-5 h-5 rounded border flex items-center justify-center transition-all shrink-0 ${
-          checked ? "bg-emerald-500 border-emerald-500" : "border-[color:var(--pend-text-dim)] hover:border-emerald-500"
+          checked ? "bg-success border-success" : "border-[color:var(--pend-text-dim)] hover:border-success"
         }`}>
         {checked && (
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -625,20 +625,20 @@ function ItemRow({ item, checked, onToggle, onEdit }: {
           </svg>
         )}
       </button>
-      <span className={`text-[12px] truncate ${checked ? "line-through" : ""}`} style={{ color: "var(--pend-text)" }}>{item.jenis}</span>
-      <span className="text-[11px] truncate text-[color:var(--pend-text-dim)]">{item.merk || "—"}</span>
-      <span className="text-[12px] font-mono text-center" style={{ color: "var(--pend-text)" }}>{item.qty}</span>
-      <span className={`text-[9px] font-semibold uppercase tracking-wide rounded-md px-1.5 py-0.5 text-center ${arah === "tarik" ? "pend-arah-tarik" : "pend-arah-kirim"}`}>
+      <span className={`text-base2 truncate ${checked ? "line-through" : ""}`} style={{ color: "var(--pend-text)" }}>{item.jenis}</span>
+      <span className="text-small truncate text-[color:var(--pend-text-dim)]">{item.merk || "—"}</span>
+      <span className="text-base2 font-mono text-center" style={{ color: "var(--pend-text)" }}>{item.qty}</span>
+      <span className={`text-mini font-semibold uppercase tracking-wide rounded-md px-1.5 py-0.5 text-center ${arah === "tarik" ? "pend-arah-tarik" : "pend-arah-kirim"}`}>
         {arah}
       </span>
-      <span className={`text-[9px] font-semibold uppercase tracking-wide rounded-md px-1.5 py-0.5 text-center ${URGENSI_STYLE[urg]}`}>
+      <span className={`text-mini font-semibold uppercase tracking-wide rounded-md px-1.5 py-0.5 text-center ${URGENSI_STYLE[urg]}`}>
         {urg}
       </span>
-      <span className="text-[11px] text-[color:var(--pend-text-dim)] truncate">{item.keterangan || "—"}</span>
+      <span className="text-small text-[color:var(--pend-text-dim)] truncate">{item.keterangan || "—"}</span>
       <button
         onClick={onEdit}
         title="Edit item"
-        className="w-6 h-6 rounded-md flex items-center justify-center text-[color:var(--pend-text-dim)] hover:text-[color:var(--pend-accent)] hover:bg-cyan-500/10 transition-all"
+        className="w-6 h-6 rounded-md flex items-center justify-center text-[color:var(--pend-text-dim)] hover:text-[color:var(--pend-accent)] hover:bg-accent/10 transition-all"
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />

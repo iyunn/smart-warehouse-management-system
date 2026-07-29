@@ -105,7 +105,7 @@ function PendinganItemsTable({ items, jenisOptions, merkOptions, onChange }: Pro
   return (
     <div className="rounded-2xl border border-[color:var(--pend-border)] bg-[color:var(--pend-row)] overflow-visible" onFocusCapture={handleFocusCapture}>
       {/* Header */}
-      <div className={`grid ${gridCols} gap-2 border-b border-[color:var(--pend-border)] px-3 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)]`}>
+      <div className={`grid ${gridCols} gap-2 border-b border-[color:var(--pend-border)] px-3 py-2.5 text-tiny font-semibold uppercase tracking-widest text-[color:var(--pend-text-dim)]`}>
         <span>No</span>
         <span>Jenis Barang</span>
         <span>Merk</span>
@@ -120,7 +120,7 @@ function PendinganItemsTable({ items, jenisOptions, merkOptions, onChange }: Pro
       <div className="max-h-[320px] overflow-y-auto">
         {items.map((item, idx) => (
           <div key={idx} className={`grid ${gridCols} gap-2 px-3 py-2 items-center border-b border-[color:var(--pend-border)] last:border-b-0`}>
-            <span className="text-[12px] text-[color:var(--pend-text-dim)] text-center">{item.urutan}</span>
+            <span className="text-base2 text-[color:var(--pend-text-dim)] text-center">{item.urutan}</span>
 
             <SearchableDropdown
               options={jenisDropdownOptions}
@@ -141,7 +141,7 @@ function PendinganItemsTable({ items, jenisOptions, merkOptions, onChange }: Pro
             <input
               type="number" min="1" value={item.qty}
               onChange={(e) => updateItem(idx, { qty: Math.max(1, Number(e.target.value) || 1) })}
-              className="w-full px-2 py-1.5 rounded-lg border border-[color:var(--pend-border)] bg-[color:var(--pend-input)] text-[12px] text-[color:var(--pend-text)] text-center focus:outline-none focus:border-cyan-500/50"
+              className="w-full px-2 py-1.5 rounded-lg border border-[color:var(--pend-border)] bg-[color:var(--pend-input)] text-base2 text-[color:var(--pend-text)] text-center focus:outline-none focus:border-accent/50"
             />
 
             <SearchableDropdown
@@ -162,14 +162,14 @@ function PendinganItemsTable({ items, jenisOptions, merkOptions, onChange }: Pro
               type="text" value={item.keterangan}
               onChange={(e) => updateItem(idx, { keterangan: e.target.value })}
               placeholder="Keterangan..."
-              className="w-full px-2 py-1.5 rounded-lg border border-[color:var(--pend-border)] bg-[color:var(--pend-input)] text-[12px] text-[color:var(--pend-text)] placeholder:text-[color:var(--pend-text-dim)] focus:outline-none focus:border-cyan-500/50"
+              className="w-full px-2 py-1.5 rounded-lg border border-[color:var(--pend-border)] bg-[color:var(--pend-input)] text-base2 text-[color:var(--pend-text)] placeholder:text-[color:var(--pend-text-dim)] focus:outline-none focus:border-accent/50"
             />
 
             {/* Aksi: duplikat + hapus */}
             <div className="flex items-center justify-center gap-1">
               <button
                 type="button" onClick={() => duplicateRow(idx)} title="Duplikat baris ke bawah"
-                className="w-6 h-6 rounded-md border border-[color:var(--pend-border)] text-[color:var(--pend-text-dim)] hover:text-cyan-400 hover:border-cyan-500/40 transition-all flex items-center justify-center"
+                className="w-6 h-6 rounded-md border border-[color:var(--pend-border)] text-[color:var(--pend-text-dim)] hover:text-accent hover:border-accent/40 transition-all flex items-center justify-center"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" />
@@ -177,7 +177,7 @@ function PendinganItemsTable({ items, jenisOptions, merkOptions, onChange }: Pro
               </button>
               <button
                 type="button" onClick={() => removeRow(idx)} title="Hapus baris"
-                className="w-6 h-6 rounded-md border border-[color:var(--pend-border)] text-[color:var(--pend-text-dim)] hover:text-rose-400 hover:border-rose-500/40 transition-all flex items-center justify-center"
+                className="w-6 h-6 rounded-md border border-[color:var(--pend-border)] text-[color:var(--pend-text-dim)] hover:text-danger hover:border-danger/40 transition-all flex items-center justify-center"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -192,7 +192,7 @@ function PendinganItemsTable({ items, jenisOptions, merkOptions, onChange }: Pro
       {/* Add row footer */}
       <button
         type="button" onClick={addRow}
-        className="w-full py-2.5 border-t border-[color:var(--pend-border)] text-[12px] font-medium text-cyan-400 hover:bg-cyan-500/10 transition-all flex items-center justify-center gap-2"
+        className="w-full py-2.5 border-t border-[color:var(--pend-border)] text-base2 font-medium text-accent hover:bg-accent/10 transition-all flex items-center justify-center gap-2"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
           <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
