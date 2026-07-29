@@ -3280,3 +3280,71 @@ dampaknya kecil.
 `docs/UI-CUSTOMIZATION.md` — panduan lengkap: tabel "mau ubah apa", pemetaan class
 lama→baru, contoh migrasi, resep cepat (tampilan lega, nuansa hijau, kontras tinggi),
 aturan menimpa warna, dan daftar nilai bawaan untuk balik ke awal.
+
+---
+
+## 27 Juli 2026 — Merge Refactor UI ke main, Fix Duplikat Kode Aset, Filter Kategori, Fix Kop PDF
+
+### Branch `style` di-merge ke main lalu dihapus
+Refactor UI (3 dari 10 halaman) digabungkan ke `main` dan branch `style` dihapus.
+Pekerjaan migrasi berikutnya dilanjutkan langsung di `main`.
+Branch lama `stock` juga dihapus (0 commit yang belum ada di main).
+
+[CATATAN GIT] Sempat terjadi *diverged* di branch `style`: commit docs di-push dari
+Codespace, sementara repo lokal (yang belum menarik commit itu) melakukan
+`git merge origin/main`. Kedua sisi maju ke arah berbeda. Diselesaikan dengan
+`git pull` biasa — merge bersih karena file yang disentuh berbeda
+(docs vs `report/page.tsx`).
+
+### [BUG FIX] Kode aset yang sudah dimutasi memblokir input duplikat
+Gejala: input `C06.000001` di Rekap Alokasi ditolak "kode sudah dipakai", padahal
+kode itu ada di SJ Penerimaan yang SUDAH terkonfirmasi mutasi.
+
+Root cause: `usedKodes` (di `sj/report/page.tsx`, bukan API) dibangun dari SELURUH
+item tabel tanpa memandang status mutasi.
+
+Alasan kenapa itu salah: satu aset punya siklus hidup berulang — masuk ke gudang
+lewat SJ Penerimaan, lalu dikirim lagi ke toko lewat SJ Keluar dengan kode yang
+sama. Baris yang sudah dimutasi adalah CATATAN RIWAYAT, bukan pemakaian aktif.
+
+Fix: item ber-`is_mutated` dikeluarkan dari `usedKodes`. Status mutasi diresolusi
+lewat `allocOverride` supaya akurat tanpa perlu refresh. Fungsi asli (mencegah salah
+ketik kode kembar pada dua baris yang sama-sama belum diproses) tetap jalan.
+
+### [BUG FIX] Kop surat hilang di halaman lanjutan PDF
+Gejala: kalau blok tanda tangan terdorong ke halaman 2, halaman itu cuma berisi
+kolom TTD tanpa identitas surat.
+
+Root cause: `DocumentHeader` sengaja TIDAK `fixed` (warisan dari perbaikan
+23 Juli, karena dulu dikira `fixed` yang menyebabkan bug "halaman 1 header doang").
+
+Fix: `DocumentHeader` menerima prop `fixed`, diteruskan ke 3 blok teratasnya
+(header, metaContainer, tujuanSection).
+
+[VERIFIKASI] Diuji dengan MERENDER PDF SUNGGUHAN (`@react-pdf/renderer` v4.5.1
+dipasang di sandbox, hasil dibaca pdfplumber):
+- tanpa `fixed`, 36–42 item → hal 2: TTD tanpa kop
+- dengan `fixed`, 36–42 item → hal 2: kop + TTD
+- posisi hal 2: kop y=37–55, isi mulai y=94 → TIDAK bertabrakan.
+  @react-pdf memang menyediakan ruang untuk elemen `fixed` di halaman lanjutan.
+
+### Fitur: filter multi-kategori di Rekap Alokasi
+Tombol `[All][C][P][Q][S][T]…` di kanan baris "Review Mutasi", di atas tombol Reset.
+Multi-pilih dengan toggle: klik nyala, klik lagi mati. Set kosong = semua tampil.
+Tombol dibuat OTOMATIS dari kategori yang ada di data (bukan daftar hardcoded).
+
+Sumber data: item Surat Jalan hanya menyimpan `jenis`, sedangkan kategori ada di
+`assets_raw.kategori_oracle`. API report membangun peta jenis→kategori memakai pola
+join yang sama dengan Live Stock (`assets_clean` join `assets_raw!inner`), lalu
+menempelkan field `kategori` ke tiap item.
+[BEBAN] Ini menambah SATU pemindaian tabel saat memuat Rekap. Kalau terasa lambat,
+opsi berikutnya: pindahkan ke endpoint master dengan cache 5 menit (pola
+`useMasterJenis`).
+
+Filter ikut mempengaruhi ekspor Excel (memakai `filtered` yang sama), bertumpuk
+dengan filter lain, dan ikut ter-reset tombol Reset.
+
+[GOTCHA] Saat menyisipkan filter, sempat error runtime `out is not defined` karena
+nama variabel akumulator di blok `filtered` ditebak (`out`) padahal aslinya `result`.
+Syntax check TIDAK menangkapnya (secara sintaksis sah, cuma tak terdeklarasi).
+Pelajaran: baca variabel di sekitar titik sisip, jangan menebak.

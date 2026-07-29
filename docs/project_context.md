@@ -3,7 +3,7 @@ git # PROJECT_CONTEXT.md
 # Smart Asset Monitoring and Reconciliation System
 
 > File ini berisi state sistem terkini. Untuk history kronologis sesi pengembangan, lihat `development-journal.md`.
-> Terakhir diupdate: **26 Juli 2026** (refactor UI ke design token Tailwind — branch `style`, berjalan)
+> Terakhir diupdate: **27 Juli 2026** (refactor UI merged ke main + filter kategori Rekap + fix kop PDF)
 
 ## Project Identity
 
@@ -532,8 +532,10 @@ conditional update dua field); kode_asset ikut dikirim agar tidak terhapus.
 **Title tab browser.** Topbar set `document.title = "${title} — SmartWMS"` (semua
 halaman sudah kirim prop title). Reset ke default saat unmount (halaman auth).
 
-### 🚧 Refactor UI ke Design Token Tailwind (branch `style` — BERJALAN)
-Status: dikerjakan bertahap di branch `style`, BELUM merge ke main.
+### 🚧 Refactor UI ke Design Token Tailwind (SUDAH di main — 3/10 halaman)
+Status: sudah di-merge ke `main`, branch `style` dihapus. Sisa halaman dilanjutkan
+langsung di `main`. Halaman yang belum dimigrasi tetap normal karena ditopang
+lapisan kompatibilitas di globals.css.
 
 **Tujuan:** Fillian bisa mengubah warna, ukuran font, dan jenis font dengan mudah,
 memakai mekanisme resmi Tailwind v4 (utility class di komponen), bukan override CSS.
@@ -559,7 +561,7 @@ hasil ke `.next/static/css/` (gitignored).
 amber-300, dst) dipetakan ke versi gelap. Rasio kontras WCAG naik dari 1.44–2.69
 (gagal) menjadi 5.01–7.10 (lolos AA).
 
-**Progres:** Template Item ✅ · Master Tujuan ✅ · Manajemen User ✅ ·
+**Progres (3/10):** Template Item ✅ · Master Tujuan ✅ · Manajemen User ✅ ·
 berikutnya Pendingan Alokasi, lalu Upload → Rekap Alokasi → Daftar SJ → Buat SJ →
 Monitoring → Dashboard. **Live Stock dilewati** (ukuran TV `vmin`/`clamp` sudah
 disetel dan mudah rusak).
@@ -571,6 +573,30 @@ anjuran dokumentasi Tailwind. Tiap halaman diverifikasi: syntax lolos, kode di l
 `className` identik byte-per-byte, jumlah class layout tidak berubah.
 
 Panduan lengkap: `docs/UI-CUSTOMIZATION.md`.
+
+### ✅ Rekap Alokasi — Filter Kategori & Fix Duplikat Kode Aset (27 Juli 2026)
+
+**Filter multi-kategori.** Tombol `[All][C][P][Q][S][T]…` di kanan baris "Review
+Mutasi", di atas tombol Reset. Multi-pilih dengan toggle (klik nyala, klik lagi
+mati); set kosong = semua tampil. Tombol dibuat otomatis dari kategori yang ada
+di data. Ikut mempengaruhi ekspor Excel, bertumpuk dengan filter lain, ikut Reset.
+Sumber data: API report membangun peta `jenis → kategori_oracle` (item SJ hanya
+menyimpan `jenis`). Menambah satu pemindaian tabel saat memuat Rekap — kalau
+terasa lambat, pindahkan ke endpoint master ber-cache 5 menit.
+
+**Fix duplikat kode aset.** `usedKodes` dulu dibangun dari SELURUH item tanpa
+memandang status mutasi, sehingga kode yang sudah selesai dimutasi di SJ Penerimaan
+memblokir input kode sama di SJ Keluar. Padahal satu aset memang punya siklus
+berulang (masuk gudang → dikirim ke toko). Item ber-`is_mutated` kini dikeluarkan
+dari pengecekan; perlindungan terhadap salah ketik kode kembar pada item aktif
+tetap jalan.
+
+### ✅ PDF Surat Jalan — Kop di Halaman Lanjutan (27 Juli 2026)
+`DocumentHeader` kini `fixed` → kop surat berulang di setiap halaman. Sebelumnya
+kalau blok tanda tangan terdorong ke halaman berikutnya, halaman itu hanya berisi
+kolom TTD tanpa identitas surat. Diverifikasi dengan render PDF nyata: kop di
+y=37–55, isi mulai y=94, tidak bertabrakan (@react-pdf menyediakan ruang untuk
+elemen `fixed` di halaman lanjutan).
 
 ---
 
