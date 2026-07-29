@@ -614,6 +614,30 @@ export default function SJReportPage() {
   //
   // Sebelumnya semua item ikut dihitung, sehingga kode yang sudah selesai
   // dimutasi di SJ Penerimaan memblokir input kode yang sama di SJ Keluar.
+  // Daftar kode kategori yang benar-benar ada di data (huruf depan kategori_oracle,
+  // mis. "C - PERALATAN KOMPUTER" → "C"). Tombol filter dibuat dari sini supaya
+  // otomatis mengikuti kategori yang ada di DAT.
+  const kategoriCodes = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items) {
+      const kat = (it.kategori ?? "").trim();
+      if (!kat) continue;
+      const code = kat.charAt(0).toUpperCase();
+      if (code) set.add(code);
+    }
+    return Array.from(set).sort();
+  }, [items]);
+
+  const toggleKategori = useCallback((code: string) => {
+    setKatFilter(prev => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+    setPage(1);
+  }, []);
+
   const usedKodes = useMemo(() => {
     const s = new Set<string>();
     for (const it of items) {
@@ -638,6 +662,9 @@ export default function SJReportPage() {
   const [searchField, setSearchField]   = useState<SearchField>("all");
   const [search, setSearch]             = useState("");
   const [mutasiFilter, setMutasiFilter] = useState<MutasiFilter>("all");
+  // Multi-pilih kategori. Set KOSONG = tanpa filter (semua kategori tampil).
+  // Klik tombol = toggle: masuk Set kalau belum ada, keluar kalau sudah ada.
+  const [katFilter, setKatFilter]       = useState<Set<string>>(new Set());
   const [page, setPage]                 = useState(1);
 
   // Period preset handler
@@ -700,6 +727,13 @@ export default function SJReportPage() {
     // Resolve nilai dengan override (allocOverride) agar akurat setelah user
     // baru ubah checkbox tanpa refetch. Hanya item is_aktiva yang relevan
     // (barang non-AT tidak perlu mutasi Oracle/WT).
+    // Filter kategori (huruf depan kategori_oracle, mis. "C - PERALATAN KOMPUTER").
+    // Multi-pilih: item lolos kalau kategorinya ada di salah satu yang dipilih.
+    if (katFilter.size > 0) {
+      result = result.filter(it =>
+        katFilter.has((it.kategori ?? "").trim().charAt(0).toUpperCase()));
+    }
+
     if (mutasiFilter !== "all") {
       result = result.filter(it => {
         if (!it.is_aktiva) return false;  // non-AT tidak masuk review mutasi
@@ -719,7 +753,7 @@ export default function SJReportPage() {
     return [...result].sort((a, b) =>
       b.no_sj.localeCompare(a.no_sj) || a.urutan - b.urutan
     );
-  }, [items, dateFrom, dateTo, search, searchField, mutasiFilter, allocOverride]);
+  }, [items, dateFrom, dateTo, search, searchField, mutasiFilter, katFilter, allocOverride]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = useMemo(
@@ -733,6 +767,7 @@ export default function SJReportPage() {
     setDateFrom(""); setDateTo("");
     setSearchField("all"); setSearch("");
     setMutasiFilter("all");
+    setKatFilter(new Set());
     setPage(1);
   }, []);
 
@@ -753,7 +788,7 @@ export default function SJReportPage() {
   const totalQty     = filtered.reduce((s, it) => s + (it.qty ?? 0), 0);
   const periodLabel  = getPeriodLabel(periodPreset, dateFrom, dateTo);
 
-  const hasActiveFilter = periodPreset !== "all" || !!search.trim() || mutasiFilter !== "all";
+  const hasActiveFilter = periodPreset !== "all" || !!search.trim() || mutasiFilter !== "all" || katFilter.size > 0;
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#080e18] text-white">
@@ -857,6 +892,40 @@ export default function SJReportPage() {
                 <span className="text-[10px] text-white/30">
                   {filtered.length} item ditemukan
                 </span>
+              )}
+
+              {/* Filter kategori — kode huruf dari kategori_oracle DAT.
+                  Ikut mempengaruhi tabel DAN ekspor Excel (lewat `filtered`). */}
+              {kategoriCodes.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1 ml-auto">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40 mr-1">Kategori</span>
+                  <button
+                    onClick={() => { setKatFilter(new Set()); setPage(1); }}
+                    title="Tampilkan semua kategori"
+                    className={`text-[11px] font-semibold w-8 h-7 rounded-lg border transition-all ${
+                      katFilter.size === 0
+                        ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300"
+                        : "bg-white/[0.03] border-white/[0.08] text-white/50 hover:text-white/80 hover:bg-white/[0.05]"
+                    }`}>
+                    All
+                  </button>
+                  {kategoriCodes.map(code => {
+                    const active = katFilter.has(code);
+                    const contoh = items.find(it => (it.kategori ?? "").trim().charAt(0).toUpperCase() === code);
+                    return (
+                      <button key={code}
+                        onClick={() => toggleKategori(code)}
+                        title={`${contoh?.kategori || code}${active ? " — klik untuk matikan" : ""}`}
+                        className={`text-[11px] font-semibold w-7 h-7 rounded-lg border transition-all ${
+                          active
+                            ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300"
+                            : "bg-white/[0.03] border-white/[0.08] text-white/50 hover:text-white/80 hover:bg-white/[0.05]"
+                        }`}>
+                        {code}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
 

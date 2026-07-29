@@ -304,10 +304,10 @@ const styles = StyleSheet.create({
 
 /** Header dokumen: logo + judul + meta info + tujuan + intro text.
  * Diulang penuh di setiap halaman (termasuk halaman lanjutan). */
-function DocumentHeader({ data, logoSrc }: { data: SJDataForPDF; logoSrc?: string }) {
+function DocumentHeader({ data, logoSrc, fixed }: { data: SJDataForPDF; logoSrc?: string; fixed?: boolean }) {
   return (
     <>
-      <View style={styles.header}>
+      <View style={styles.header} fixed={fixed}>
         <View style={styles.headerLeft}>
           {logoSrc ? (
             <Image src={logoSrc} style={styles.logo} />
@@ -327,7 +327,7 @@ function DocumentHeader({ data, logoSrc }: { data: SJDataForPDF; logoSrc?: strin
         </View>
       </View>
 
-      <View style={styles.metaContainer}>
+      <View style={styles.metaContainer} fixed={fixed}>
         <View style={styles.metaCol}>
           <Text style={styles.metaLabel}>Nomor Surat Jalan</Text>
           <Text style={styles.metaValueMono}>{data.no_sj}</Text>
@@ -338,7 +338,7 @@ function DocumentHeader({ data, logoSrc }: { data: SJDataForPDF; logoSrc?: strin
         </View>
       </View>
 
-      <View style={styles.tujuanSection}>
+      <View style={styles.tujuanSection} fixed={fixed}>
         <Text style={styles.tujuanLabel}>Kepada Yth.</Text>
         <View style={styles.tujuanBox}>
           <Text style={styles.tujuanKode}>{data.tujuan_kode}</Text>
@@ -409,7 +409,12 @@ export function SuratJalanPDF({ data, logoSrc }: SuratJalanPDFProps) {
     <Document>
       <Page size="A4" style={styles.page}>
 
-        <DocumentHeader data={data} logoSrc={logoSrc} />
+        {/* `fixed` → kop surat berulang di SETIAP halaman.
+            Tanpa ini, kalau blok tanda tangan terdorong ke halaman berikutnya,
+            halaman itu cuma berisi kolom TTD tanpa identitas surat.
+            Terverifikasi: @react-pdf menyediakan ruang untuk elemen `fixed`
+            di halaman lanjutan, jadi konten TIDAK bertabrakan dengan kop. */}
+        <DocumentHeader data={data} logoSrc={logoSrc} fixed />
 
         {/* ── TABLE ──────────────────────────────────────────────────── */}
         <View style={styles.table}>

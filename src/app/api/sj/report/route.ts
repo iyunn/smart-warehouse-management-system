@@ -73,6 +73,34 @@ export async function GET() {
     //   Barang keluar: kode HILANG dari DAT = mutasi confirmed (barang sudah keluar).
     //   Barang masuk:  kode ADA di DAT     = mutasi confirmed (barang sudah kembali
     //                  ke CGA, muncul di DAT setelah user mutasi oracle & re-upload).
+
+    // ── Peta jenis → kategori (dari DAT) ────────────────────────────────────
+    // Item Surat Jalan hanya menyimpan `jenis`, sedangkan kategori ada di
+    // assets_raw.kategori_oracle. Dipakai untuk filter kategori di Rekap.
+    // Format kategori_oracle: "C - PERALATAN KOMPUTER" → huruf depan = kode.
+    const kategoriByJenis = new Map<string, string>()
+    {
+      let from = 0
+      while (true) {
+        const { data: batch, error } = await supabase
+          .from('assets_clean')
+          .select(`jenis, raw:assets_raw!inner(kategori_oracle)`)
+          .range(from, from + FETCH_SIZE - 1)
+        if (error) throw new Error(error.message)
+        const b = batch ?? []
+        for (const row of b) {
+          const jenis = ((row as any).jenis ?? '').trim()
+          if (!jenis || kategoriByJenis.has(jenis)) continue
+          const raw = Array.isArray((row as any).raw) ? (row as any).raw[0] : (row as any).raw
+          const kat = ((raw?.kategori_oracle) ?? '').trim()
+          if (kat) kategoriByJenis.set(jenis, kat)
+        }
+        if (b.length < FETCH_SIZE) break
+        from += FETCH_SIZE
+        if (from > 100000) break
+      }
+    }
+
     function computeIsMutated(kode: string, mutasi: boolean, jenisSJ: string): boolean {
       const k = (kode ?? '').trim()
 
@@ -115,6 +143,7 @@ export async function GET() {
         keterangan:      it.keterangan ?? '',
         mutasi_oracle:   !!it.mutasi_oracle_status,
         kode_asset:      it.kode_asset ?? '',
+        kategori:        kategoriByJenis.get((it.jenis ?? '').trim()) ?? '',
         is_mutated:      computeIsMutated(it.kode_asset, !!it.mutasi_oracle_status, sj?.jenis === 'masuk' ? 'masuk' : 'keluar'),
         mutasi_wt:       !!it.mutasi_wt_status,
         // SJ info

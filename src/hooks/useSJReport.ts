@@ -15,6 +15,7 @@ export interface SJReportItem {
   keterangan: string;
   mutasi_oracle: boolean;
   kode_asset: string;
+  kategori: string;   // kategori_oracle, mis. "C - PERALATAN KOMPUTER"
   is_mutated: boolean;
   mutasi_wt: boolean;
   // SJ info
